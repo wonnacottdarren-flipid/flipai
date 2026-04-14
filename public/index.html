@@ -41,6 +41,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 20px;
+      align-items: start;
     }
 
     .card {
@@ -76,6 +77,8 @@
       border-radius: 10px;
       font-size: 14px;
       font-family: inherit;
+      background: #fff;
+      color: #111827;
     }
 
     textarea {
@@ -88,11 +91,15 @@
       padding: 14px;
       border: none;
       border-radius: 10px;
-      background: #111827;
+      background: #0f172a;
       color: #ffffff;
       font-size: 15px;
       font-weight: 700;
       cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.96;
     }
 
     button:disabled {
@@ -122,21 +129,67 @@
       color: #065f46;
     }
 
-    pre {
-      margin: 0;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
     .placeholder {
       color: #6b7280;
       font-size: 14px;
     }
 
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      background: #f9fafb;
+      border-radius: 12px;
+      padding: 14px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .metric .label {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+
+    .metric .value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .panel {
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      line-height: 1.5;
+    }
+
+    .reasoning {
+      padding: 14px;
+      border-radius: 12px;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+
+    .muted {
+      color: #6b7280;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
     @media (max-width: 850px) {
       .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .results-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -241,6 +294,85 @@
       };
     }
 
+    function currency(value) {
+      return "£" + Number(value || 0).toFixed(2);
+    }
+
+    function verdictColor(text) {
+      const value = String(text || "").toUpperCase();
+
+      if (value.includes("OK")) return "#16a34a";
+      if (value.includes("MARGINAL")) return "#f59e0b";
+      if (value.includes("GOOD")) return "#16a34a";
+      if (value.includes("BAD")) return "#dc2626";
+      if (value.includes("SKIP")) return "#dc2626";
+
+      return "#374151";
+    }
+
+    function renderResult(data) {
+      const result = data.result || {};
+      const metrics = result.flipMetrics || {};
+      const analysis = result.flip_analysis || {};
+      const listing = result.ebay_listing || {};
+
+      resultArea.innerHTML = `
+        <div class="results-grid">
+          <div class="metric">
+            <div class="label">Profit</div>
+            <div class="value">${currency(metrics.profit)}</div>
+          </div>
+
+          <div class="metric">
+            <div class="label">Total Cost</div>
+            <div class="value">${currency(metrics.totalCost)}</div>
+          </div>
+
+          <div class="metric">
+            <div class="label">Resale Value</div>
+            <div class="value">${currency(metrics.estimatedResale)}</div>
+          </div>
+
+          <div class="metric">
+            <div class="label">eBay Fees</div>
+            <div class="value">${currency(metrics.ebayFees)}</div>
+          </div>
+        </div>
+
+        <div class="panel" style="font-weight:700;color:${verdictColor(metrics.verdict)};">
+          Verdict: ${metrics.verdict || analysis.final_verdict || "Unknown"}
+        </div>
+
+        <div class="panel">
+          <strong>Risk:</strong> ${analysis.risk_level || "N/A"}<br>
+          <strong>Time to sell:</strong> ${analysis.time_to_sell_estimate || "N/A"}<br>
+          <strong>Buy price:</strong> ${currency(analysis.buy_price)}<br>
+          <strong>Sale price:</strong> ${currency(analysis.sale_price)}
+        </div>
+
+        <div class="reasoning">
+${analysis.brief_reasoning || "No analysis provided."}
+        </div>
+
+        ${
+          listing.title
+            ? `
+              <div class="panel" style="margin-top:12px;">
+                <strong>Suggested eBay title:</strong><br>
+                ${listing.title}
+              </div>
+            `
+            : ""
+        }
+
+        ${
+          data.locked === true || result.locked === true
+            ? `<div class="muted">Some features are currently locked.</div>`
+            : ""
+        }
+      `;
+    }
+
     async function runAnalysis() {
       statusEl.innerHTML = '<div class="status loading">Analyzing...</div>';
       resultArea.innerHTML = "";
@@ -251,7 +383,9 @@
 
         const res = await fetch("/api/analyze", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify(payload)
         });
 
@@ -262,7 +396,7 @@
         }
 
         statusEl.innerHTML = '<div class="status success">Analysis complete.</div>';
-        resultArea.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        renderResult(data);
       } catch (err) {
         statusEl.innerHTML = `<div class="status error">Error: ${err.message}</div>`;
         resultArea.innerHTML = '<div class="placeholder">No result available.</div>';
