@@ -3,6 +3,7 @@ import express from "express";
 import path from "path";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import jwt from "jsonwebtoken";
 import { fileURLToPath } from "url";
 import {
   enforceUsage,
@@ -28,6 +29,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 const appUrl = process.env.APP_URL || `http://localhost:${port}`;
+const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 
 function calculateFlipMetrics({ buyPrice, repairCost, condition }) {
   const buy = Number(buyPrice || 0);
@@ -59,7 +61,25 @@ function calculateFlipMetrics({ buyPrice, repairCost, condition }) {
   };
 }
 
-app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
+function getUserFromCookie(req) {
+  try {
+    const token = req.cookies?.flipai_token;
+    if (!token) return null;
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = getUserById(decoded.userId);
+
+    return user || null;
+  } catch {
+    return null;
+  }
+}
+
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhookHandler
+);
 
 app.use(cors({ origin: appUrl, credentials: true }));
 app.use(cookieParser());
@@ -81,7 +101,9 @@ app.post("/api/create-checkout-session", requireAuth, async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message || "Could not create checkout session." });
+    res
+      .status(500)
+      .json({ error: error.message || "Could not create checkout session." });
   }
 });
 
@@ -91,17 +113,32 @@ app.post("/api/create-portal-session", requireAuth, async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message || "Could not open billing portal." });
+    res
+      .status(500)
+      .json({ error: error.message || "Could not open billing portal." });
   }
 });
 
-// TEMP TEST VERSION: no login required
 app.post("/api/analyze", async (req, res) => {
   try {
-    const { product, condition, buyPrice, repairCost, extras, goal } = req.body || {};
+    const user = getUserFromCookie(req);
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Please sign in to use FlipAI analysis.",
+        locked: true,
+      });
+    }
+
+    const allowedUser = enforceUsage(user);
+
+    const { product, condition, buyPrice, repairCost, extras, goal } =
+      req.body || {};
 
     if (!product || !condition) {
-      return res.status(400).json({ error: "Product name and condition are required." });
+      return res.status(400).json({
+        error: "Product name and condition are required.",
+      });
     }
 
     const flipMetrics = calculateFlipMetrics({
@@ -119,17 +156,28 @@ app.post("/api/analyze", async (req, res) => {
       goal,
     });
 
+    incrementUsage(allowedUser.id);
+
     return res.json({
       result: {
         ...aiResult,
         flipMetrics,
         locked: false,
       },
-      user: null,
+      user: safeUser(allowedUser),
     });
   } catch (error) {
+    if (error.statusCode === 403) {
+      return res.status(403).json({
+        error: "Free limit reached. Upgrade to continue.",
+        locked: true,
+      });
+    }
+
     console.error(error);
-    return res.status(500).json({ error: error.message || "Could not generate analysis." });
+    return res.status(500).json({
+      error: error.message || "Could not generate analysis.",
+    });
   }
 });
 
