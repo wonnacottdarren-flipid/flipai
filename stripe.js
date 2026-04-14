@@ -1,141 +1,183 @@
 import Stripe from "stripe";
-import { getUserByStripeCustomerId, updateUser } from "./db.js";
+import {
+  getUserByStripeCustomerId,
+  updateUser,
+} from "./db.js";
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "";
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
-const APP_URL = process.env.APP_URL || "http://localhost:3000";
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-export const stripe = new Stripe(STRIPE_SECRET_KEY || "sk_test_placeholder");
-
-export const PLAN_PRICES = {
-  starter: process.env.STRIPE_PRICE_STARTER || "price_starter_placeholder",
-  growth: process.env.STRIPE_PRICE_GROWTH || "price_growth_placeholder",
-  pro: process.env.STRIPE_PRICE_PRO || "price_pro_placeholder",
+const PRICE_IDS = {
+  starter: process.env.STRIPE_STARTER_PRICE_ID,
+  pro: process.env.STRIPE_PRO_PRICE_ID,
 };
 
+const APP_URL = process.env.APP_URL || "http://localhost:3000";
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+
+function getPlanFromPriceId(priceId) {
+  if (priceId === PRICE_IDS.starter) return "starter";
+  if (priceId === PRICE_IDS.pro) return "pro";
+  return "free";
+}
+
 export async function createCheckoutSession(user, plan) {
-  if (!STRIPE_SECRET_KEY) {
-    throw new Error("Stripe is not configured yet.");
+  const selectedPlan = String(plan || "").toLowerCase();
+  const priceId = PRICE_IDS[selectedPlan];
+
+  if (!priceId) {
+    throw new Error("Invalid plan selected.");
   }
 
-  const priceId = PLAN_PRICES[plan];
-  if (!priceId) throw new Error("Invalid plan.");
+  let customerId = user.stripeCustomerId || null;
 
-  let customerId = user.stripeCustomerId;
   if (!customerId) {
     const customer = await stripe.customers.create({
       email: user.email,
-      name: user.name,
-      metadata: { userId: user.id }
+      name: user.name || undefined,
+      metadata: {
+        userId: user.id,
+      },
     });
+
     customerId = customer.id;
-    updateUser(user.id, (u) => ({ ...u, stripeCustomerId: customerId }));
+
+    await updateUser({
+      ...user,
+      stripeCustomerId: customerId,
+    });
   }
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
+    line_items: [
+      {
+        price: priceId,
+        quantity: 1,
+      },
+    ],
     success_url: `${APP_URL}/?checkout=success`,
     cancel_url: `${APP_URL}/?checkout=cancelled`,
     allow_promotion_codes: true,
-    metadata: { userId: user.id, plan },
-    subscription_data: { metadata: { userId: user.id, plan } }
+    metadata: {
+      userId: user.id,
+      plan: selectedPlan,
+    },
+    subscription_data: {
+      metadata: {
+        userId: user.id,
+        plan: selectedPlan,
+      },
+    },
   });
 
   return session.url;
 }
 
 export async function createPortalSession(user) {
-  if (!STRIPE_SECRET_KEY) {
-    throw new Error("Stripe is not configured yet.");
-  }
   if (!user.stripeCustomerId) {
     throw new Error("No Stripe customer found for this account yet.");
   }
 
   const session = await stripe.billingPortal.sessions.create({
     customer: user.stripeCustomerId,
-    return_url: APP_URL
+    return_url: `${APP_URL}/`,
   });
 
   return session.url;
 }
 
-export function stripeWebhookHandler(req, res) {
-  if (!STRIPE_WEBHOOK_SECRET) {
-    return res.status(500).send("Missing STRIPE_WEBHOOK_SECRET");
-  }
+async function handleCheckoutCompleted(session) {
+  const customerId = session.customer;
+  const subscriptionId = session.subscription;
 
-  let event;
+  if (!customerId || !subscriptionId) return;
+
+  const user = getUserByStripeCustomerId(customerId);
+  if (!user) return;
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+  const plan = getPlanFromPriceId(priceId);
+
+  await updateUser({
+    ...user,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    subscriptionStatus: subscription.status || "active",
+    plan,
+  });
+}
+
+async function handleSubscriptionUpdated(subscription) {
+  const customerId = subscription.customer;
+  if (!customerId) return;
+
+  const user = getUserByStripeCustomerId(customerId);
+  if (!user) return;
+
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+  const plan = getPlanFromPriceId(priceId);
+
+  await updateUser({
+    ...user,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    subscriptionStatus: subscription.status || "inactive",
+    plan,
+  });
+}
+
+async function handleSubscriptionDeleted(subscription) {
+  const customerId = subscription.customer;
+  if (!customerId) return;
+
+  const user = getUserByStripeCustomerId(customerId);
+  if (!user) return;
+
+  await updateUser({
+    ...user,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: null,
+    subscriptionStatus: "canceled",
+    plan: "free",
+  });
+}
+
+export async function stripeWebhookHandler(req, res) {
   try {
-    event = stripe.webhooks.constructEvent(
+    if (!STRIPE_WEBHOOK_SECRET) {
+      return res.status(500).send("Missing STRIPE_WEBHOOK_SECRET");
+    }
+
+    const signature = req.headers["stripe-signature"];
+    const event = stripe.webhooks.constructEvent(
       req.body,
-      req.headers["stripe-signature"],
+      signature,
       STRIPE_WEBHOOK_SECRET
     );
-  } catch (error) {
-    return res.status(400).send(`Webhook Error: ${error.message}`);
-  }
 
-  try {
     switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object;
-        if (session.mode === "subscription") {
-          const userId = session.metadata?.userId;
-          const plan = session.metadata?.plan;
-          if (userId) {
-            updateUser(userId, (u) => ({
-              ...u,
-              stripeCustomerId: session.customer || u.stripeCustomerId,
-              stripeSubscriptionId: session.subscription || u.stripeSubscriptionId,
-              subscriptionStatus: "active",
-              plan: plan || u.plan,
-            }));
-          }
-        }
+      case "checkout.session.completed":
+        await handleCheckoutCompleted(event.data.object);
         break;
-      }
 
       case "customer.subscription.created":
-      case "customer.subscription.updated": {
-        const subscription = event.data.object;
-        const user = getUserByStripeCustomerId(subscription.customer);
-        if (user) {
-          const priceId = subscription.items?.data?.[0]?.price?.id;
-          const plan = Object.entries(PLAN_PRICES).find(([, id]) => id === priceId)?.[0] || user.plan;
-          updateUser(user.id, (u) => ({
-            ...u,
-            stripeSubscriptionId: subscription.id,
-            subscriptionStatus: subscription.status,
-            plan,
-          }));
-        }
+      case "customer.subscription.updated":
+        await handleSubscriptionUpdated(event.data.object);
         break;
-      }
 
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object;
-        const user = getUserByStripeCustomerId(subscription.customer);
-        if (user) {
-          updateUser(user.id, (u) => ({
-            ...u,
-            stripeSubscriptionId: null,
-            subscriptionStatus: "free",
-            plan: "free",
-          }));
-        }
+      case "customer.subscription.deleted":
+        await handleSubscriptionDeleted(event.data.object);
         break;
-      }
 
       default:
         break;
     }
 
-    return res.json({ received: true });
+    res.json({ received: true });
   } catch (error) {
-    console.error(error);
-    return res.status(500).send("Webhook handler failed.");
+    console.error("Stripe webhook error:", error.message);
+    res.status(400).send(`Webhook Error: ${error.message}`);
   }
 }
