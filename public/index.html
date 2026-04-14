@@ -107,6 +107,10 @@
       cursor: not-allowed;
     }
 
+    .secondary-btn {
+      background: #374151;
+    }
+
     .status {
       margin-top: 14px;
       padding: 12px;
@@ -184,6 +188,11 @@
       margin-top: 10px;
     }
 
+    .user-email {
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
     @media (max-width: 850px) {
       .grid {
         grid-template-columns: 1fr;
@@ -200,6 +209,32 @@
     <div class="hero">
       <h1>FlipAI</h1>
       <p>Analyze product flips before you buy.</p>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+      <h2>Account</h2>
+
+      <div id="authArea">
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" placeholder="you@example.com" />
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" placeholder="Enter your password" />
+        </div>
+
+        <button id="loginBtn">Login</button>
+        <button id="signupBtn" class="secondary-btn" style="margin-top: 8px;">Sign Up</button>
+      </div>
+
+      <div id="userArea" style="display: none;">
+        <div id="userEmail" class="user-email"></div>
+        <button id="logoutBtn">Logout</button>
+      </div>
+
+      <div id="authStatus"></div>
     </div>
 
     <div class="grid">
@@ -283,6 +318,15 @@
     const statusEl = document.getElementById("status");
     const resultArea = document.getElementById("resultArea");
 
+    const authArea = document.getElementById("authArea");
+    const userArea = document.getElementById("userArea");
+    const userEmailEl = document.getElementById("userEmail");
+    const authStatusEl = document.getElementById("authStatus");
+
+    const loginBtn = document.getElementById("loginBtn");
+    const signupBtn = document.getElementById("signupBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+
     function getPayload() {
       return {
         product: document.getElementById("product").value.trim(),
@@ -291,6 +335,13 @@
         repairCost: Number(document.getElementById("repairCost").value || 0),
         extras: document.getElementById("extras").value.trim(),
         goal: document.getElementById("goal").value
+      };
+    }
+
+    function getCredentials() {
+      return {
+        email: document.getElementById("email").value.trim(),
+        password: document.getElementById("password").value
       };
     }
 
@@ -308,6 +359,24 @@
       if (value.includes("SKIP")) return "#dc2626";
 
       return "#374151";
+    }
+
+    function setAuthStatus(message, type) {
+      if (!message) {
+        authStatusEl.innerHTML = "";
+        return;
+      }
+
+      authStatusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+    }
+
+    function setAnalyzeStatus(message, type) {
+      if (!message) {
+        statusEl.innerHTML = "";
+        return;
+      }
+
+      statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
     }
 
     function renderResult(data) {
@@ -339,7 +408,7 @@
           </div>
         </div>
 
-        <div class="panel" style="font-weight:700;color:${verdictColor(metrics.verdict)};">
+        <div class="panel" style="font-weight: 700; color: ${verdictColor(metrics.verdict || analysis.final_verdict)};">
           Verdict: ${metrics.verdict || analysis.final_verdict || "Unknown"}
         </div>
 
@@ -350,14 +419,12 @@
           <strong>Sale price:</strong> ${currency(analysis.sale_price)}
         </div>
 
-        <div class="reasoning">
-${analysis.brief_reasoning || "No analysis provided."}
-        </div>
+        <div class="reasoning">${analysis.brief_reasoning || "No analysis provided."}</div>
 
         ${
           listing.title
             ? `
-              <div class="panel" style="margin-top:12px;">
+              <div class="panel" style="margin-top: 12px;">
                 <strong>Suggested eBay title:</strong><br>
                 ${listing.title}
               </div>
@@ -374,7 +441,7 @@ ${analysis.brief_reasoning || "No analysis provided."}
     }
 
     async function runAnalysis() {
-      statusEl.innerHTML = '<div class="status loading">Analyzing...</div>';
+      setAnalyzeStatus("Analyzing...", "loading");
       resultArea.innerHTML = "";
       analyzeBtn.disabled = true;
 
@@ -395,17 +462,145 @@ ${analysis.brief_reasoning || "No analysis provided."}
           throw new Error(data.error || "Request failed");
         }
 
-        statusEl.innerHTML = '<div class="status success">Analysis complete.</div>';
+        setAnalyzeStatus("Analysis complete.", "success");
         renderResult(data);
       } catch (err) {
-        statusEl.innerHTML = `<div class="status error">Error: ${err.message}</div>`;
+        setAnalyzeStatus(`Error: ${err.message}`, "error");
         resultArea.innerHTML = '<div class="placeholder">No result available.</div>';
       } finally {
         analyzeBtn.disabled = false;
       }
     }
 
+    async function loadUser() {
+      try {
+        const res = await fetch("/api/me", {
+          credentials: "include"
+        });
+
+        const data = await res.json();
+
+        if (data.user) {
+          authArea.style.display = "none";
+          userArea.style.display = "block";
+          userEmailEl.textContent = `Logged in as: ${data.user.email}`;
+        } else {
+          authArea.style.display = "block";
+          userArea.style.display = "none";
+          userEmailEl.textContent = "";
+        }
+      } catch (err) {
+        authArea.style.display = "block";
+        userArea.style.display = "none";
+        userEmailEl.textContent = "";
+      }
+    }
+
+    async function login() {
+      const { email, password } = getCredentials();
+
+      if (!email || !password) {
+        setAuthStatus("Enter your email and password.", "error");
+        return;
+      }
+
+      loginBtn.disabled = true;
+      signupBtn.disabled = true;
+      setAuthStatus("Logging in...", "loading");
+
+      try {
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "include",
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Login failed");
+        }
+
+        setAuthStatus("Login successful.", "success");
+        await loadUser();
+      } catch (err) {
+        setAuthStatus(`Error: ${err.message}`, "error");
+      } finally {
+        loginBtn.disabled = false;
+        signupBtn.disabled = false;
+      }
+    }
+
+    async function signup() {
+      const { email, password } = getCredentials();
+
+      if (!email || !password) {
+        setAuthStatus("Enter your email and password.", "error");
+        return;
+      }
+
+      loginBtn.disabled = true;
+      signupBtn.disabled = true;
+      setAuthStatus("Creating account...", "loading");
+
+      try {
+        const res = await fetch("/api/signup", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "include",
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Signup failed");
+        }
+
+        setAuthStatus("Account created.", "success");
+        await loadUser();
+      } catch (err) {
+        setAuthStatus(`Error: ${err.message}`, "error");
+      } finally {
+        loginBtn.disabled = false;
+        signupBtn.disabled = false;
+      }
+    }
+
+    async function logout() {
+      logoutBtn.disabled = true;
+      setAuthStatus("Logging out...", "loading");
+
+      try {
+        const res = await fetch("/api/logout", {
+          method: "POST",
+          credentials: "include"
+        });
+
+        if (!res.ok) {
+          throw new Error("Logout failed");
+        }
+
+        setAuthStatus("Logged out.", "success");
+        await loadUser();
+      } catch (err) {
+        setAuthStatus(`Error: ${err.message}`, "error");
+      } finally {
+        logoutBtn.disabled = false;
+      }
+    }
+
     analyzeBtn.addEventListener("click", runAnalysis);
+    loginBtn.addEventListener("click", login);
+    signupBtn.addEventListener("click", signup);
+    logoutBtn.addEventListener("click", logout);
+
+    loadUser();
   </script>
 </body>
 </html>
