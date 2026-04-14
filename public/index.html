@@ -249,6 +249,7 @@
 
       <div id="userArea" style="display: none;">
         <div id="userEmail" class="user-email"></div>
+        <button id="billingBtn" class="secondary-btn" style="margin-bottom: 8px;">Manage Billing</button>
         <button id="logoutBtn">Logout</button>
       </div>
 
@@ -344,6 +345,7 @@
     const loginBtn = document.getElementById("loginBtn");
     const signupBtn = document.getElementById("signupBtn");
     const logoutBtn = document.getElementById("logoutBtn");
+    const billingBtn = document.getElementById("billingBtn");
 
     function getPayload() {
       return {
@@ -683,10 +685,37 @@
       }
     }
 
+    async function openBillingPortal() {
+      try {
+        setAuthStatus("Opening billing portal...", "loading");
+
+        const res = await fetch("/api/create-portal-session", {
+          method: "POST",
+          credentials: "include"
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Could not open billing portal.");
+        }
+
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+
+        throw new Error("Billing portal URL missing.");
+      } catch (err) {
+        setAuthStatus(`Error: ${err.message}`, "error");
+      }
+    }
+
     analyzeBtn.addEventListener("click", runAnalysis);
     loginBtn.addEventListener("click", login);
     signupBtn.addEventListener("click", signup);
     logoutBtn.addEventListener("click", logout);
+    billingBtn.addEventListener("click", openBillingPortal);
 
     loadUser();
   </script>
