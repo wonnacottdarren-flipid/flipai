@@ -1,26 +1,29 @@
-${money(latestResult.flip_analysis.sale_price)}`,
-        `Net profit: ${money(latestResult.flip_analysis.net_profit)}`,
-        `Time to sell: ${latestResult.flip_analysis.time_to_sell_estimate}`,
-        `Risk: ${latestResult.flip_analysis.risk_level}`,
-        `Reasoning: ${latestResult.flip_analysis.brief_reasoning}`,
-        ``,
-        `Title: ${latestResult.ebay_listing.title}`,
-        `Quick sale price: ${money(latestResult.ebay_listing.quick_sale_price)}`,
-        `Max value price: ${money(latestResult.ebay_listing.max_value_price)}`,
-        ``,
-        `Description:`,
-        latestResult.ebay_listing.description,
-        ``,
-        `Keywords:`,
-        Array.isArray(latestResult.ebay_listing.keywords)
-          ? latestResult.ebay_listing.keywords.join(", ")
-          : latestResult.ebay_listing.keywords
-      ].join("\n");
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FlipAI</title>
+</head>
+<body>
 
-      copy(text, ids.copyFullBtn);
-    };
+  <h1>FlipAI</h1>
 
-    refreshMe();
+  <button onclick="runTest()">Run Test</button>
+
+  <pre id="output"></pre>
+
+  <script>
+    async function runTest() {
+      const res = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: "iphone 12 cracked screen" })
+      });
+
+      const data = await res.json();
+      document.getElementById('output').innerText = JSON.stringify(data, null, 2);
+    }
   </script>
+
 </body>
 </html>
