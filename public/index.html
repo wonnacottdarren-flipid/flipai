@@ -767,21 +767,10 @@
         <div class="locked-box">
           <h3>Upgrade required</h3>
           <p>${message}</p>
-          ${showStarter ? `<button id="upgradeStarterBtn" class="upgrade-btn">Upgrade to Starter - £5/month</button>` : ""}
-          ${showPro ? `<button id="upgradeProBtn" class="upgrade-btn">Upgrade to Pro - £20/month</button>` : ""}
+          ${showStarter ? `<button class="upgrade-btn" onclick="startCheckout('starter')">Upgrade to Starter - £5/month</button>` : ""}
+          ${showPro ? `<button class="upgrade-btn" onclick="startCheckout('pro')">Upgrade to Pro - £20/month</button>` : ""}
         </div>
       `;
-
-      const upgradeStarterBtn = document.getElementById("upgradeStarterBtn");
-      const upgradeProBtn = document.getElementById("upgradeProBtn");
-
-      if (upgradeStarterBtn) {
-        upgradeStarterBtn.addEventListener("click", () => startCheckout("starter"));
-      }
-
-      if (upgradeProBtn) {
-        upgradeProBtn.addEventListener("click", () => startCheckout("pro"));
-      }
     }
 
     function renderResult(data) {
@@ -1084,7 +1073,7 @@
       }
     }
 
-    async function startCheckout(plan) {
+    window.startCheckout = async function (plan) {
       try {
         const selectedPlan = String(plan || "").toLowerCase();
         setAnalyzeStatus("Redirecting to checkout...", "loading");
@@ -1145,8 +1134,8 @@
     loginBtn.addEventListener("click", login);
     signupBtn.addEventListener("click", signup);
     logoutBtn.addEventListener("click", logout);
-    starterBtn.addEventListener("click", () => startCheckout("starter"));
-    proBtn.addEventListener("click", () => startCheckout("pro"));
+    starterBtn.addEventListener("click", () => window.startCheckout("starter"));
+    proBtn.addEventListener("click", () => window.startCheckout("pro"));
     billingBtn.addEventListener("click", openBillingPortal);
 
     loadUser();
