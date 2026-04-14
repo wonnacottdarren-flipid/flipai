@@ -95,19 +95,13 @@ app.post("/api/create-portal-session", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/analyze", requireAuth, async (req, res) => {
+// TEMP TEST VERSION: no login required
+app.post("/api/analyze", async (req, res) => {
   try {
     const { product, condition, buyPrice, repairCost, extras, goal } = req.body || {};
 
     if (!product || !condition) {
       return res.status(400).json({ error: "Product name and condition are required." });
-    }
-
-    const usageCheck = enforceUsage(req.user);
-    if (!usageCheck.allowed) {
-      return res.status(403).json({
-        error: `You have reached your monthly limit of ${usageCheck.limit} analyses for your plan.`,
-      });
     }
 
     const flipMetrics = calculateFlipMetrics({
@@ -116,37 +110,22 @@ app.post("/api/analyze", requireAuth, async (req, res) => {
       condition,
     });
 
-    const isPaid = req.user.plan && req.user.plan !== "free";
+    const aiResult = await runAnalysis({
+      product,
+      condition,
+      buyPrice,
+      repairCost,
+      extras,
+      goal,
+    });
 
-    let result;
-
-    if (isPaid) {
-      const aiResult = await runAnalysis({
-        product,
-        condition,
-        buyPrice,
-        repairCost,
-        extras,
-        goal,
-      });
-
-      result = {
+    return res.json({
+      result: {
         ...aiResult,
         flipMetrics,
         locked: false,
-      };
-    } else {
-      result = {
-        flipMetrics,
-        locked: true,
-      };
-    }
-
-    const updatedUser = incrementUsage(getUserById(req.user.id) || req.user);
-
-    return res.json({
-      result,
-      user: safeUser(updatedUser),
+      },
+      user: null,
     });
   } catch (error) {
     console.error(error);
