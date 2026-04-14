@@ -9,26 +9,34 @@ const USERS_FILE = path.join(__dirname, "users.json");
 
 function ensureUsersFile() {
   if (!fs.existsSync(USERS_FILE)) {
-    fs.writeFileSync(USERS_FILE, "[]", "utf8");
+    fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [] }, null, 2), "utf8");
   }
 }
 
-function readUsers() {
+function readUsersFile() {
   ensureUsersFile();
 
   try {
     const raw = fs.readFileSync(USERS_FILE, "utf8");
     const parsed = JSON.parse(raw);
 
-    return Array.isArray(parsed) ? parsed : [];
+    if (Array.isArray(parsed)) {
+      return { users: parsed };
+    }
+
+    if (parsed && Array.isArray(parsed.users)) {
+      return parsed;
+    }
+
+    return { users: [] };
   } catch (error) {
-    console.error("readUsers error:", error);
-    return [];
+    console.error("readUsersFile error:", error);
+    return { users: [] };
   }
 }
 
-function writeUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+function writeUsersFile(data) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2), "utf8");
 }
 
 function normalizeEmail(email) {
@@ -42,73 +50,78 @@ export function safeUser(user) {
     id: user.id,
     name: user.name,
     email: user.email,
-    subscriptionStatus: user.subscriptionStatus || "free",
-    usageCount: user.usageCount || 0,
-    usageResetAt: user.usageResetAt || null,
+    createdAt: user.createdAt || null,
     stripeCustomerId: user.stripeCustomerId || null,
+    stripeSubscriptionId: user.stripeSubscriptionId || null,
+    subscriptionStatus: user.subscriptionStatus || "free",
+    plan: user.plan || "free",
+    usageCount: Number(user.usageCount || 0),
+    usagePeriod: user.usagePeriod || null,
   };
 }
 
 export function getUserByEmail(email) {
   const cleanEmail = normalizeEmail(email);
-  const users = readUsers();
+  const data = readUsersFile();
 
-  return users.find((user) => normalizeEmail(user.email) === cleanEmail) || null;
+  return data.users.find((user) => normalizeEmail(user.email) === cleanEmail) || null;
 }
 
 export function getUserById(id) {
-  const users = readUsers();
-  return users.find((user) => user.id === id) || null;
+  const data = readUsersFile();
+  return data.users.find((user) => user.id === id) || null;
 }
 
 export function createUser({ name, email, passwordHash }) {
-  const users = readUsers();
+  const data = readUsersFile();
+
+  const now = new Date();
+  const usagePeriod = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 
   const user = {
     id: crypto.randomUUID(),
     name: String(name || "").trim(),
     email: normalizeEmail(email),
     passwordHash,
-    subscriptionStatus: "free",
-    usageCount: 0,
-    usageResetAt: new Date().toISOString(),
+    createdAt: now.toISOString(),
     stripeCustomerId: null,
-    createdAt: new Date().toISOString(),
+    stripeSubscriptionId: null,
+    subscriptionStatus: "free",
+    plan: "free",
+    usageCount: 0,
+    usagePeriod,
   };
 
-  users.push(user);
-  writeUsers(users);
+  data.users.push(user);
+  writeUsersFile(data);
 
   return user;
 }
 
 export function updateUser(updatedUser) {
-  const users = readUsers();
-  const index = users.findIndex((user) => user.id === updatedUser.id);
+  const data = readUsersFile();
+  const index = data.users.findIndex((user) => user.id === updatedUser.id);
 
   if (index === -1) {
     throw new Error("User not found.");
   }
 
-  users[index] = updatedUser;
-  writeUsers(users);
+  data.users[index] = updatedUser;
+  writeUsersFile(data);
 
   return updatedUser;
 }
 
 export function resetUsageIfNeeded(user) {
   const currentUser = getUserById(user.id);
-
   if (!currentUser) return null;
 
   const now = new Date();
-  const resetAt = currentUser.usageResetAt
-    ? new Date(currentUser.usageResetAt)
-    : null;
+  const currentPeriod = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 
-  if (!resetAt || now - resetAt > 1000 * 60 * 60 * 24 * 30) {
+  if (currentUser.usagePeriod !== currentPeriod) {
     currentUser.usageCount = 0;
-    currentUser.usageResetAt = now.toISOString();
+    currentUser.usagePeriod = currentPeriod;
     updateUser(currentUser);
   }
 
