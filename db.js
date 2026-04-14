@@ -152,12 +152,28 @@ export function enforceUsage(user) {
     throw new Error("User not found.");
   }
 
-  if (
-    currentUser.subscriptionStatus !== "active" &&
-    currentUser.subscriptionStatus !== "trialing" &&
-    Number(currentUser.usageCount || 0) >= 5
-  ) {
-    const error = new Error("Free usage limit reached.");
+  const usage = Number(currentUser.usageCount || 0);
+  const plan = String(currentUser.plan || "free").toLowerCase();
+  const status = String(currentUser.subscriptionStatus || "free").toLowerCase();
+
+  // Pro = unlimited
+  if (plan === "pro" && (status === "active" || status === "trialing")) {
+    return currentUser;
+  }
+
+  // Starter = 25 analyses
+  if (plan === "starter" && (status === "active" || status === "trialing")) {
+    if (usage >= 25) {
+      const error = new Error("Starter limit reached. Upgrade to Pro for unlimited analyses.");
+      error.statusCode = 403;
+      throw error;
+    }
+    return currentUser;
+  }
+
+  // Free = 5 analyses
+  if (usage >= 5) {
+    const error = new Error("Free limit reached. Upgrade to continue.");
     error.statusCode = 403;
     throw error;
   }
