@@ -156,7 +156,7 @@ app.post("/api/analyze", async (req, res) => {
       goal,
     });
 
-    incrementUsage(allowedUser.id);
+    const updatedUser = incrementUsage(allowedUser.id);
 
     return res.json({
       result: {
@@ -164,12 +164,12 @@ app.post("/api/analyze", async (req, res) => {
         flipMetrics,
         locked: false,
       },
-      user: safeUser(allowedUser),
+      user: safeUser(updatedUser),
     });
   } catch (error) {
     if (error.statusCode === 403) {
       return res.status(403).json({
-        error: "Free limit reached. Upgrade to continue.",
+        error: error.message,
         locked: true,
       });
     }
