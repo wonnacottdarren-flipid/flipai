@@ -14,7 +14,7 @@
 
   <script>
     async function runTest() {
-      const res = awaitfetch('/api/analyze', {
+      const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: "iphone 12 cracked screen" })
