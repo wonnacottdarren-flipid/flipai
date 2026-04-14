@@ -111,6 +111,11 @@
       background: #374151;
     }
 
+    .upgrade-btn {
+      background: #2563eb;
+      margin-top: 12px;
+    }
+
     .status {
       margin-top: 14px;
       padding: 12px;
@@ -191,6 +196,14 @@
     .user-email {
       font-weight: 700;
       margin-bottom: 12px;
+    }
+
+    .locked-box {
+      padding: 16px;
+      border-radius: 12px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e3a8a;
     }
 
     @media (max-width: 850px) {
@@ -385,6 +398,24 @@
       statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
     }
 
+    function renderLockedState(message, showUpgrade) {
+      resultArea.innerHTML = `
+        <div class="locked-box">
+          <strong>${message}</strong>
+          ${
+            showUpgrade
+              ? `<button id="upgradeBtn" class="upgrade-btn">Upgrade to Continue</button>`
+              : ""
+          }
+        </div>
+      `;
+
+      if (showUpgrade) {
+        const upgradeBtn = document.getElementById("upgradeBtn");
+        upgradeBtn.addEventListener("click", startCheckout);
+      }
+    }
+
     function renderResult(data) {
       const result = data.result || {};
       const metrics = result.flipMetrics || {};
@@ -437,12 +468,6 @@
             `
             : ""
         }
-
-        ${
-          data.locked === true || result.locked === true
-            ? `<div class="muted">Some features are currently locked.</div>`
-            : ""
-        }
       `;
     }
 
@@ -459,10 +484,23 @@
           headers: {
             "Content-Type": "application/json"
           },
+          credentials: "include",
           body: JSON.stringify(payload)
         });
 
         const data = await res.json();
+
+        if (res.status === 401) {
+          setAnalyzeStatus("Please sign in to use FlipAI analysis.", "error");
+          renderLockedState("Please sign in to use FlipAI analysis.", false);
+          return;
+        }
+
+        if (res.status === 403 || data.locked === true) {
+          setAnalyzeStatus(data.error || "Free limit reached. Upgrade to continue.", "error");
+          renderLockedState(data.error || "Free limit reached. Upgrade to continue.", true);
+          return;
+        }
 
         if (!res.ok) {
           throw new Error(data.error || "Request failed");
@@ -605,11 +643,43 @@
         }
 
         setAuthStatus("Logged out.", "success");
+        resultArea.innerHTML = '<div class="placeholder">Submit a flip and your analysis will appear here.</div>';
+        setAnalyzeStatus("", "");
         await loadUser();
       } catch (err) {
         setAuthStatus(`Error: ${err.message}`, "error");
       } finally {
         logoutBtn.disabled = false;
+      }
+    }
+
+    async function startCheckout() {
+      try {
+        setAnalyzeStatus("Redirecting to checkout...", "loading");
+
+        const res = await fetch("/api/create-checkout-session", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "include",
+          body: JSON.stringify({ plan: "starter" })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Could not start checkout.");
+        }
+
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+
+        throw new Error("Checkout URL missing.");
+      } catch (err) {
+        setAnalyzeStatus(`Error: ${err.message}`, "error");
       }
     }
 
