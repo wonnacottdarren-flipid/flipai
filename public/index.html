@@ -14,14 +14,29 @@
 
   <script>
     async function runTest() {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: "iphone 12 cracked screen" })
-      });
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product: 'iPhone 12 64GB Unlocked',
+            condition: 'Cracked screen, fully working, battery fine, light wear',
+            buyPrice: 90,
+            repairCost: 40,
+            extras: 'Box included, unlocked',
+            goal: 'Fast sale'
+          })
+        });
 
-      const data = await res.json();
-      document.getElementById('output').innerText = JSON.stringify(data, null, 2);
+        const data = await res.json();
+
+        document.getElementById('output').innerText =
+          JSON.stringify(data, null, 2);
+
+      } catch (err) {
+        document.getElementById('output').innerText =
+          "ERROR: " + err.message;
+      }
     }
   </script>
 
