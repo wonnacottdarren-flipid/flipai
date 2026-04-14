@@ -24,7 +24,6 @@
       --red: #dc2626;
       --red-soft: #fef2f2;
       --amber: #f59e0b;
-      --amber-soft: #fffbeb;
       --shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
       --radius: 16px;
     }
@@ -181,7 +180,7 @@
 
     .pricing-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 16px;
     }
 
@@ -411,12 +410,6 @@
       line-height: 1.6;
     }
 
-    .muted {
-      color: var(--muted);
-      font-size: 13px;
-      margin-top: 10px;
-    }
-
     .user-email {
       font-weight: 700;
       margin-bottom: 12px;
@@ -493,7 +486,12 @@
 
         <div class="hero-stat">
           <div class="label">Starter plan</div>
-          <div class="value">£5 / month</div>
+          <div class="value">25 analyses</div>
+        </div>
+
+        <div class="hero-stat">
+          <div class="label">Pro plan</div>
+          <div class="value">Unlimited</div>
         </div>
       </div>
     </section>
@@ -515,7 +513,7 @@
 
     <section class="pricing">
       <h2 class="section-title">Simple pricing</h2>
-      <p class="section-subtitle">Start free, then upgrade when you want more analyses.</p>
+      <p class="section-subtitle">Start free, then upgrade when you need more analyses.</p>
 
       <div class="pricing-grid">
         <div class="pricing-card">
@@ -525,19 +523,30 @@
             <li>5 analyses</li>
             <li>Profit and fee estimates</li>
             <li>Risk verdict</li>
-            <li>Great for testing the tool</li>
+            <li>Good for testing the tool</li>
+          </ul>
+        </div>
+
+        <div class="pricing-card">
+          <div class="plan-name">Starter</div>
+          <div class="plan-price">£5 <span>/ month</span></div>
+          <ul class="plan-list">
+            <li>25 analyses per month</li>
+            <li>Manage billing in Stripe</li>
+            <li>Built for regular flipping</li>
+            <li>Low monthly cost</li>
           </ul>
         </div>
 
         <div class="pricing-card highlight">
-          <div class="pricing-badge">Most popular</div>
-          <div class="plan-name">Starter</div>
-          <div class="plan-price">£5 <span>/ month</span></div>
+          <div class="pricing-badge">Best value</div>
+          <div class="plan-name">Pro</div>
+          <div class="plan-price">£20 <span>/ month</span></div>
           <ul class="plan-list">
             <li>Unlimited analyses</li>
-            <li>Manage billing in Stripe</li>
-            <li>Built for regular flipping</li>
-            <li>Low monthly cost</li>
+            <li>Best for heavy usage</li>
+            <li>Full access every month</li>
+            <li>Upgrade when Starter caps out</li>
           </ul>
         </div>
       </div>
@@ -586,6 +595,8 @@
 
         <p id="accountSubline" class="account-subline"></p>
 
+        <button id="starterBtn" class="secondary-btn" style="margin-bottom: 8px;">Upgrade to Starter</button>
+        <button id="proBtn" class="secondary-btn" style="margin-bottom: 8px;">Upgrade to Pro</button>
         <button id="billingBtn" class="secondary-btn" style="margin-bottom: 8px;">Manage Billing</button>
         <button id="logoutBtn">Logout</button>
       </div>
@@ -687,6 +698,8 @@
     const signupBtn = document.getElementById("signupBtn");
     const logoutBtn = document.getElementById("logoutBtn");
     const billingBtn = document.getElementById("billingBtn");
+    const starterBtn = document.getElementById("starterBtn");
+    const proBtn = document.getElementById("proBtn");
 
     const planValueEl = document.getElementById("planValue");
     const usageValueEl = document.getElementById("usageValue");
@@ -746,22 +759,28 @@
       statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
     }
 
-    function renderLockedState(message, showUpgrade) {
+    function renderLockedState(message, options = {}) {
+      const showStarter = Boolean(options.showStarter);
+      const showPro = Boolean(options.showPro);
+
       resultArea.innerHTML = `
         <div class="locked-box">
           <h3>Upgrade required</h3>
           <p>${message}</p>
-          ${
-            showUpgrade
-              ? `<button id="upgradeBtn" class="upgrade-btn">Upgrade to Starter - £5/month</button>`
-              : ""
-          }
+          ${showStarter ? `<button id="upgradeStarterBtn" class="upgrade-btn">Upgrade to Starter - £5/month</button>` : ""}
+          ${showPro ? `<button id="upgradeProBtn" class="upgrade-btn">Upgrade to Pro - £20/month</button>` : ""}
         </div>
       `;
 
-      if (showUpgrade) {
-        const upgradeBtn = document.getElementById("upgradeBtn");
-        upgradeBtn.addEventListener("click", startCheckout);
+      const upgradeStarterBtn = document.getElementById("upgradeStarterBtn");
+      const upgradeProBtn = document.getElementById("upgradeProBtn");
+
+      if (upgradeStarterBtn) {
+        upgradeStarterBtn.addEventListener("click", () => startCheckout("starter"));
+      }
+
+      if (upgradeProBtn) {
+        upgradeProBtn.addEventListener("click", () => startCheckout("pro"));
       }
     }
 
@@ -821,31 +840,41 @@
     }
 
     function updateAccountUi(user) {
-      const isPaid =
-        user.subscriptionStatus === "active" ||
-        user.subscriptionStatus === "trialing";
-
+      const plan = String(user.plan || "free").toLowerCase();
+      const status = String(user.subscriptionStatus || "free").toLowerCase();
       const usageCount = Number(user.usageCount || 0);
-      const remaining = Math.max(0, 5 - usageCount);
+
+      const isPro = plan === "pro" && (status === "active" || status === "trialing");
+      const isStarter = plan === "starter" && (status === "active" || status === "trialing");
 
       userEmailEl.textContent = `Logged in as: ${user.email}`;
 
-      if (isPaid) {
-        planValueEl.textContent = user.plan ? user.plan.charAt(0).toUpperCase() + user.plan.slice(1) : "Starter";
+      starterBtn.style.display = "none";
+      proBtn.style.display = "none";
+      billingBtn.style.display = "none";
+
+      if (isPro) {
+        planValueEl.textContent = "Pro";
         usageValueEl.textContent = "Unlimited";
         remainingValueEl.textContent = "∞";
-        accountSublineEl.textContent = "Your paid plan is active. You can manage billing below.";
+        accountSublineEl.textContent = "Your Pro plan is active with unlimited analyses.";
         billingBtn.style.display = "block";
-        billingBtn.textContent = "Manage Billing";
-        billingBtn.onclick = openBillingPortal;
+      } else if (isStarter) {
+        const remaining = Math.max(0, 25 - usageCount);
+        planValueEl.textContent = "Starter";
+        usageValueEl.textContent = `${usageCount} / 25`;
+        remainingValueEl.textContent = `${remaining}`;
+        accountSublineEl.textContent = "Your Starter plan is active with 25 analyses per month.";
+        proBtn.style.display = "block";
+        billingBtn.style.display = "block";
       } else {
+        const remaining = Math.max(0, 5 - usageCount);
         planValueEl.textContent = "Free";
         usageValueEl.textContent = `${usageCount} / 5`;
         remainingValueEl.textContent = `${remaining}`;
         accountSublineEl.textContent = "You are on the free plan with 5 analyses included.";
-        billingBtn.style.display = "block";
-        billingBtn.textContent = "Upgrade Plan";
-        billingBtn.onclick = startCheckout;
+        starterBtn.style.display = "block";
+        proBtn.style.display = "block";
       }
     }
 
@@ -870,13 +899,33 @@
 
         if (res.status === 401) {
           setAnalyzeStatus("Please sign in to use FlipAI analysis.", "error");
-          renderLockedState("Please sign in to use FlipAI analysis.", false);
+          renderLockedState("Please sign in to use FlipAI analysis.");
           return;
         }
 
         if (res.status === 403 || data.locked === true) {
-          setAnalyzeStatus(data.error || "Free limit reached. Upgrade to continue.", "error");
-          renderLockedState(data.error || "You have used all 5 free analyses. Upgrade to continue analyzing deals instantly.", true);
+          const user = data.user || null;
+          const plan = String(user?.plan || "free").toLowerCase();
+          const status = String(user?.subscriptionStatus || "free").toLowerCase();
+          const isStarter = plan === "starter" && (status === "active" || status === "trialing");
+
+          setAnalyzeStatus(data.error || "Limit reached.", "error");
+
+          if (isStarter) {
+            renderLockedState(
+              data.error || "You have used all 25 Starter analyses. Upgrade to Pro for unlimited access.",
+              { showPro: true }
+            );
+          } else {
+            renderLockedState(
+              data.error || "You have used all 5 free analyses. Upgrade to continue.",
+              { showStarter: true, showPro: true }
+            );
+          }
+
+          if (user) {
+            updateAccountUi(user);
+          }
           return;
         }
 
@@ -1035,8 +1084,9 @@
       }
     }
 
-    async function startCheckout() {
+    async function startCheckout(plan) {
       try {
+        const selectedPlan = String(plan || "").toLowerCase();
         setAnalyzeStatus("Redirecting to checkout...", "loading");
 
         const res = await fetch("/api/create-checkout-session", {
@@ -1045,7 +1095,7 @@
             "Content-Type": "application/json"
           },
           credentials: "include",
-          body: JSON.stringify({ plan: "starter" })
+          body: JSON.stringify({ plan: selectedPlan })
         });
 
         const data = await res.json();
@@ -1095,6 +1145,9 @@
     loginBtn.addEventListener("click", login);
     signupBtn.addEventListener("click", signup);
     logoutBtn.addEventListener("click", logout);
+    starterBtn.addEventListener("click", () => startCheckout("starter"));
+    proBtn.addEventListener("click", () => startCheckout("pro"));
+    billingBtn.addEventListener("click", openBillingPortal);
 
     loadUser();
   </script>
