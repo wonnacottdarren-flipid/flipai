@@ -1,115 +1,149 @@
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import crypto from "crypto";
 
-const DATA_DIR = path.join(process.cwd(), "flipai_data");
-const USERS_FILE = path.join(DATA_DIR, "users.json");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const USERS_FILE = path.join(__dirname, "users.json");
 
-export const PLAN_CONFIG = {
-  starter: { name: "Starter", monthlyLimit: 10 },
-  growth: { name: "Growth", monthlyLimit: 50 },
-  pro: { name: "Pro", monthlyLimit: null },
-};
-
-function ensureDb() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+function ensureUsersFile() {
   if (!fs.existsSync(USERS_FILE)) {
-    fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [] }, null, 2));
+    fs.writeFileSync(USERS_FILE, "[]", "utf8");
   }
 }
 
-function readDb() {
-  ensureDb();
-  return JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
-}
+function readUsers() {
+  ensureUsersFile();
 
-function writeDb(db) {
-  ensureDb();
-  fs.writeFileSync(USERS_FILE, JSON.stringify(db, null, 2));
-}
+  try {
+    const raw = fs.readFileSync(USERS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
 
-export function createUser({ name, email, passwordHash }) {
-  const db = readDb();
-  const now = new Date().toISOString();
-  const user = {
-    id: crypto.randomUUID(),
-    name,
-    email: email.toLowerCase(),
-    passwordHash,
-    createdAt: now,
-    stripeCustomerId: null,
-    stripeSubscriptionId: null,
-    subscriptionStatus: "free",
-    plan: "free",
-    usageCount: 0,
-    usagePeriod: new Date().toISOString().slice(0, 7),
-  };
-  db.users.push(user);
-  writeDb(db);
-  return user;
-}
-
-export function getUserByEmail(email) {
-  const db = readDb();
-  return db.users.find((u) => u.email === String(email).toLowerCase()) || null;
-}
-
-export function getUserById(id) {
-  const db = readDb();
-  return db.users.find((u) => u.id === id) || null;
-}
-
-export function getUserByStripeCustomerId(customerId) {
-  const db = readDb();
-  return db.users.find((u) => u.stripeCustomerId === customerId) || null;
-}
-
-export function updateUser(userId, updater) {
-  const db = readDb();
-  const index = db.users.findIndex((u) => u.id === userId);
-  if (index === -1) return null;
-  db.users[index] = updater(db.users[index]);
-  writeDb(db);
-  return db.users[index];
-}
-
-export function resetUsageIfNeeded(user) {
-  const currentPeriod = new Date().toISOString().slice(0, 7);
-  if (user.usagePeriod !== currentPeriod) {
-    return updateUser(user.id, (u) => ({
-      ...u,
-      usagePeriod: currentPeriod,
-      usageCount: 0,
-    }));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("readUsers error:", error);
+    return [];
   }
-  return user;
+}
+
+function writeUsers(users) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+}
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
 }
 
 export function safeUser(user) {
+  if (!user) return null;
+
   return {
     id: user.id,
     name: user.name,
     email: user.email,
-    plan: user.plan,
-    subscriptionStatus: user.subscriptionStatus,
-    usageCount: user.usageCount,
-    usagePeriod: user.usagePeriod,
-    usageLimit: PLAN_CONFIG[user.plan]?.monthlyLimit ?? null,
+    subscriptionStatus: user.subscriptionStatus || "free",
+    usageCount: user.usageCount || 0,
+    usageResetAt: user.usageResetAt || null,
+    stripeCustomerId: user.stripeCustomerId || null,
   };
 }
 
-export function enforceUsage(user) {
-  const cfg = PLAN_CONFIG[user.plan];
-  if (!cfg || cfg.monthlyLimit === null) return { allowed: true, limit: null };
-  if (user.usageCount >= cfg.monthlyLimit) {
-    return { allowed: false, limit: cfg.monthlyLimit };
-  }
-  return { allowed: true, limit: cfg.monthlyLimit };
+export function getUserByEmail(email) {
+  const cleanEmail = normalizeEmail(email);
+  const users = readUsers();
+
+  return users.find((user) => normalizeEmail(user.email) === cleanEmail) || null;
 }
 
-export function incrementUsage(user) {
-  return updateUser(user.id, (u) => ({
-    ...u,
-    usageCount: (u.usageCount || 0) + 1,
-  }));
+export function getUserById(id) {
+  const users = readUsers();
+  return users.find((user) => user.id === id) || null;
+}
+
+export function createUser({ name, email, passwordHash }) {
+  const users = readUsers();
+
+  const user = {
+    id: crypto.randomUUID(),
+    name: String(name || "").trim(),
+    email: normalizeEmail(email),
+    passwordHash,
+    subscriptionStatus: "free",
+    usageCount: 0,
+    usageResetAt: new Date().toISOString(),
+    stripeCustomerId: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  users.push(user);
+  writeUsers(users);
+
+  return user;
+}
+
+export function updateUser(updatedUser) {
+  const users = readUsers();
+  const index = users.findIndex((user) => user.id === updatedUser.id);
+
+  if (index === -1) {
+    throw new Error("User not found.");
+  }
+
+  users[index] = updatedUser;
+  writeUsers(users);
+
+  return updatedUser;
+}
+
+export function resetUsageIfNeeded(user) {
+  const currentUser = getUserById(user.id);
+
+  if (!currentUser) return null;
+
+  const now = new Date();
+  const resetAt = currentUser.usageResetAt
+    ? new Date(currentUser.usageResetAt)
+    : null;
+
+  if (!resetAt || now - resetAt > 1000 * 60 * 60 * 24 * 30) {
+    currentUser.usageCount = 0;
+    currentUser.usageResetAt = now.toISOString();
+    updateUser(currentUser);
+  }
+
+  return currentUser;
+}
+
+export function incrementUsage(userId) {
+  const user = getUserById(userId);
+
+  if (!user) {
+    throw new Error("User not found.");
+  }
+
+  user.usageCount = Number(user.usageCount || 0) + 1;
+  updateUser(user);
+
+  return user;
+}
+
+export function enforceUsage(user) {
+  const currentUser = resetUsageIfNeeded(user);
+
+  if (!currentUser) {
+    throw new Error("User not found.");
+  }
+
+  if (
+    currentUser.subscriptionStatus !== "active" &&
+    currentUser.subscriptionStatus !== "trialing" &&
+    Number(currentUser.usageCount || 0) >= 5
+  ) {
+    const error = new Error("Free usage limit reached.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return currentUser;
 }
