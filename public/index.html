@@ -216,13 +216,18 @@
 
       <div id="authArea">
         <div class="field">
+          <label for="name">Name</label>
+          <input id="name" type="text" placeholder="Your name" />
+        </div>
+
+        <div class="field">
           <label for="email">Email</label>
           <input id="email" type="email" placeholder="you@example.com" />
         </div>
 
         <div class="field">
           <label for="password">Password</label>
-          <input id="password" type="password" placeholder="Enter your password" />
+          <input id="password" type="password" placeholder="At least 8 characters" />
         </div>
 
         <button id="loginBtn">Login</button>
@@ -340,6 +345,7 @@
 
     function getCredentials() {
       return {
+        name: document.getElementById("name").value.trim(),
         email: document.getElementById("email").value.trim(),
         password: document.getElementById("password").value
       };
@@ -478,6 +484,13 @@
           credentials: "include"
         });
 
+        if (!res.ok) {
+          authArea.style.display = "block";
+          userArea.style.display = "none";
+          userEmailEl.textContent = "";
+          return;
+        }
+
         const data = await res.json();
 
         if (data.user) {
@@ -489,7 +502,7 @@
           userArea.style.display = "none";
           userEmailEl.textContent = "";
         }
-      } catch (err) {
+      } catch {
         authArea.style.display = "block";
         userArea.style.display = "none";
         userEmailEl.textContent = "";
@@ -535,10 +548,15 @@
     }
 
     async function signup() {
-      const { email, password } = getCredentials();
+      const { name, email, password } = getCredentials();
 
-      if (!email || !password) {
-        setAuthStatus("Enter your email and password.", "error");
+      if (!name || !email || !password) {
+        setAuthStatus("Enter your name, email, and password.", "error");
+        return;
+      }
+
+      if (password.length < 8) {
+        setAuthStatus("Password must be at least 8 characters.", "error");
         return;
       }
 
@@ -553,7 +571,7 @@
             "Content-Type": "application/json"
           },
           credentials: "include",
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({ name, email, password })
         });
 
         const data = await res.json();
