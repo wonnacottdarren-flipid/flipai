@@ -7,34 +7,45 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const USERS_FILE = path.join(__dirname, "users.json");
 
-// Ensure file exists
-if (!fs.existsSync(USERS_FILE)) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [] }, null, 2));
+function ensureUsersFile() {
+  if (!fs.existsSync(USERS_FILE)) {
+    fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [] }, null, 2), "utf8");
+  }
 }
 
-// Read file
-function readUsers() {
-  const raw = fs.readFileSync(USERS_FILE, "utf8");
-  const data = JSON.parse(raw);
+function readUsersFile() {
+  ensureUsersFile();
 
-  return Array.isArray(data.users) ? data.users : [];
+  try {
+    const raw = fs.readFileSync(USERS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+
+    if (parsed && Array.isArray(parsed.users)) {
+      return parsed;
+    }
+
+    return { users: [] };
+  } catch (error) {
+    console.error("readUsersFile error:", error);
+    return { users: [] };
+  }
 }
 
-// Write file
-function writeUsers(users) {
-  fs.writeFileSync(
-    USERS_FILE,
-    JSON.stringify({ users }, null, 2),
-    "utf8"
-  );
+function writeUsersFile(data) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2), "utf8");
 }
 
-// Normalize email
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
-// Safe user
+function currentUsagePeriod() {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
 export function safeUser(user) {
   if (!user) return null;
 
@@ -42,28 +53,35 @@ export function safeUser(user) {
     id: user.id,
     name: user.name,
     email: user.email,
+    createdAt: user.createdAt || null,
+    stripeCustomerId: user.stripeCustomerId || null,
+    stripeSubscriptionId: user.stripeSubscriptionId || null,
     subscriptionStatus: user.subscriptionStatus || "free",
-    usageCount: user.usageCount || 0,
+    plan: user.plan || "free",
+    usageCount: Number(user.usageCount || 0),
+    usagePeriod: user.usagePeriod || currentUsagePeriod(),
   };
 }
 
-// Get by email
 export function getUserByEmail(email) {
-  const users = readUsers();
-  const clean = normalizeEmail(email);
+  const cleanEmail = normalizeEmail(email);
+  const data = readUsersFile();
 
-  return users.find(u => normalizeEmail(u.email) === clean) || null;
+  return data.users.find((user) => normalizeEmail(user.email) === cleanEmail) || null;
 }
 
-// Get by ID
 export function getUserById(id) {
-  const users = readUsers();
-  return users.find(u => u.id === id) || null;
+  const data = readUsersFile();
+  return data.users.find((user) => user.id === id) || null;
 }
 
-// Create user
+export function getUserByStripeCustomerId(stripeCustomerId) {
+  const data = readUsersFile();
+  return data.users.find((user) => user.stripeCustomerId === stripeCustomerId) || null;
+}
+
 export function createUser({ name, email, passwordHash }) {
-  const users = readUsers();
+  const data = readUsersFile();
 
   const user = {
     id: crypto.randomUUID(),
@@ -71,33 +89,78 @@ export function createUser({ name, email, passwordHash }) {
     email: normalizeEmail(email),
     passwordHash,
     createdAt: new Date().toISOString(),
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
     subscriptionStatus: "free",
+    plan: "free",
     usageCount: 0,
+    usagePeriod: currentUsagePeriod(),
   };
 
-  users.push(user);
-  writeUsers(users);
+  data.users.push(user);
+  writeUsersFile(data);
 
   return user;
 }
 
-// Usage functions (keep simple)
+export function updateUser(updatedUser) {
+  const data = readUsersFile();
+  const index = data.users.findIndex((user) => user.id === updatedUser.id);
+
+  if (index === -1) {
+    throw new Error("User not found.");
+  }
+
+  data.users[index] = updatedUser;
+  writeUsersFile(data);
+
+  return updatedUser;
+}
+
 export function resetUsageIfNeeded(user) {
-  return user;
+  const currentUser = getUserById(user.id);
+  if (!currentUser) return null;
+
+  const period = currentUsagePeriod();
+
+  if (currentUser.usagePeriod !== period) {
+    currentUser.usagePeriod = period;
+    currentUser.usageCount = 0;
+    updateUser(currentUser);
+  }
+
+  return currentUser;
 }
 
 export function incrementUsage(userId) {
-  const users = readUsers();
-  const user = users.find(u => u.id === userId);
+  const user = getUserById(userId);
 
-  if (!user) return null;
+  if (!user) {
+    throw new Error("User not found.");
+  }
 
-  user.usageCount = (user.usageCount || 0) + 1;
-  writeUsers(users);
+  user.usageCount = Number(user.usageCount || 0) + 1;
+  updateUser(user);
 
   return user;
 }
 
 export function enforceUsage(user) {
-  return user;
+  const currentUser = resetUsageIfNeeded(user);
+
+  if (!currentUser) {
+    throw new Error("User not found.");
+  }
+
+  if (
+    currentUser.subscriptionStatus !== "active" &&
+    currentUser.subscriptionStatus !== "trialing" &&
+    Number(currentUser.usageCount || 0) >= 5
+  ) {
+    const error = new Error("Free usage limit reached.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return currentUser;
 }
