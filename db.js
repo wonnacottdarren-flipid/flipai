@@ -12,15 +12,21 @@ if (!fs.existsSync(USERS_FILE)) {
   fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [] }, null, 2));
 }
 
-// Read users
-function readData() {
+// Read file
+function readUsers() {
   const raw = fs.readFileSync(USERS_FILE, "utf8");
-  return JSON.parse(raw);
+  const data = JSON.parse(raw);
+
+  return Array.isArray(data.users) ? data.users : [];
 }
 
-// Write users
-function writeData(data) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
+// Write file
+function writeUsers(users) {
+  fs.writeFileSync(
+    USERS_FILE,
+    JSON.stringify({ users }, null, 2),
+    "utf8"
+  );
 }
 
 // Normalize email
@@ -28,7 +34,7 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
-// Safe user (hide password)
+// Safe user
 export function safeUser(user) {
   if (!user) return null;
 
@@ -43,51 +49,51 @@ export function safeUser(user) {
 
 // Get by email
 export function getUserByEmail(email) {
-  const data = readData();
+  const users = readUsers();
   const clean = normalizeEmail(email);
 
-  return data.users.find(u => normalizeEmail(u.email) === clean) || null;
+  return users.find(u => normalizeEmail(u.email) === clean) || null;
 }
 
 // Get by ID
 export function getUserById(id) {
-  const data = readData();
-  return data.users.find(u => u.id === id) || null;
+  const users = readUsers();
+  return users.find(u => u.id === id) || null;
 }
 
 // Create user
 export function createUser({ name, email, passwordHash }) {
-  const data = readData();
+  const users = readUsers();
 
   const user = {
     id: crypto.randomUUID(),
     name: String(name || "").trim(),
     email: normalizeEmail(email),
     passwordHash,
+    createdAt: new Date().toISOString(),
     subscriptionStatus: "free",
     usageCount: 0,
-    createdAt: new Date().toISOString(),
   };
 
-  data.users.push(user);
-  writeData(data);
+  users.push(user);
+  writeUsers(users);
 
   return user;
 }
 
-// Usage helpers (simple versions)
+// Usage functions (keep simple)
 export function resetUsageIfNeeded(user) {
   return user;
 }
 
 export function incrementUsage(userId) {
-  const data = readData();
-  const user = data.users.find(u => u.id === userId);
+  const users = readUsers();
+  const user = users.find(u => u.id === userId);
 
   if (!user) return null;
 
   user.usageCount = (user.usageCount || 0) + 1;
-  writeData(data);
+  writeUsers(users);
 
   return user;
 }
