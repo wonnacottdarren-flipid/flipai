@@ -1,0 +1,30 @@
+{
+  "users": [
+    {
+      "id": "a57d6a49-3068-4304-8b41-ad11720d69a4",
+      "name": "Darren Wonnacott",
+      "email": "wonnacott.darren@gmail.com",
+      "passwordHash": "$2a$10$58XLMeqI1A.CfSs24YNakOWjfMy5mOjfdxF96ClqEhHuA0dSPB7Pq",
+      "createdAt": "2026-04-13T19:24:21.660Z",
+      "stripeCustomerId": "cus_UKVziLLiyYCZwt",
+      "stripeSubscriptionId": "sub_1TLrjBQ32t0V1Fhh8S63KXqg",
+      "subscriptionStatus": "active",
+      "plan": "starter",
+      "usageCount": 2,
+      "usagePeriod": "2026-04"
+    },
+    {
+      "id": "05b5d5ad-f1db-4510-b735-1fa04799a124",
+      "name": "kelly wonnacott",
+      "email": "wonnacott.kelly@gmail.com",
+      "passwordHash": "$2a$10$yOYO5eeuS09gP5alhWHEGu5D5zpfZduGGFUuraymtr1HIjm6pntae",
+      "createdAt": "2026-04-14T17:17:53.158Z",
+      "stripeCustomerId": null,
+      "stripeSubscriptionId": null,
+      "subscriptionStatus": "free",
+      "plan": "free",
+      "usageCount": 1,
+      "usagePeriod": "2026-04"
+    }
+  ]
+}

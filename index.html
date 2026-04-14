@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlipAI</title>
+  <style>
+    :root{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#475569;--border:#e2e8f0;--accent:#0f172a;--soft:#f1f5f9;--good:#ecfdf5;--goodtext:#166534;--warn:#fffbeb;--warntext:#92400e;--bad:#fff1f2;--badtext:#9f1239;--radius:24px}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1200px;margin:0 auto;padding:24px}.hero{background:linear-gradient(135deg,#fff,#f1f5f9);border-bottom:1px solid var(--border)}
+    .grid2,.grid3,.main,.authgrid{display:grid;gap:24px}.grid2{grid-template-columns:1.2fr .8fr;align-items:center;padding:56px 24px}.main{grid-template-columns:1fr 1fr}.grid3{grid-template-columns:repeat(3,1fr)}.authgrid{grid-template-columns:1fr 1fr}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;box-shadow:0 1px 2px rgba(15,23,42,.04)} .dark{background:#0f172a;color:#fff;border-color:#1e293b}
+    .pill,.badge,.chip,.plan-tag{display:inline-flex;align-items:center;border-radius:999px}.pill{gap:8px;padding:10px 14px;border:1px solid var(--border);background:#fff;font-size:14px;font-weight:700}
+    h1{font-size:54px;line-height:1;margin:18px 0 0} h2{font-size:34px;line-height:1.1;margin:8px 0 0} h3{font-size:28px;margin:8px 0 0}.eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#64748b;font-weight:700}.muted{color:var(--muted)}
+    .chips,.rowbtn,.stack,.metrics,.field2{display:grid;gap:12px}.chips{grid-auto-flow:column;grid-auto-columns:max-content;overflow:auto;padding-bottom:4px}.metrics,.field2{grid-template-columns:1fr 1fr}.soft,.metric{background:var(--soft);border:1px solid var(--border);border-radius:20px;padding:16px}.metric .v{font-size:28px;font-weight:800;margin-top:6px}
+    .row{display:flex;justify-content:space-between;gap:16px;padding:4px 0;font-size:15px}.divider{border-top:1px solid var(--border);padding-top:12px;margin-top:12px}
+    .badge{padding:8px 14px;font-size:13px;font-weight:800}.buy{background:var(--good);color:var(--goodtext)}.marginal{background:var(--warn);color:var(--warntext)}.skip{background:var(--bad);color:var(--badtext)}
+    .chip{background:var(--soft);padding:10px 14px;font-size:14px;color:#334155}.rowbtn{grid-auto-flow:column;grid-auto-columns:max-content}.section{padding:18px 0 42px}.center{text-align:center;max-width:760px;margin:0 auto}
+    button,a.button{appearance:none;border:none;border-radius:18px;padding:14px 18px;font-size:15px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;justify-content:center;align-items:center;transition:.18s ease} button:hover,a.button:hover{transform:translateY(-1px)}
+    .primary{background:var(--accent);color:#fff}.secondary{background:#fff;color:var(--text);border:1px solid var(--border)} .ghost{background:transparent;border:1px solid rgba(255,255,255,.18);color:#fff}
+    label{display:block;font-size:14px;font-weight:600;margin-bottom:8px}input,textarea,select{width:100%;border-radius:18px;border:1px solid var(--border);padding:14px 16px;font-size:15px;background:#fff;color:var(--text)} textarea{min-height:120px;resize:vertical}
+    .plan.pop{background:#0f172a;color:#fff}.plan.pop .muted,.plan.pop ul{color:#cbd5e1}.plan ul{padding-left:18px;color:#334155}.plan li{margin:10px 0}.plan-tag{padding:6px 10px;background:rgba(255,255,255,.12);color:#fff;font-size:12px;font-weight:700}
+    .hidden{display:none}.small{font-size:13px}pre{white-space:pre-wrap;word-wrap:break-word;font-family:Inter,Arial,sans-serif;margin:0}.top{margin-top:16px}
+    @media (max-width:960px){.grid2,.main,.grid3,.authgrid,.metrics,.field2{grid-template-columns:1fr}h1{font-size:42px}h2{font-size:28px}}
+  </style>
+</head>
+<body>
+  <section class="hero"><div class="wrap grid2"><div><div class="pill">Built for eBay sellers, flippers, and phone resellers</div><h1>FlipAI</h1><p class="muted" style="font-size:20px;max-width:700px;margin-top:18px">Instantly analyse flips, estimate profit after fees, and generate ready-to-paste eBay listings in one place.</p><div class="chips top"><div class="chip">Profit estimates</div><div class="chip">Buy / skip verdicts</div><div class="chip">Listing writer</div><div class="chip">Paid plans with Stripe</div></div><div class="rowbtn top"><a href="#auth" class="button primary">Create account</a><a href="#pricing" class="button secondary">View pricing</a></div></div><div class="card"><div class="metrics" style="margin-top:0"><div class="metric"><div class="muted small">Starter</div><div class="v">10</div><div class="small muted">analyses / month</div></div><div class="metric"><div class="muted small">Growth</div><div class="v">50</div><div class="small muted">analyses / month</div></div></div><div class="soft top"><div class="small muted">Customer flow</div><strong style="display:block;margin-top:8px">Sign up → Pay → Analyse → Manage plan</strong><p class="muted top">Stripe Checkout handles subscriptions and the customer portal lets users manage billing after signup.</p></div></div></div></section>
+
+  <section id="auth" class="section"><div class="wrap authgrid"><div class="card"><div class="eyebrow">Account</div><h2>Create account</h2><div class="stack top"><div><label>Name</label><input id="signupName" placeholder="Darren" /></div><div><label>Email</label><input id="signupEmail" type="email" placeholder="you@example.com" /></div><div><label>Password</label><input id="signupPassword" type="password" placeholder="Minimum 8 characters" /></div><button id="signupBtn" class="primary">Create account</button><div id="signupMsg" class="soft hidden"></div></div></div><div class="card"><div class="eyebrow">Access</div><h2>Sign in</h2><div class="stack top"><div><label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com" /></div><div><label>Password</label><input id="loginPassword" type="password" placeholder="Your password" /></div><button id="loginBtn" class="primary">Sign in</button><div id="loginMsg" class="soft hidden"></div></div></div></div></section>
+
+  <section class="section"><div class="wrap main"><div class="card"><div class="row" style="align-items:flex-start"><div><div class="eyebrow">Dashboard</div><h2>Your account</h2></div><button id="logoutBtn" class="secondary">Log out</button></div><div id="dashboardState" class="stack top"><div class="soft"><div class="small muted">Status</div><strong id="acctStatus">Not signed in</strong></div><div class="field2"><div class="soft"><div class="small muted">Plan</div><strong id="acctPlan">Free</strong></div><div class="soft"><div class="small muted">Usage this month</div><strong id="acctUsage">0 / 0</strong></div></div><div class="rowbtn"><button data-plan="starter" class="button primary subscribeBtn">Choose Starter £5</button><button data-plan="growth" class="button primary subscribeBtn">Choose Growth £10</button><button data-plan="pro" class="button primary subscribeBtn">Choose Pro £20</button></div><div class="rowbtn"><button id="portalBtn" class="button secondary">Manage billing</button></div><div id="acctMsg" class="soft hidden"></div></div></div>
+      <div class="card"><div class="row" style="align-items:flex-start"><div><div class="eyebrow">Live tool</div><h2>Analyse item</h2></div><span id="verdictBadge" class="badge marginal">MARGINAL</span></div><div class="stack top"><div><label>Product name</label><input id="product" value="iPhone 12 64GB Unlocked" /></div><div><label>Condition</label><textarea id="condition">Cracked screen, fully working, battery fine, light wear</textarea></div><div class="field2"><div><label>Buy price (£)</label><input id="buyPrice" type="number" step="0.01" value="90" /></div><div><label>Repair cost (£)</label><input id="repairCost" type="number" step="0.01" value="40" /></div></div><div><label>Extras</label><input id="extras" value="Box included, unlocked" /></div><div><label>Selling goal</label><select id="goal"><option>Fast sale</option><option>Balanced</option><option>Max value</option></select></div><button id="analyseBtn" class="primary">Analyse item</button><div id="analysisMsg" class="soft hidden"></div></div></div></div></section>
+
+  <section class="section"><div class="wrap main"><div class="card"><div class="eyebrow">Output</div><h2>Flip analysis</h2><div class="metrics top"><div class="metric"><div class="small muted">Estimated resale</div><div id="salePriceValue" class="v">£0.00</div></div><div class="metric"><div class="small muted">Net profit</div><div id="profitValue" class="v">£0.00</div></div></div><div class="top"><div class="row"><span>Buy price</span><span id="buyPriceValue">£0.00</span></div><div class="row"><span>Sale price</span><span id="salePriceRow">£0.00</span></div><div class="row"><span>Fees (15%)</span><span id="feesValue">£0.00</span></div><div class="row"><span>Costs</span><span id="costsValue">£0.00</span></div><div class="row divider"><strong>Net profit</strong><strong id="profitRow">£0.00</strong></div></div><div class="soft top"><div class="small muted">Why this price</div><p id="reasoningText" class="top">Run an item through the tool to see the reasoning here.</p></div><div class="field2 top"><div class="card" style="padding:16px;border-radius:20px"><div class="small muted">Time to sell</div><strong id="sellSpeedValue">—</strong></div><div class="card" style="padding:16px;border-radius:20px"><div class="small muted">Risk level</div><strong id="riskValue">—</strong></div></div></div>
+    <div class="card"><div class="row" style="align-items:flex-start"><div><div class="eyebrow">Output</div><h2>eBay listing</h2></div><button id="copyFullBtn" class="secondary">Copy result</button></div><div class="stack top"><div class="soft"><div class="row"><span class="small muted">Title</span><button id="copyTitleBtn" class="secondary">Copy</button></div><strong id="titleText" style="display:block;margin-top:8px">—</strong></div><div class="field2"><div class="soft"><div class="small muted">Quick sale price</div><strong id="quickSaleText">—</strong></div><div class="soft"><div class="small muted">Max value price</div><strong id="maxValueText">—</strong></div></div><div class="soft"><div class="row"><span class="small muted">Description</span><button id="copyDescriptionBtn" class="secondary">Copy</button></div><pre id="descriptionText" class="top">—</pre></div><div class="soft"><div class="row"><span class="small muted">SEO keywords</span><button id="copyKeywordsBtn" class="secondary">Copy</button></div><p id="keywordsText" class="top">—</p></div></div></div></div></section>
+
+  <section id="pricing" class="section" style="background:#fff;border-top:1px solid var(--border);border-bottom:1px solid var(--border)"><div class="wrap"><div class="center"><div class="eyebrow">Pricing</div><h2>Simple plans that are easy to say yes to</h2><p class="muted top">Low enough for casual sellers to try, strong enough for active flippers to get daily value.</p></div><div class="grid3 top"><div class="card plan"><div class="small muted">Starter</div><h3>£5<span class="muted" style="font-size:16px;font-weight:600">/month</span></h3><p class="muted">Best for light sellers testing the tool.</p><ul><li>10 item checks per month</li><li>Flip analysis</li><li>Basic listing generation</li></ul><button data-plan="starter" class="button secondary subscribeBtn">Choose Starter</button></div><div class="card plan pop"><div class="plan-tag">Most popular</div><div class="small" style="margin-top:8px">Growth</div><h3>£10<span style="font-size:16px;font-weight:600;color:#cbd5e1">/month</span></h3><p class="muted">The best starting plan for most resellers.</p><ul><li>50 item checks per month</li><li>Full flip analysis + listing output</li><li>Faster response priority</li></ul><button data-plan="growth" class="button" style="background:#fff;color:#0f172a">Choose Growth</button></div><div class="card plan"><div class="small muted">Pro</div><h3>£20<span class="muted" style="font-size:16px;font-weight:600">/month</span></h3><p class="muted">For active flippers checking items daily.</p><ul><li>Unlimited item checks</li><li>Advanced listing output</li><li>Priority support</li></ul><button data-plan="pro" class="button secondary subscribeBtn">Choose Pro</button></div></div></div></section>
+
+  <script>
+    const currency = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 2 });
+    let latestResult = null;
+    let currentUser = null;
+    const $ = (id) => document.getElementById(id);
+    const ids = {
+      signupName: $("signupName"), signupEmail: $("signupEmail"), signupPassword: $("signupPassword"), signupBtn: $("signupBtn"), signupMsg: $("signupMsg"),
+      loginEmail: $("loginEmail"), loginPassword: $("loginPassword"), loginBtn: $("loginBtn"), loginMsg: $("loginMsg"), logoutBtn: $("logoutBtn"),
+      acctStatus: $("acctStatus"), acctPlan: $("acctPlan"), acctUsage: $("acctUsage"), acctMsg: $("acctMsg"), portalBtn: $("portalBtn"),
+      product: $("product"), condition: $("condition"), buyPrice: $("buyPrice"), repairCost: $("repairCost"), extras: $("extras"), goal: $("goal"), analyseBtn: $("analyseBtn"), analysisMsg: $("analysisMsg"),
+      verdictBadge: $("verdictBadge"), salePriceValue: $("salePriceValue"), profitValue: $("profitValue"), buyPriceValue: $("buyPriceValue"), salePriceRow: $("salePriceRow"), feesValue: $("feesValue"), costsValue: $("costsValue"), profitRow: $("profitRow"), reasoningText: $("reasoningText"), sellSpeedValue: $("sellSpeedValue"), riskValue: $("riskValue"), titleText: $("titleText"), quickSaleText: $("quickSaleText"), maxValueText: $("maxValueText"), descriptionText: $("descriptionText"), keywordsText: $("keywordsText"),
+      copyFullBtn: $("copyFullBtn"), copyTitleBtn: $("copyTitleBtn"), copyDescriptionBtn: $("copyDescriptionBtn"), copyKeywordsBtn: $("copyKeywordsBtn")
+    };
+
+    function money(v){ return currency.format(Number(v || 0)); }
+    function showBox(el, msg, isError=false){ el.textContent = msg; el.classList.remove("hidden"); el.style.background = isError ? "#fff1f2" : "#f1f5f9"; el.style.color = isError ? "#9f1239" : "#0f172a"; el.style.borderColor = isError ? "#fecdd3" : "#e2e8f0"; }
+    function hideBox(el){ el.classList.add("hidden"); }
+    async function copy(text, button){ try{ await navigator.clipboard.writeText(text); const t=button.textContent; button.textContent="Copied"; setTimeout(()=>button.textContent=t,1200);}catch{ alert("Copy failed."); } }
+
+    function setVerdict(verdict){
+      ids.verdictBadge.textContent = verdict || "—";
+      ids.verdictBadge.className = "badge " + (verdict === "BUY" ? "buy" : verdict === "MARGINAL" ? "marginal" : "skip");
+    }
+
+    function renderUser(user){
+      currentUser = user;
+      ids.acctStatus.textContent = user ? (user.subscriptionStatus === "active" || user.subscriptionStatus === "trialing" ? "Paid access active" : "Signed in - no active plan") : "Not signed in";
+      ids.acctPlan.textContent = user ? user.plan : "Free";
+      ids.acctUsage.textContent = user ? `${user.usageCount} / ${user.usageLimit === null ? "Unlimited" : user.usageLimit}` : "0 / 0";
+    }
+
+    function renderResult(result){
+      latestResult = result;
+
+      const metrics = result.flipMetrics || {};
+      const paid = !result.locked && result.flip_analysis && result.ebay_listing;
+
+      ids.salePriceValue.textContent = money(metrics.estimatedResale || 0);
+      ids.profitValue.textContent = money(metrics.profit || 0);
+      ids.buyPriceValue.textContent = money(Number(ids.buyPrice.value || 0));
+      ids.salePriceRow.textContent = money(metrics.estimatedResale || 0);
+      ids.feesValue.textContent = money(metrics.ebayFees || 0);
+      ids.costsValue.textContent = money(metrics.totalCost || 0);
+      ids.profitRow.textContent = money(metrics.profit || 0);
+
+      ids.verdictBadge.textContent = metrics.verdict || "—";
+      ids.verdictBadge.className =
+        "badge " +
+        (
+          metrics.verdict && metrics.verdict.includes("GOOD") ? "buy" :
+          metrics.verdict && metrics.verdict.includes("OK") ? "marginal" :
+          "skip"
+        );
+
+      if (!paid) {
+        ids.reasoningText.textContent = "Upgrade to unlock full pricing reasoning and sell-speed insights.";
+        ids.sellSpeedValue.textContent = "Upgrade required";
+        ids.riskValue.textContent = "Upgrade required";
+
+        ids.titleText.textContent = "🔒 Upgrade to unlock eBay title";
+        ids.quickSaleText.textContent = "🔒";
+        ids.maxValueText.textContent = "🔒";
+        ids.descriptionText.textContent = "Upgrade to unlock the full eBay listing description.";
+        ids.keywordsText.textContent = "Upgrade to unlock SEO keywords.";
+        return;
+      }
+
+      setVerdict(result.flip_analysis.final_verdict);
+      ids.salePriceValue.textContent = money(result.flip_analysis.sale_price);
+      ids.profitValue.textContent = money(result.flip_analysis.net_profit);
+      ids.buyPriceValue.textContent = money(result.flip_analysis.buy_price);
+      ids.salePriceRow.textContent = money(result.flip_analysis.sale_price);
+      ids.feesValue.textContent = money(result.flip_analysis.fees);
+      ids.costsValue.textContent = money(result.flip_analysis.costs);
+      ids.profitRow.textContent = money(result.flip_analysis.net_profit);
+
+      ids.reasoningText.textContent = result.flip_analysis.brief_reasoning;
+      ids.sellSpeedValue.textContent = result.flip_analysis.time_to_sell_estimate;
+      ids.riskValue.textContent = result.flip_analysis.risk_level;
+
+      ids.titleText.textContent = result.ebay_listing.title;
+      ids.quickSaleText.textContent = money(result.ebay_listing.quick_sale_price);
+      ids.maxValueText.textContent = money(result.ebay_listing.max_value_price);
+      ids.descriptionText.textContent = result.ebay_listing.description;
+      ids.keywordsText.textContent = Array.isArray(result.ebay_listing.keywords)
+        ? result.ebay_listing.keywords.join(", ")
+        : result.ebay_listing.keywords;
+    }
+
+    async function api(url, method="GET", body){
+      const res = await fetch(url,{
+        method,
+        credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(data.error || "Request failed.");
+      return data;
+    }
+
+    async function refreshMe(){
+      try{
+        const data = await api("/api/me");
+        renderUser(data.user);
+      } catch {
+        renderUser(null);
+      }
+    }
+
+    ids.signupBtn.onclick = async () => {
+      hideBox(ids.signupMsg);
+      try{
+        const data = await api("/api/signup","POST",{
+          name:ids.signupName.value.trim(),
+          email:ids.signupEmail.value.trim(),
+          password:ids.signupPassword.value
+        });
+        renderUser(data.user);
+        showBox(ids.signupMsg,"Account created. You can now choose a plan.");
+      } catch(e){
+        showBox(ids.signupMsg,e.message,true);
+      }
+    };
+
+    ids.loginBtn.onclick = async () => {
+      hideBox(ids.loginMsg);
+      try{
+        const data = await api("/api/login","POST",{
+          email:ids.loginEmail.value.trim(),
+          password:ids.loginPassword.value
+        });
+        renderUser(data.user);
+        showBox(ids.loginMsg,"Signed in successfully.");
+      } catch(e){
+        showBox(ids.loginMsg,e.message,true);
+      }
+    };
+
+    ids.logoutBtn.onclick = async () => {
+      try{
+        await api("/api/logout","POST");
+        renderUser(null);
+        showBox($("acctMsg"),"Logged out.");
+      } catch(e){
+        showBox($("acctMsg"),e.message,true);
+      }
+    };
+
+    ids.portalBtn.onclick = async () => {
+      hideBox($("acctMsg"));
+      try{
+        const data = await api("/api/create-portal-session","POST");
+        window.location.href = data.url;
+      } catch(e){
+        showBox($("acctMsg"),e.message,true);
+      }
+    };
+
+    document.querySelectorAll(".subscribeBtn").forEach((btn)=>{
+      btn.onclick = async () => {
+        hideBox($("acctMsg"));
+        try {
+          const plan = btn.dataset.plan;
+          const data = await api("/api/create-checkout-session","POST",{ plan });
+          window.location.href = data.url;
+        } catch (e) {
+          showBox($("acctMsg"), e.message, true);
+        }
+      };
+    });
+
+    ids.analyseBtn.onclick = async () => {
+      hideBox(ids.analysisMsg);
+      ids.analyseBtn.disabled = true;
+      ids.analyseBtn.textContent = "Analysing...";
+      try{
+        const data = await api("/api/analyze","POST",{
+          product: ids.product.value.trim(),
+          condition: ids.condition.value.trim(),
+          buyPrice: Number(ids.buyPrice.value || 0),
+          repairCost: Number(ids.repairCost.value || 0),
+          extras: ids.extras.value.trim(),
+          goal: ids.goal.value
+        });
+        renderResult(data.result);
+        renderUser(data.user);
+        showBox(ids.analysisMsg, data.result.locked ? "Basic analysis complete. Upgrade to unlock full output." : "Analysis complete.");
+      } catch(e){
+        showBox(ids.analysisMsg,e.message,true);
+      } finally{
+        ids.analyseBtn.disabled = false;
+        ids.analyseBtn.textContent = "Analyse item";
+      }
+    };
+
+    ids.copyTitleBtn.onclick = () => copy(ids.titleText.textContent, ids.copyTitleBtn);
+    ids.copyDescriptionBtn.onclick = () => copy(ids.descriptionText.textContent, ids.copyDescriptionBtn);
+    ids.copyKeywordsBtn.onclick = () => copy(ids.keywordsText.textContent, ids.copyKeywordsBtn);
+    ids.copyFullBtn.onclick = () => {
+      if(!latestResult) return;
+
+      if (latestResult.locked) {
+        const text = [
+          `Verdict: ${latestResult.flipMetrics?.verdict || "—"}`,
+          `Estimated resale: ${money(latestResult.flipMetrics?.estimatedResale || 0)}`,
+          `eBay fees: ${money(latestResult.flipMetrics?.ebayFees || 0)}`,
+          `Total cost: ${money(latestResult.flipMetrics?.totalCost || 0)}`,
+          `Net profit: ${money(latestResult.flipMetrics?.profit || 0)}`,
+          ``,
+          `Upgrade to unlock full eBay listing output.`
+        ].join("\n");
+        copy(text, ids.copyFullBtn);
+        return;
+      }
+
+      const text = [
+        `Verdict: ${latestResult.flip_analysis.final_verdict}`,
+        `Estimated resale: ${money(latestResult.flip_analysis.sale_price)}`,
+        `Net profit: ${money(latestResult.flip_analysis.net_profit)}`,
+        `Time to sell: ${latestResult.flip_analysis.time_to_sell_estimate}`,
+        `Risk: ${latestResult.flip_analysis.risk_level}`,
+        `Reasoning: ${latestResult.flip_analysis.brief_reasoning}`,
+        ``,
+        `Title: ${latestResult.ebay_listing.title}`,
+        `Quick sale price: ${money(latestResult.ebay_listing.quick_sale_price)}`,
+        `Max value price: ${money(latestResult.ebay_listing.max_value_price)}`,
+        ``,
+        `Description:`,
+        latestResult.ebay_listing.description,
+        ``,
+        `Keywords:`,
+        Array.isArray(latestResult.ebay_listing.keywords)
+          ? latestResult.ebay_listing.keywords.join(", ")
+          : latestResult.ebay_listing.keywords
+      ].join("\n");
+
+      copy(text, ids.copyFullBtn);
+    };
+
+    refreshMe();
+  </script>
+</body>
+</html>
