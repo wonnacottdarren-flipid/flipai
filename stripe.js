@@ -4,19 +4,20 @@ import {
   updateUser,
 } from "./db.js";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-03-31.basil",
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+const PRICE_IDS = {
+  starter: process.env.STRIPE_STARTER_PRICE_ID,
+  pro: process.env.STRIPE_PRO_PRICE_ID,
+};
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
-function getPriceIdForPlan(plan) {
-  const cleanPlan = String(plan || "").toLowerCase();
-
-  if (cleanPlan === "starter") return process.env.STRIPE_STARTER_PRICE_ID;
-  if (cleanPlan === "pro") return process.env.STRIPE_PRO_PRICE_ID;
-
-  throw new Error("Invalid plan selected.");
+function getPlanFromPriceId(priceId) {
+  if (priceId === PRICE_IDS.starter) return "starter";
+  if (priceId === PRICE_IDS.pro) return "pro";
+  return "free";
 }
 
 async function ensureStripeCustomer(user) {
@@ -34,7 +35,6 @@ async function ensureStripeCustomer(user) {
     } catch (error) {
       const message = String(error?.message || "");
       const code = String(error?.code || "");
-
       const missingCustomer =
         code === "resource_missing" || message.includes("No such customer");
 
@@ -46,20 +46,28 @@ async function ensureStripeCustomer(user) {
 
   const newCustomer = await stripe.customers.create({
     email: user.email,
-    name: user.name,
+    name: user.name || undefined,
     metadata: {
       userId: user.id,
     },
   });
 
-  user.stripeCustomerId = newCustomer.id;
-  updateUser(user);
+  await updateUser({
+    ...user,
+    stripeCustomerId: newCustomer.id,
+  });
 
   return newCustomer;
 }
 
 export async function createCheckoutSession(user, plan) {
-  const priceId = getPriceIdForPlan(plan);
+  const selectedPlan = String(plan || "").toLowerCase();
+  const priceId = PRICE_IDS[selectedPlan];
+
+  if (!priceId) {
+    throw new Error("Invalid plan selected.");
+  }
+
   const customer = await ensureStripeCustomer(user);
 
   const session = await stripe.checkout.sessions.create({
@@ -76,12 +84,12 @@ export async function createCheckoutSession(user, plan) {
     allow_promotion_codes: true,
     metadata: {
       userId: user.id,
-      plan: String(plan || "").toLowerCase(),
+      plan: selectedPlan,
     },
     subscription_data: {
       metadata: {
         userId: user.id,
-        plan: String(plan || "").toLowerCase(),
+        plan: selectedPlan,
       },
     },
   });
@@ -100,104 +108,99 @@ export async function createPortalSession(user) {
   return session.url;
 }
 
-async function handleCheckoutSessionCompleted(event) {
-  const session = event.data.object;
-  const userId = session?.metadata?.userId;
-  const customerId = session?.customer;
-  const subscriptionId = session?.subscription;
+async function handleCheckoutCompleted(session) {
+  const customerId = session.customer;
+  const subscriptionId = session.subscription;
   const plan = String(session?.metadata?.plan || "").toLowerCase();
 
-  if (!userId) return;
-
-  const user = getUserByStripeCustomerId(customerId) || null;
-
-  if (user) {
-    user.stripeCustomerId = customerId || user.stripeCustomerId || null;
-    user.stripeSubscriptionId = subscriptionId || user.stripeSubscriptionId || null;
-    user.subscriptionStatus = "active";
-    user.plan = plan || user.plan || "free";
-    updateUser(user);
-  }
-}
-
-async function handleCustomerSubscriptionEvent(event) {
-  const subscription = event.data.object;
-  const customerId = subscription?.customer;
-  const subscriptionId = subscription?.id;
-  const status = subscription?.status || "inactive";
-  const plan =
-    String(subscription?.metadata?.plan || "").toLowerCase() ||
-    inferPlanFromSubscription(subscription);
+  if (!customerId) return;
 
   const user = getUserByStripeCustomerId(customerId);
-
   if (!user) return;
 
-  user.stripeCustomerId = customerId || user.stripeCustomerId || null;
-  user.stripeSubscriptionId = subscriptionId || null;
-  user.subscriptionStatus = status;
-
-  if (status === "active" || status === "trialing") {
-    user.plan = plan || user.plan || "free";
-  } else if (
-    status === "canceled" ||
-    status === "unpaid" ||
-    status === "incomplete_expired"
-  ) {
-    user.plan = "free";
-  }
-
-  updateUser(user);
+  await updateUser({
+    ...user,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscriptionId || user.stripeSubscriptionId || null,
+    subscriptionStatus: "active",
+    plan: plan || user.plan || "free",
+  });
 }
 
-function inferPlanFromSubscription(subscription) {
-  const priceId =
-    subscription?.items?.data?.[0]?.price?.id || "";
+async function handleSubscriptionUpdated(subscription) {
+  const customerId = subscription.customer;
+  if (!customerId) return;
 
-  if (priceId && priceId === process.env.STRIPE_STARTER_PRICE_ID) {
-    return "starter";
-  }
+  const user = getUserByStripeCustomerId(customerId);
+  if (!user) return;
 
-  if (priceId && priceId === process.env.STRIPE_PRO_PRICE_ID) {
-    return "pro";
-  }
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+  const plan =
+    String(subscription?.metadata?.plan || "").toLowerCase() ||
+    getPlanFromPriceId(priceId);
 
-  return "free";
+  await updateUser({
+    ...user,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    subscriptionStatus: subscription.status || "inactive",
+    plan:
+      subscription.status === "active" || subscription.status === "trialing"
+        ? (plan || user.plan || "free")
+        : "free",
+  });
+}
+
+async function handleSubscriptionDeleted(subscription) {
+  const customerId = subscription.customer;
+  if (!customerId) return;
+
+  const user = getUserByStripeCustomerId(customerId);
+  if (!user) return;
+
+  await updateUser({
+    ...user,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: null,
+    subscriptionStatus: "canceled",
+    plan: "free",
+  });
 }
 
 export async function stripeWebhookHandler(req, res) {
   try {
-    const signature = req.headers["stripe-signature"];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    if (!webhookSecret) {
-      return res.status(500).send("Missing webhook secret.");
+    if (!STRIPE_WEBHOOK_SECRET) {
+      return res.status(500).send("Missing STRIPE_WEBHOOK_SECRET");
     }
 
+    const signature = req.headers["stripe-signature"];
     const event = stripe.webhooks.constructEvent(
       req.body,
       signature,
-      webhookSecret
+      STRIPE_WEBHOOK_SECRET
     );
 
     switch (event.type) {
       case "checkout.session.completed":
-        await handleCheckoutSessionCompleted(event);
+        await handleCheckoutCompleted(event.data.object);
         break;
 
       case "customer.subscription.created":
       case "customer.subscription.updated":
+        await handleSubscriptionUpdated(event.data.object);
+        break;
+
       case "customer.subscription.deleted":
-        await handleCustomerSubscriptionEvent(event);
+        await handleSubscriptionDeleted(event.data.object);
         break;
 
       default:
         break;
     }
 
-    return res.json({ received: true });
+    res.json({ received: true });
   } catch (error) {
-    console.error("stripeWebhookHandler error:", error);
-    return res.status(400).send(`Webhook Error: ${error.message}`);
+    console.error("Stripe webhook error:", error.message);
+    res.status(400).send(`Webhook Error: ${error.message}`);
   }
 }
