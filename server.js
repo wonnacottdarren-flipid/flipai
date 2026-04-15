@@ -23,6 +23,7 @@ import {
   stripeWebhookHandler,
 } from "./stripe.js";
 import { runAnalysis } from "./openai.js";
+import { searchEbayListings } from "./ebay.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -177,6 +178,42 @@ app.post("/api/analyze", async (req, res) => {
     console.error(error);
     return res.status(500).json({
       error: error.message || "Could not generate analysis.",
+    });
+  }
+});
+
+app.post("/api/search-ebay", async (req, res) => {
+  try {
+    const user = getUserFromCookie(req);
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Please sign in to search eBay.",
+      });
+    }
+
+    const { query, limit, filterPriceMax, condition, freeShippingOnly } =
+      req.body || {};
+
+    if (!query || !String(query).trim()) {
+      return res.status(400).json({
+        error: "Search query is required.",
+      });
+    }
+
+    const items = await searchEbayListings({
+      query,
+      limit,
+      filterPriceMax,
+      condition,
+      freeShippingOnly,
+    });
+
+    return res.json({ items });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: error.message || "Could not search eBay.",
     });
   }
 });
