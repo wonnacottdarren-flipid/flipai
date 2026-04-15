@@ -1,5 +1,6 @@
 const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
-const EBAY_BROWSE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
+const EBAY_BROWSE_URL =
+  "https://api.ebay.com/buy/browse/v1/item_summary/search";
 const EBAY_SCOPE = "https://api.ebay.com/oauth/api_scope";
 
 let cachedToken = null;
@@ -44,7 +45,11 @@ async function getEbayAccessToken() {
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.error_description || data.error || "Could not get eBay access token.");
+    throw new Error(
+      data.error_description ||
+        data.error ||
+        "Could not get eBay access token."
+    );
   }
 
   cachedToken = data.access_token;
@@ -53,13 +58,67 @@ async function getEbayAccessToken() {
   return cachedToken;
 }
 
-function normaliseCondition(condition) {
+function normaliseConditionLabel(condition) {
   const text = String(condition || "").toLowerCase();
 
-  if (text.includes("new")) return "New";
-  if (text.includes("used")) return "Used";
-  if (text.includes("refurb")) return "Refurbished";
+  if (
+    text.includes("new") ||
+    text === "brand new" ||
+    text === "new"
+  ) {
+    return "New";
+  }
+
+  if (
+    text.includes("refurb") ||
+    text.includes("seller refurbished") ||
+    text.includes("manufacturer refurbished")
+  ) {
+    return "Refurbished";
+  }
+
+  if (
+    text.includes("used") ||
+    text.includes("pre-owned") ||
+    text.includes("preowned")
+  ) {
+    return "Used";
+  }
+
   return "Unknown";
+}
+
+function normaliseConditionFilter(condition) {
+  const text = String(condition || "").trim().toUpperCase();
+
+  if (!text) return "";
+
+  const directAllowed = new Set([
+    "NEW",
+    "USED",
+    "CERTIFIED_REFURBISHED",
+    "LIKE_NEW",
+    "VERY_GOOD",
+    "GOOD",
+    "ACCEPTABLE",
+  ]);
+
+  if (directAllowed.has(text)) {
+    return text;
+  }
+
+  const loose = String(condition || "").trim().toLowerCase();
+
+  if (loose.includes("new")) return "NEW";
+  if (loose.includes("used")) return "USED";
+  if (loose.includes("certified refurb")) return "CERTIFIED_REFURBISHED";
+  if (loose.includes("refurb")) return "CERTIFIED_REFURBISHED";
+  if (loose.includes("like new")) return "LIKE_NEW";
+  if (loose.includes("very good")) return "VERY_GOOD";
+  if (loose === "good" || loose.includes(" good")) return "GOOD";
+  if (loose.includes("acceptable")) return "ACCEPTABLE";
+
+  return "";
 }
 
 function mapEbayItem(item) {
@@ -79,8 +138,12 @@ function mapEbayItem(item) {
     price: priceValue,
     shipping: shippingValue,
     totalBuyPrice: priceValue + shippingValue,
-    condition: normaliseCondition(item?.condition),
-    location: item?.itemLocation?.country || "GB",
+    condition: normaliseConditionLabel(item?.condition),
+    rawCondition: item?.condition || "",
+    location:
+      item?.itemLocation?.country ||
+      item?.itemLocation?.city ||
+      "GB",
     buyingOptions: Array.isArray(item?.buyingOptions)
       ? item.buyingOptions
       : [],
@@ -101,9 +164,11 @@ export async function searchEbayListings({
   const token = await getEbayAccessToken();
   const marketplaceId = process.env.EBAY_MARKETPLACE_ID || "EBAY_GB";
 
+  const safeLimit = Math.min(Math.max(Number(limit) || 10, 1), 20);
+
   const params = new URLSearchParams({
     q: String(query).trim(),
-    limit: String(Math.min(Math.max(Number(limit) || 10, 1), 20)),
+    limit: String(safeLimit),
   });
 
   const filters = [];
@@ -113,14 +178,12 @@ export async function searchEbayListings({
   }
 
   if (freeShippingOnly) {
-    filters.push("deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP|SHIP_TO_HOME}");
+    filters.push("maxDeliveryCost:0");
   }
 
-  if (condition && String(condition).trim()) {
-    const clean = String(condition).trim();
-    if (["NEW", "USED", "CERTIFIED_REFURBISHED", "LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"].includes(clean)) {
-      filters.push(`conditions:{${clean}}`);
-    }
+  const ebayCondition = normaliseConditionFilter(condition);
+  if (ebayCondition) {
+    filters.push(`conditions:{${ebayCondition}}`);
   }
 
   if (filters.length) {
@@ -128,6 +191,7 @@ export async function searchEbayListings({
   }
 
   const res = await fetch(`${EBAY_BROWSE_URL}?${params.toString()}`, {
+    method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
       "X-EBAY-C-MARKETPLACE-ID": marketplaceId,
@@ -138,9 +202,11 @@ export async function searchEbayListings({
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.errors?.[0]?.message || "Could not search eBay.");
+    throw new Error(
+      data?.errors?.[0]?.message || "Could not search eBay."
+    );
   }
 
-  const items = Array.isArray(data.itemSummaries) ? data.itemSummaries : [];
+  const items = Array.isArray(data?.itemSummaries) ? data.itemSummaries : [];
   return items.map(mapEbayItem);
 }
