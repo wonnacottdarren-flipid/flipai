@@ -10,42 +10,106 @@
     }
 
     :root {
-      --bg: #f5f7fb;
-      --card: #ffffff;
-      --text: #1f2937;
-      --muted: #6b7280;
-      --border: #e5e7eb;
-      --dark: #0f172a;
-      --dark-2: #374151;
-      --blue: #2563eb;
-      --blue-soft: #eff6ff;
-      --green: #16a34a;
-      --green-soft: #ecfdf5;
-      --red: #dc2626;
-      --red-soft: #fef2f2;
+      --bg: #0b1020;
+      --bg-soft: #11182d;
+      --card: rgba(255, 255, 255, 0.06);
+      --card-strong: rgba(255, 255, 255, 0.1);
+      --card-solid: #121a2f;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --border: rgba(255, 255, 255, 0.1);
+      --white: #ffffff;
+      --blue: #4f8cff;
+      --blue-2: #6da3ff;
+      --blue-soft: rgba(79, 140, 255, 0.14);
+      --green: #22c55e;
+      --green-soft: rgba(34, 197, 94, 0.14);
+      --red: #ef4444;
+      --red-soft: rgba(239, 68, 68, 0.14);
       --amber: #f59e0b;
-      --shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
-      --radius: 16px;
+      --amber-soft: rgba(245, 158, 11, 0.14);
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+      --radius: 20px;
+      --radius-sm: 14px;
+      --max: 1180px;
+    }
+
+    html {
+      scroll-behavior: smooth;
     }
 
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: var(--bg);
+      font-family: Inter, Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(79, 140, 255, 0.14), transparent 28%),
+        radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 22%),
+        linear-gradient(180deg, #0b1020 0%, #0f172a 100%);
       color: var(--text);
     }
 
     .container {
-      max-width: 1120px;
+      max-width: var(--max);
       margin: 0 auto;
       padding: 24px;
     }
 
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0 28px;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--blue), #7dd3fc);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 18px;
+      box-shadow: 0 14px 34px rgba(79, 140, 255, 0.35);
+    }
+
+    .brand-sub {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    .topbar-links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .chip-link {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
     .hero {
       display: grid;
-      grid-template-columns: 1.3fr 0.7fr;
+      grid-template-columns: 1.2fr 0.8fr;
       gap: 20px;
-      margin-bottom: 24px;
+      margin-bottom: 22px;
       align-items: stretch;
     }
 
@@ -53,91 +117,169 @@
     .hero-side,
     .card,
     .feature-card,
-    .pricing-card {
-      background: var(--card);
+    .pricing-card,
+    .mini-card {
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
     }
 
     .hero-main {
-      padding: 28px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+      padding: 34px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -80px auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(79,140,255,0.35), transparent 68%);
+      pointer-events: none;
     }
 
     .eyebrow {
-      display: inline-block;
-      padding: 6px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
       border-radius: 999px;
       background: var(--blue-soft);
-      color: var(--blue);
+      color: #cfe0ff;
       font-size: 12px;
-      font-weight: 700;
-      margin-bottom: 14px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      border: 1px solid rgba(79, 140, 255, 0.25);
     }
 
     .hero h1 {
-      margin: 0 0 10px;
-      font-size: 40px;
-      line-height: 1.08;
+      margin: 0 0 12px;
+      font-size: 50px;
+      line-height: 1.02;
+      letter-spacing: -1.2px;
+      max-width: 680px;
     }
 
     .hero p {
       margin: 0;
-      color: var(--muted);
+      color: #cbd5e1;
       font-size: 17px;
-      line-height: 1.6;
+      line-height: 1.75;
+      max-width: 660px;
     }
 
-    .hero-points {
-      margin-top: 18px;
-      display: grid;
-      gap: 10px;
+    .hero-cta-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 22px;
     }
 
-    .hero-point {
-      padding: 12px 14px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: #fafafa;
+    .hero-cta {
+      display: inline-block;
+      text-decoration: none;
+      padding: 13px 18px;
+      border-radius: 14px;
+      font-weight: 700;
       font-size: 14px;
     }
 
+    .hero-cta.primary {
+      background: linear-gradient(135deg, var(--blue), var(--blue-2));
+      color: white;
+      box-shadow: 0 14px 34px rgba(79, 140, 255, 0.35);
+    }
+
+    .hero-cta.secondary {
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .hero-points {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .hero-point {
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      color: #dbeafe;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
     .hero-side {
+      background: linear-gradient(180deg, #11192f 0%, #0d1428 100%);
       padding: 24px;
       display: flex;
       flex-direction: column;
-      justify-content: center;
-      background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-      color: #fff;
+      justify-content: space-between;
+      min-height: 100%;
     }
 
     .hero-side h3 {
-      margin: 0 0 10px;
-      font-size: 20px;
+      margin: 0 0 8px;
+      font-size: 22px;
     }
 
     .hero-side p {
       margin: 0 0 16px;
-      color: rgba(255,255,255,0.8);
+      color: var(--muted);
       font-size: 14px;
-      line-height: 1.6;
+      line-height: 1.65;
     }
 
     .hero-stat {
-      padding: 14px;
-      border-radius: 12px;
-      background: rgba(255,255,255,0.08);
-      margin-bottom: 10px;
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.05);
+      margin-bottom: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
     }
 
     .hero-stat .label {
       font-size: 12px;
-      opacity: 0.8;
+      color: #cbd5e1;
       margin-bottom: 4px;
     }
 
     .hero-stat .value {
-      font-size: 24px;
-      font-weight: 700;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.6px;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+
+    .mini-card {
+      background: rgba(255,255,255,0.04);
+      padding: 18px;
+    }
+
+    .mini-card .mini-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .mini-card .mini-value {
+      font-size: 20px;
+      font-weight: 800;
     }
 
     .features {
@@ -148,7 +290,19 @@
     }
 
     .feature-card {
-      padding: 20px;
+      background: rgba(255,255,255,0.04);
+      padding: 22px;
+    }
+
+    .feature-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,0.06);
+      margin-bottom: 14px;
+      font-size: 18px;
     }
 
     .feature-card h3 {
@@ -160,22 +314,32 @@
       margin: 0;
       color: var(--muted);
       font-size: 14px;
-      line-height: 1.6;
+      line-height: 1.7;
     }
 
     .pricing {
       margin-bottom: 24px;
     }
 
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
     .section-title {
-      margin: 0 0 14px;
-      font-size: 24px;
+      margin: 0 0 6px;
+      font-size: 30px;
+      letter-spacing: -0.5px;
     }
 
     .section-subtitle {
-      margin: 0 0 16px;
+      margin: 0;
       color: var(--muted);
       font-size: 15px;
+      line-height: 1.6;
     }
 
     .pricing-grid {
@@ -185,13 +349,15 @@
     }
 
     .pricing-card {
-      padding: 22px;
-      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      padding: 24px;
+      position: relative;
     }
 
     .pricing-card.highlight {
-      border: 2px solid var(--blue);
-      position: relative;
+      border: 1px solid rgba(79, 140, 255, 0.45);
+      background: linear-gradient(180deg, rgba(79,140,255,0.1), rgba(255,255,255,0.04));
+      transform: translateY(-2px);
     }
 
     .pricing-badge {
@@ -199,40 +365,43 @@
       padding: 6px 10px;
       border-radius: 999px;
       background: var(--blue-soft);
-      color: var(--blue);
+      color: #dbeafe;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 800;
       margin-bottom: 12px;
+      border: 1px solid rgba(79, 140, 255, 0.25);
     }
 
     .plan-name {
       font-size: 22px;
-      font-weight: 700;
+      font-weight: 800;
       margin-bottom: 6px;
     }
 
     .plan-price {
-      font-size: 34px;
-      font-weight: 700;
+      font-size: 36px;
+      font-weight: 900;
       margin-bottom: 10px;
+      letter-spacing: -1px;
     }
 
     .plan-price span {
       font-size: 14px;
-      font-weight: 400;
+      font-weight: 500;
       color: var(--muted);
     }
 
     .plan-list {
       margin: 0;
       padding-left: 18px;
-      color: var(--muted);
-      line-height: 1.8;
+      color: #cbd5e1;
+      line-height: 1.9;
       font-size: 14px;
     }
 
     .card {
-      padding: 20px;
+      background: rgba(255,255,255,0.04);
+      padding: 24px;
       margin-bottom: 20px;
     }
 
@@ -240,6 +409,7 @@
       margin-top: 0;
       margin-bottom: 18px;
       font-size: 24px;
+      letter-spacing: -0.4px;
     }
 
     .account-grid {
@@ -250,10 +420,10 @@
     }
 
     .account-stat {
-      background: #f9fafb;
+      background: rgba(255,255,255,0.04);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
+      border-radius: 16px;
+      padding: 16px;
     }
 
     .account-stat .label {
@@ -264,13 +434,14 @@
 
     .account-stat .value {
       font-size: 18px;
-      font-weight: 700;
+      font-weight: 800;
     }
 
     .account-subline {
       color: var(--muted);
       font-size: 14px;
       margin: 0 0 16px;
+      line-height: 1.6;
     }
 
     .field {
@@ -279,26 +450,42 @@
 
     label {
       display: block;
-      margin-bottom: 6px;
-      font-weight: 600;
-      font-size: 14px;
+      margin-bottom: 7px;
+      font-weight: 700;
+      font-size: 13px;
+      color: #dbeafe;
+      letter-spacing: 0.2px;
     }
 
     input,
     textarea,
     select {
       width: 100%;
-      padding: 12px;
-      border: 1px solid #d1d5db;
-      border-radius: 10px;
+      padding: 14px 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
       font-size: 14px;
       font-family: inherit;
-      background: #fff;
-      color: #111827;
+      background: rgba(255,255,255,0.04);
+      color: var(--white);
+      outline: none;
+      transition: 0.18s ease;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: #8192aa;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: rgba(79,140,255,0.55);
+      box-shadow: 0 0 0 4px rgba(79,140,255,0.14);
     }
 
     textarea {
-      min-height: 110px;
+      min-height: 120px;
       resize: vertical;
     }
 
@@ -306,64 +493,74 @@
       width: 100%;
       padding: 14px;
       border: none;
-      border-radius: 10px;
-      background: var(--dark);
+      border-radius: 14px;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
       color: #ffffff;
       font-size: 15px;
-      font-weight: 700;
+      font-weight: 800;
       cursor: pointer;
+      transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
+      box-shadow: 0 14px 24px rgba(0, 0, 0, 0.18);
     }
 
     button:hover {
-      opacity: 0.96;
+      opacity: 0.98;
+      transform: translateY(-1px);
     }
 
     button:disabled {
       opacity: 0.65;
       cursor: not-allowed;
+      transform: none;
     }
 
     .secondary-btn {
-      background: var(--dark-2);
+      background: linear-gradient(135deg, #1f2937, #334155);
     }
 
     .upgrade-btn {
-      background: var(--blue);
+      background: linear-gradient(135deg, var(--blue), var(--blue-2));
       margin-top: 12px;
+      box-shadow: 0 16px 28px rgba(79, 140, 255, 0.35);
     }
 
     .grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 0.95fr 1.05fr;
       gap: 20px;
       align-items: start;
     }
 
     .status {
       margin-top: 14px;
-      padding: 12px;
-      border-radius: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
       font-size: 14px;
+      border: 1px solid transparent;
     }
 
     .loading {
       background: var(--blue-soft);
-      color: #1d4ed8;
+      color: #dbeafe;
+      border-color: rgba(79, 140, 255, 0.25);
     }
 
     .error {
       background: var(--red-soft);
-      color: #991b1b;
+      color: #fecaca;
+      border-color: rgba(239, 68, 68, 0.22);
     }
 
     .success {
       background: var(--green-soft);
-      color: #065f46;
+      color: #bbf7d0;
+      border-color: rgba(34, 197, 94, 0.22);
     }
 
     .placeholder {
       color: var(--muted);
       font-size: 14px;
+      line-height: 1.7;
     }
 
     .results-grid {
@@ -374,63 +571,69 @@
     }
 
     .metric {
-      background: #f9fafb;
-      border-radius: 12px;
-      padding: 14px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 16px;
+      padding: 16px;
       border: 1px solid var(--border);
     }
 
     .metric .label {
       font-size: 12px;
       color: var(--muted);
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
 
     .metric .value {
-      font-size: 22px;
-      font-weight: 700;
-      color: #111827;
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--white);
+      letter-spacing: -0.4px;
     }
 
     .panel {
-      padding: 12px;
-      border-radius: 10px;
+      padding: 14px;
+      border-radius: 14px;
       margin-bottom: 12px;
-      background: #f9fafb;
+      background: rgba(255,255,255,0.04);
       border: 1px solid var(--border);
-      line-height: 1.5;
+      line-height: 1.65;
+      color: #e2e8f0;
     }
 
     .reasoning {
-      padding: 14px;
-      border-radius: 12px;
-      background: #f3f4f6;
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
       border: 1px solid var(--border);
       white-space: pre-wrap;
-      line-height: 1.6;
+      line-height: 1.7;
+      color: #e2e8f0;
     }
 
     .user-email {
-      font-weight: 700;
+      font-weight: 800;
       margin-bottom: 12px;
+      color: #dbeafe;
     }
 
     .locked-box {
-      padding: 18px;
-      border-radius: 12px;
-      background: var(--blue-soft);
-      border: 1px solid #bfdbfe;
-      color: #1e3a8a;
+      padding: 20px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(79,140,255,0.12), rgba(79,140,255,0.06));
+      border: 1px solid rgba(79,140,255,0.24);
+      color: #dbeafe;
     }
 
     .locked-box h3 {
       margin: 0 0 10px;
-      font-size: 22px;
+      font-size: 24px;
+      letter-spacing: -0.3px;
     }
 
     .locked-box p {
       margin: 0;
-      line-height: 1.6;
+      line-height: 1.7;
+      color: #cbd5e1;
     }
 
     .footer {
@@ -439,91 +642,154 @@
       color: var(--muted);
       font-size: 13px;
       text-align: center;
+      line-height: 1.7;
     }
 
-    @media (max-width: 900px) {
+    @media (max-width: 980px) {
       .hero,
       .features,
       .pricing-grid,
       .grid,
       .account-grid,
-      .results-grid {
+      .results-grid,
+      .mini-grid,
+      .hero-points {
         grid-template-columns: 1fr;
       }
 
       .hero h1 {
-        font-size: 32px;
+        font-size: 36px;
+      }
+
+      .section-header {
+        display: block;
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
       }
     }
   </style>
 </head>
 <body>
   <div class="container">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark">↗</div>
+        <div>
+          <div>FlipAI</div>
+          <div class="brand-sub">AI resale analysis for serious flippers</div>
+        </div>
+      </div>
+
+      <div class="topbar-links">
+        <a class="chip-link" href="#pricing">Pricing</a>
+        <a class="chip-link" href="#account">Account</a>
+        <a class="chip-link" href="#analyzer">Analyzer</a>
+      </div>
+    </div>
+
     <section class="hero">
       <div class="hero-main">
-        <div class="eyebrow">AI-powered flip analysis</div>
-        <h1>Find profitable flips faster.</h1>
+        <div class="eyebrow">Premium flip analysis in seconds</div>
+        <h1>Analyse flips before you buy.</h1>
         <p>
-          Estimate resale value, fees, profit, risk, and time to sell before you buy.
-          FlipAI helps you make faster, smarter flipping decisions.
+          Estimate resale value, fees, profit, risk, and time to sell before you spend money.
+          FlipAI helps you make smarter buying decisions with a cleaner, faster workflow.
         </p>
 
+        <div class="hero-cta-row">
+          <a class="hero-cta primary" href="#analyzer">Try the analyzer</a>
+          <a class="hero-cta secondary" href="#pricing">View plans</a>
+        </div>
+
         <div class="hero-points">
-          <div class="hero-point">Profit estimate before you spend money</div>
-          <div class="hero-point">Clear verdict: good deal, marginal, or avoid</div>
-          <div class="hero-point">Suggested resale title and buyer-friendly reasoning</div>
+          <div class="hero-point">See projected profit and total cost instantly before committing to a deal.</div>
+          <div class="hero-point">Get a fast buy / avoid style verdict instead of guessing resale potential.</div>
+          <div class="hero-point">Generate listing angles that make your eBay titles and descriptions stronger.</div>
+          <div class="hero-point">Designed for fast decision-making when browsing marketplaces on the go.</div>
         </div>
       </div>
 
       <div class="hero-side">
-        <h3>Quick snapshot</h3>
-        <p>Built for fast decision-making when you’re browsing deals and need an instant answer.</p>
-
-        <div class="hero-stat">
-          <div class="label">Free plan</div>
-          <div class="value">5 analyses</div>
+        <div>
+          <h3>Built for real flips</h3>
+          <p>
+            Created for people comparing deals quickly and needing a clean answer:
+            worth buying, worth negotiating, or worth skipping.
+          </p>
         </div>
 
-        <div class="hero-stat">
-          <div class="label">Starter plan</div>
-          <div class="value">25 analyses</div>
-        </div>
+        <div>
+          <div class="hero-stat">
+            <div class="label">Free plan</div>
+            <div class="value">5 analyses</div>
+          </div>
 
-        <div class="hero-stat">
-          <div class="label">Pro plan</div>
-          <div class="value">Unlimited</div>
+          <div class="hero-stat">
+            <div class="label">Starter plan</div>
+            <div class="value">25 / month</div>
+          </div>
+
+          <div class="hero-stat">
+            <div class="label">Pro plan</div>
+            <div class="value">Unlimited</div>
+          </div>
         </div>
       </div>
     </section>
+
+    <div class="mini-grid">
+      <div class="mini-card">
+        <div class="mini-label">Fast decision-making</div>
+        <div class="mini-value">Profit-first</div>
+      </div>
+      <div class="mini-card">
+        <div class="mini-label">Best for</div>
+        <div class="mini-value">eBay & resale</div>
+      </div>
+      <div class="mini-card">
+        <div class="mini-label">Premium tier</div>
+        <div class="mini-value">Pro £20/month</div>
+      </div>
+    </div>
 
     <section class="features">
       <div class="feature-card">
+        <div class="feature-icon">£</div>
         <h3>Profit-first analysis</h3>
-        <p>See total cost, estimated resale, fees, and projected profit in one clear view.</p>
+        <p>See estimated resale, total cost, fees, and projected profit in one clean premium view.</p>
       </div>
       <div class="feature-card">
-        <h3>Risk verdict</h3>
-        <p>Get a fast decision signal so you know whether to buy, negotiate harder, or walk away.</p>
+        <div class="feature-icon">⚡</div>
+        <h3>Fast verdicts</h3>
+        <p>Make quicker decisions with a clear risk signal and realistic time-to-sell estimate.</p>
       </div>
       <div class="feature-card">
+        <div class="feature-icon">✍</div>
         <h3>Listing help</h3>
-        <p>Generate a stronger eBay-style title and clearer reasoning around resale expectations.</p>
+        <p>Generate stronger title suggestions and clearer resale reasoning for marketplace listings.</p>
       </div>
     </section>
 
-    <section class="pricing">
-      <h2 class="section-title">Simple pricing</h2>
-      <p class="section-subtitle">Start free, then upgrade when you need more analyses.</p>
+    <section class="pricing" id="pricing">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Simple pricing</h2>
+          <p class="section-subtitle">Start free, then upgrade as your flipping volume grows.</p>
+        </div>
+      </div>
 
       <div class="pricing-grid">
         <div class="pricing-card">
           <div class="plan-name">Free</div>
           <div class="plan-price">£0 <span>/ month</span></div>
           <ul class="plan-list">
-            <li>5 analyses</li>
+            <li>5 analyses per month</li>
             <li>Profit and fee estimates</li>
-            <li>Risk verdict</li>
-            <li>Good for testing the tool</li>
+            <li>Risk verdicts</li>
+            <li>Perfect for testing FlipAI</li>
           </ul>
         </div>
 
@@ -532,9 +798,9 @@
           <div class="plan-price">£5 <span>/ month</span></div>
           <ul class="plan-list">
             <li>25 analyses per month</li>
+            <li>Ideal for regular sourcing</li>
             <li>Manage billing in Stripe</li>
-            <li>Built for regular flipping</li>
-            <li>Low monthly cost</li>
+            <li>Easy low-cost upgrade path</li>
           </ul>
         </div>
 
@@ -544,15 +810,15 @@
           <div class="plan-price">£20 <span>/ month</span></div>
           <ul class="plan-list">
             <li>Unlimited analyses</li>
-            <li>Best for heavy usage</li>
-            <li>Full access every month</li>
-            <li>Upgrade when Starter caps out</li>
+            <li>Built for frequent flipping</li>
+            <li>Best for heavy marketplace use</li>
+            <li>Full premium access</li>
           </ul>
         </div>
       </div>
     </section>
 
-    <div class="card">
+    <div class="card" id="account">
       <h2>Account</h2>
 
       <div id="authArea">
@@ -604,7 +870,7 @@
       <div id="authStatus"></div>
     </div>
 
-    <div class="grid">
+    <div class="grid" id="analyzer">
       <div class="card">
         <h2>Flip Details</h2>
 
@@ -674,7 +940,7 @@
       <div class="card">
         <h2>Result</h2>
         <div id="resultArea" class="placeholder">
-          Submit a flip and your analysis will appear here.
+          Run an analysis and your profit estimate, verdict, risk, and resale guidance will appear here.
         </div>
       </div>
     </div>
@@ -732,13 +998,13 @@
     function verdictColor(text) {
       const value = String(text || "").toUpperCase();
 
-      if (value.includes("OK")) return "#16a34a";
+      if (value.includes("OK")) return "#4ade80";
       if (value.includes("MARGINAL")) return "#f59e0b";
-      if (value.includes("GOOD")) return "#16a34a";
-      if (value.includes("BAD")) return "#dc2626";
-      if (value.includes("SKIP")) return "#dc2626";
+      if (value.includes("GOOD")) return "#4ade80";
+      if (value.includes("BAD")) return "#f87171";
+      if (value.includes("SKIP")) return "#f87171";
 
-      return "#374151";
+      return "#e2e8f0";
     }
 
     function setAuthStatus(message, type) {
@@ -802,7 +1068,7 @@
           </div>
         </div>
 
-        <div class="panel" style="font-weight:700;color:${verdictColor(metrics.verdict || analysis.final_verdict)};">
+        <div class="panel" style="font-weight:800;color:${verdictColor(metrics.verdict || analysis.final_verdict)};">
           Verdict: ${metrics.verdict || analysis.final_verdict || "Unknown"}
         </div>
 
@@ -1063,7 +1329,7 @@
         }
 
         setAuthStatus("Logged out.", "success");
-        resultArea.innerHTML = '<div class="placeholder">Submit a flip and your analysis will appear here.</div>';
+        resultArea.innerHTML = '<div class="placeholder">Run an analysis and your profit estimate, verdict, risk, and resale guidance will appear here.</div>';
         setAnalyzeStatus("", "");
         await loadUser();
       } catch (err) {
