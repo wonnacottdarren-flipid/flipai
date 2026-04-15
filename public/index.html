@@ -675,7 +675,8 @@
 
     .deal-shipping,
     .deal-source,
-    .deal-score {
+    .deal-score,
+    .deal-condition {
       font-size: 12px;
       color: var(--muted);
       padding: 6px 10px;
@@ -686,7 +687,7 @@
 
     .deal-metrics {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 10px;
       margin-bottom: 12px;
     }
@@ -798,7 +799,7 @@
       <div class="topbar-links">
         <a class="chip-link" href="#pricing">Pricing</a>
         <a class="chip-link" href="#account">Account</a>
-        <a class="chip-link" href="#dealFinder">Deal Finder</a>
+        <a class="chip-link" href="#dealFinder">eBay Search</a>
         <a class="chip-link" href="#analyzer">Analyzer</a>
       </div>
     </div>
@@ -809,18 +810,18 @@
         <h1>Analyse flips before you buy.</h1>
         <p>
           Estimate resale value, fees, profit, and time to sell before you spend money.
-          FlipAI now helps you search for potential deals and push the best ones straight into analysis.
+          FlipAI now lets you search eBay listings and send the best finds straight into the analyzer.
         </p>
 
         <div class="hero-cta-row">
-          <a class="hero-cta primary" href="#dealFinder">Find deals</a>
+          <a class="hero-cta primary" href="#dealFinder">Search eBay</a>
           <a class="hero-cta secondary" href="#analyzer">Try the analyzer</a>
         </div>
 
         <div class="hero-points">
           <div class="hero-point">See projected profit and total cost instantly before committing to a deal.</div>
-          <div class="hero-point">Search listings and shortlist the ones with the strongest resale potential.</div>
-          <div class="hero-point">Push promising finds directly into Flip Analysis with one click.</div>
+          <div class="hero-point">Search eBay listings quickly and shortlist promising items.</div>
+          <div class="hero-point">Send any listing straight into Flip Analysis with one click.</div>
           <div class="hero-point">Designed for fast decision-making when browsing marketplaces on the go.</div>
         </div>
       </div>
@@ -881,8 +882,8 @@
       </div>
       <div class="feature-card">
         <div class="feature-icon">🔎</div>
-        <h3>Deal finder</h3>
-        <p>Search potential flips, compare margins, and move the best finds straight into the analyzer.</p>
+        <h3>eBay search</h3>
+        <p>Search live eBay listings, inspect prices, and move promising finds straight into the analyzer.</p>
       </div>
     </section>
 
@@ -984,45 +985,55 @@
     </div>
 
     <div class="card" id="dealFinder">
-      <h2>eBay Deal Finder</h2>
+      <h2>eBay Listing Search</h2>
       <div class="deal-layout">
         <div>
           <div class="field">
-            <label for="dealKeyword">What are you looking for?</label>
-            <input id="dealKeyword" type="text" placeholder="e.g. iPhone 12, PS5 bundle, Nintendo Switch OLED" value="iPhone 12 unlocked" />
+            <label for="dealKeyword">Search query</label>
+            <input
+              id="dealKeyword"
+              type="text"
+              placeholder="e.g. iPhone 12 unlocked"
+              value="iPhone 12 unlocked"
+            />
           </div>
 
           <div class="field">
-            <label for="dealCondition">Condition / notes</label>
-            <input id="dealCondition" type="text" placeholder="e.g. cracked screen, used, faulty, boxed" value="used, unlocked, good condition" />
+            <label for="dealCondition">Condition filter</label>
+            <input
+              id="dealCondition"
+              type="text"
+              placeholder="e.g. used, refurbished, faulty"
+              value="used"
+            />
           </div>
 
           <div class="field">
-            <label for="dealMaxPrice">Max buy price (£)</label>
-            <input id="dealMaxPrice" type="number" step="0.01" placeholder="150" value="150" />
+            <label for="dealMaxPrice">Max price (£)</label>
+            <input
+              id="dealMaxPrice"
+              type="number"
+              step="0.01"
+              placeholder="150"
+              value="150"
+            />
           </div>
 
           <div class="field">
-            <label for="dealMinProfit">Minimum target profit (£)</label>
-            <input id="dealMinProfit" type="number" step="0.01" placeholder="25" value="25" />
-          </div>
-
-          <div class="field">
-            <label for="dealGoal">Deal goal</label>
-            <select id="dealGoal">
-              <option selected>Fast sale</option>
-              <option>Maximum profit</option>
-              <option>Low risk</option>
+            <label for="freeShippingOnly">Free shipping only</label>
+            <select id="freeShippingOnly">
+              <option value="false" selected>No</option>
+              <option value="true">Yes</option>
             </select>
           </div>
 
-          <button id="findDealsBtn">Find Deals</button>
+          <button id="findDealsBtn">Search eBay</button>
           <div id="dealStatus"></div>
         </div>
 
         <div>
           <div id="dealResults" class="deal-empty">
-            Search for listings and your best deal opportunities will appear here.
+            Search eBay listings and matching results will appear here.
           </div>
         </div>
       </div>
@@ -1147,11 +1158,11 @@
 
     function getDealFinderPayload() {
       return {
-        keyword: document.getElementById("dealKeyword").value.trim(),
+        query: document.getElementById("dealKeyword").value.trim(),
         condition: document.getElementById("dealCondition").value.trim(),
-        maxBuyPrice: Number(document.getElementById("dealMaxPrice").value || 0),
-        minProfit: Number(document.getElementById("dealMinProfit").value || 0),
-        goal: document.getElementById("dealGoal").value
+        filterPriceMax: Number(document.getElementById("dealMaxPrice").value || 0),
+        limit: 8,
+        freeShippingOnly: document.getElementById("freeShippingOnly").value === "true"
       };
     }
 
@@ -1174,7 +1185,7 @@
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
+        .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
     }
 
@@ -1224,7 +1235,7 @@
       resultArea.innerHTML = `
         <div class="locked-box">
           <h3>Upgrade required</h3>
-          <p>${message}</p>
+          <p>${escapeHtml(message)}</p>
           ${showStarter ? `<button class="upgrade-btn" onclick="startCheckout('starter')">Upgrade to Starter - £5/month</button>` : ""}
           ${showPro ? `<button class="upgrade-btn" onclick="startCheckout('pro')">Upgrade to Pro - £20/month</button>` : ""}
         </div>
@@ -1326,19 +1337,62 @@
     }
 
     function mapDealFields(rawDeal = {}) {
+      const price = Number(
+        rawDeal.price?.value ??
+        rawDeal.currentPrice?.value ??
+        rawDeal.sellingStatus?.currentPrice?.value ??
+        rawDeal.buyPrice ??
+        rawDeal.price ??
+        0
+      ) || 0;
+
+      const shipping = Number(
+        rawDeal.shippingOptions?.[0]?.shippingCost?.value ??
+        rawDeal.shippingCost?.value ??
+        rawDeal.shipping ??
+        0
+      ) || 0;
+
+      const title =
+        rawDeal.title ||
+        rawDeal.name ||
+        rawDeal.product ||
+        "Untitled listing";
+
+      const url =
+        rawDeal.itemWebUrl ||
+        rawDeal.viewItemURL ||
+        rawDeal.url ||
+        rawDeal.link ||
+        "";
+
+      const condition =
+        rawDeal.condition ||
+        rawDeal.conditionDisplayName ||
+        rawDeal.itemCondition ||
+        "";
+
+      const image =
+        rawDeal.image?.imageUrl ||
+        rawDeal.thumbnailImages?.[0]?.imageUrl ||
+        rawDeal.galleryURL ||
+        rawDeal.imageUrl ||
+        "";
+
       return {
-        title: rawDeal.title || rawDeal.name || rawDeal.product || "Untitled listing",
-        price: Number(rawDeal.price ?? rawDeal.buyPrice ?? 0),
-        shipping: Number(rawDeal.shipping ?? rawDeal.shippingCost ?? 0),
-        estimatedResale: Number(rawDeal.estimatedResale ?? rawDeal.salePrice ?? rawDeal.estimated_sale_price ?? 0),
-        estimatedProfit: Number(rawDeal.estimatedProfit ?? rawDeal.profit ?? rawDeal.netProfit ?? 0),
-        score: rawDeal.score ?? rawDeal.dealScore ?? rawDeal.flipScore ?? null,
-        reason: rawDeal.reason || rawDeal.summary || rawDeal.notes || rawDeal.brief_reasoning || "No summary provided.",
-        condition: rawDeal.condition || rawDeal.itemCondition || "",
-        extras: rawDeal.extras || rawDeal.subtitle || "",
-        repairCost: Number(rawDeal.repairCost ?? rawDeal.estimatedRepairCost ?? 0),
-        url: rawDeal.url || rawDeal.link || rawDeal.itemUrl || "",
-        source: rawDeal.source || rawDeal.marketplace || "eBay"
+        title,
+        price,
+        shipping,
+        estimatedResale: 0,
+        estimatedProfit: 0,
+        score: null,
+        reason: "eBay listing found. Load this into the analyzer to calculate resale value, fees, and profit.",
+        condition,
+        extras: "",
+        repairCost: 0,
+        url,
+        source: "eBay",
+        image
       };
     }
 
@@ -1348,25 +1402,29 @@
       if (!deal) return;
 
       document.getElementById("product").value = deal.title || "";
-      document.getElementById("condition").value = [deal.condition, deal.reason].filter(Boolean).join(". ");
+      document.getElementById("condition").value = deal.condition || "Used item from eBay search results.";
       document.getElementById("buyPrice").value = Number(deal.price || 0).toFixed(2);
-      document.getElementById("repairCost").value = Number(deal.repairCost || 0).toFixed(2);
-      document.getElementById("extras").value = [deal.extras, deal.url].filter(Boolean).join(" | ");
-      document.getElementById("goal").value = document.getElementById("dealGoal").value;
+      document.getElementById("repairCost").value = "0.00";
+      document.getElementById("extras").value = deal.url || "";
+      document.getElementById("goal").value = "Fast sale";
 
-      document.getElementById("analyzer").scrollIntoView({ behavior: "smooth", block: "start" });
-      setAnalyzeStatus("Deal loaded into analyzer. Review the details, then click Analyze Flip.", "success");
+      document.getElementById("analyzer").scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+
+      setAnalyzeStatus("Deal loaded into analyzer. Add any repair costs or extra notes, then click Analyze Flip.", "success");
     }
 
     window.useDealForAnalysis = useDealForAnalysis;
 
     function renderDealResults(data) {
-      const rawDeals = data.deals || data.results || data.items || [];
+      const rawDeals = data.items || data.results || data.deals || [];
       const deals = rawDeals.map(mapDealFields);
       window.__lastDeals = deals;
 
       if (!deals.length) {
-        dealResultsEl.innerHTML = '<div class="deal-empty">No matching deals found. Try a broader keyword or raise your max buy price.</div>';
+        dealResultsEl.innerHTML = '<div class="deal-empty">No matching listings found. Try a broader search or higher max price.</div>';
         return;
       }
 
@@ -1379,28 +1437,24 @@
               <div class="deal-price">${currency(deal.price)}</div>
               <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
               <div class="deal-source">${escapeHtml(deal.source)}</div>
-              ${deal.score !== null && deal.score !== undefined ? `<div class="deal-score">Score ${escapeHtml(deal.score)}</div>` : ""}
+              ${deal.condition ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>` : ""}
             </div>
 
             <div class="deal-metrics">
               <div class="deal-metric">
-                <div class="label">Estimated resale</div>
-                <div class="value">${currency(deal.estimatedResale)}</div>
+                <div class="label">Item price</div>
+                <div class="value">${currency(deal.price)}</div>
               </div>
               <div class="deal-metric">
-                <div class="label">Estimated profit</div>
-                <div class="value">${currency(deal.estimatedProfit)}</div>
-              </div>
-              <div class="deal-metric">
-                <div class="label">Repair cost</div>
-                <div class="value">${currency(deal.repairCost)}</div>
+                <div class="label">Shipping</div>
+                <div class="value">${currency(deal.shipping)}</div>
               </div>
             </div>
 
             <div class="deal-summary">${escapeHtml(deal.reason)}</div>
 
             <div class="deal-actions">
-              <button onclick="useDealForAnalysis(${index})">Use in Analyzer</button>
+              <button onclick="useDealForAnalysis(${index})">Send to Analyzer</button>
               ${deal.url ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>` : ""}
             </div>
           </div>
@@ -1478,14 +1532,14 @@
     }
 
     async function findDeals() {
-      setDealStatus("Searching for deals...", "loading");
+      setDealStatus("Searching eBay...", "loading");
       dealResultsEl.innerHTML = "";
       findDealsBtn.disabled = true;
 
       try {
         const payload = getDealFinderPayload();
 
-        const res = await fetch("/api/ebay-deals", {
+        const res = await fetch("/api/search-ebay", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -1497,20 +1551,20 @@
         const data = await res.json();
 
         if (res.status === 401) {
-          setDealStatus("Please sign in to use the deal finder.", "error");
-          dealResultsEl.innerHTML = '<div class="deal-empty">Sign in first, then search for deals.</div>';
+          setDealStatus("Please sign in to search eBay.", "error");
+          dealResultsEl.innerHTML = '<div class="deal-empty">Sign in first, then search eBay listings.</div>';
           return;
         }
 
         if (!res.ok) {
-          throw new Error(data.error || "Could not fetch deals.");
+          throw new Error(data.error || "Could not search eBay.");
         }
 
-        setDealStatus("Deals loaded.", "success");
+        setDealStatus("Search complete.", "success");
         renderDealResults(data);
       } catch (err) {
         setDealStatus(`Error: ${err.message}`, "error");
-        dealResultsEl.innerHTML = '<div class="deal-empty">No deal results available right now.</div>';
+        dealResultsEl.innerHTML = '<div class="deal-empty">No search results available right now.</div>';
       } finally {
         findDealsBtn.disabled = false;
       }
@@ -1644,7 +1698,7 @@
 
         setAuthStatus("Logged out.", "success");
         resultArea.innerHTML = '<div class="placeholder">Run an analysis and your profit estimate, verdict, risk, and resale guidance will appear here.</div>';
-        dealResultsEl.innerHTML = 'Search for listings and your best deal opportunities will appear here.';
+        dealResultsEl.innerHTML = 'Search eBay listings and matching results will appear here.';
         setAnalyzeStatus("", "");
         setDealStatus("", "");
         await loadUser();
@@ -1684,7 +1738,7 @@
       } catch (err) {
         setAnalyzeStatus(`Error: ${err.message}`, "error");
       }
-    }
+    };
 
     async function openBillingPortal() {
       try {
