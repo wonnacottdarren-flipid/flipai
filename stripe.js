@@ -4,52 +4,67 @@ import {
   updateUser,
 } from "./db.js";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-const PRICE_IDS = {
-  starter: process.env.STRIPE_STARTER_PRICE_ID,
-  pro: process.env.STRIPE_PRO_PRICE_ID,
-};
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2025-03-31.basil",
+});
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
-function getPlanFromPriceId(priceId) {
-  if (priceId === PRICE_IDS.starter) return "starter";
-  if (priceId === PRICE_IDS.pro) return "pro";
-  return "free";
+function getPriceIdForPlan(plan) {
+  const cleanPlan = String(plan || "").toLowerCase();
+
+  if (cleanPlan === "starter") return process.env.STRIPE_STARTER_PRICE_ID;
+  if (cleanPlan === "pro") return process.env.STRIPE_PRO_PRICE_ID;
+
+  throw new Error("Invalid plan selected.");
+}
+
+async function ensureStripeCustomer(user) {
+  if (!user) {
+    throw new Error("User is required.");
+  }
+
+  if (user.stripeCustomerId) {
+    try {
+      const existingCustomer = await stripe.customers.retrieve(user.stripeCustomerId);
+
+      if (existingCustomer && !existingCustomer.deleted) {
+        return existingCustomer;
+      }
+    } catch (error) {
+      const message = String(error?.message || "");
+      const code = String(error?.code || "");
+
+      const missingCustomer =
+        code === "resource_missing" || message.includes("No such customer");
+
+      if (!missingCustomer) {
+        throw error;
+      }
+    }
+  }
+
+  const newCustomer = await stripe.customers.create({
+    email: user.email,
+    name: user.name,
+    metadata: {
+      userId: user.id,
+    },
+  });
+
+  user.stripeCustomerId = newCustomer.id;
+  updateUser(user);
+
+  return newCustomer;
 }
 
 export async function createCheckoutSession(user, plan) {
-  const selectedPlan = String(plan || "").toLowerCase();
-  const priceId = PRICE_IDS[selectedPlan];
-
-  if (!priceId) {
-    throw new Error("Invalid plan selected.");
-  }
-
-  let customerId = user.stripeCustomerId || null;
-
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: user.email,
-      name: user.name || undefined,
-      metadata: {
-        userId: user.id,
-      },
-    });
-
-    customerId = customer.id;
-
-    await updateUser({
-      ...user,
-      stripeCustomerId: customerId,
-    });
-  }
+  const priceId = getPriceIdForPlan(plan);
+  const customer = await ensureStripeCustomer(user);
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
-    customer: customerId,
+    customer: customer.id,
     line_items: [
       {
         price: priceId,
@@ -61,12 +76,12 @@ export async function createCheckoutSession(user, plan) {
     allow_promotion_codes: true,
     metadata: {
       userId: user.id,
-      plan: selectedPlan,
+      plan: String(plan || "").toLowerCase(),
     },
     subscription_data: {
       metadata: {
         userId: user.id,
-        plan: selectedPlan,
+        plan: String(plan || "").toLowerCase(),
       },
     },
   });
@@ -75,109 +90,114 @@ export async function createCheckoutSession(user, plan) {
 }
 
 export async function createPortalSession(user) {
-  if (!user.stripeCustomerId) {
-    throw new Error("No Stripe customer found for this account yet.");
-  }
+  const customer = await ensureStripeCustomer(user);
 
   const session = await stripe.billingPortal.sessions.create({
-    customer: user.stripeCustomerId,
+    customer: customer.id,
     return_url: `${APP_URL}/`,
   });
 
   return session.url;
 }
 
-async function handleCheckoutCompleted(session) {
-  const customerId = session.customer;
-  const subscriptionId = session.subscription;
+async function handleCheckoutSessionCompleted(event) {
+  const session = event.data.object;
+  const userId = session?.metadata?.userId;
+  const customerId = session?.customer;
+  const subscriptionId = session?.subscription;
+  const plan = String(session?.metadata?.plan || "").toLowerCase();
 
-  if (!customerId || !subscriptionId) return;
+  if (!userId) return;
 
-  const user = getUserByStripeCustomerId(customerId);
-  if (!user) return;
+  const user = getUserByStripeCustomerId(customerId) || null;
 
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  const priceId = subscription.items?.data?.[0]?.price?.id || null;
-  const plan = getPlanFromPriceId(priceId);
-
-  await updateUser({
-    ...user,
-    stripeCustomerId: customerId,
-    stripeSubscriptionId: subscription.id,
-    subscriptionStatus: subscription.status || "active",
-    plan,
-  });
+  if (user) {
+    user.stripeCustomerId = customerId || user.stripeCustomerId || null;
+    user.stripeSubscriptionId = subscriptionId || user.stripeSubscriptionId || null;
+    user.subscriptionStatus = "active";
+    user.plan = plan || user.plan || "free";
+    updateUser(user);
+  }
 }
 
-async function handleSubscriptionUpdated(subscription) {
-  const customerId = subscription.customer;
-  if (!customerId) return;
+async function handleCustomerSubscriptionEvent(event) {
+  const subscription = event.data.object;
+  const customerId = subscription?.customer;
+  const subscriptionId = subscription?.id;
+  const status = subscription?.status || "inactive";
+  const plan =
+    String(subscription?.metadata?.plan || "").toLowerCase() ||
+    inferPlanFromSubscription(subscription);
 
   const user = getUserByStripeCustomerId(customerId);
+
   if (!user) return;
 
-  const priceId = subscription.items?.data?.[0]?.price?.id || null;
-  const plan = getPlanFromPriceId(priceId);
+  user.stripeCustomerId = customerId || user.stripeCustomerId || null;
+  user.stripeSubscriptionId = subscriptionId || null;
+  user.subscriptionStatus = status;
 
-  await updateUser({
-    ...user,
-    stripeCustomerId: customerId,
-    stripeSubscriptionId: subscription.id,
-    subscriptionStatus: subscription.status || "inactive",
-    plan,
-  });
+  if (status === "active" || status === "trialing") {
+    user.plan = plan || user.plan || "free";
+  } else if (
+    status === "canceled" ||
+    status === "unpaid" ||
+    status === "incomplete_expired"
+  ) {
+    user.plan = "free";
+  }
+
+  updateUser(user);
 }
 
-async function handleSubscriptionDeleted(subscription) {
-  const customerId = subscription.customer;
-  if (!customerId) return;
+function inferPlanFromSubscription(subscription) {
+  const priceId =
+    subscription?.items?.data?.[0]?.price?.id || "";
 
-  const user = getUserByStripeCustomerId(customerId);
-  if (!user) return;
+  if (priceId && priceId === process.env.STRIPE_STARTER_PRICE_ID) {
+    return "starter";
+  }
 
-  await updateUser({
-    ...user,
-    stripeCustomerId: customerId,
-    stripeSubscriptionId: null,
-    subscriptionStatus: "canceled",
-    plan: "free",
-  });
+  if (priceId && priceId === process.env.STRIPE_PRO_PRICE_ID) {
+    return "pro";
+  }
+
+  return "free";
 }
 
 export async function stripeWebhookHandler(req, res) {
   try {
-    if (!STRIPE_WEBHOOK_SECRET) {
-      return res.status(500).send("Missing STRIPE_WEBHOOK_SECRET");
+    const signature = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      return res.status(500).send("Missing webhook secret.");
     }
 
-    const signature = req.headers["stripe-signature"];
     const event = stripe.webhooks.constructEvent(
       req.body,
       signature,
-      STRIPE_WEBHOOK_SECRET
+      webhookSecret
     );
 
     switch (event.type) {
       case "checkout.session.completed":
-        await handleCheckoutCompleted(event.data.object);
+        await handleCheckoutSessionCompleted(event);
         break;
 
       case "customer.subscription.created":
       case "customer.subscription.updated":
-        await handleSubscriptionUpdated(event.data.object);
-        break;
-
       case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(event.data.object);
+        await handleCustomerSubscriptionEvent(event);
         break;
 
       default:
         break;
     }
 
-    res.json({ received: true });
+    return res.json({ received: true });
   } catch (error) {
-    console.error("Stripe webhook error:", error.message);
-    res.status(400).send(`Webhook Error: ${error.message}`);
+    console.error("stripeWebhookHandler error:", error);
+    return res.status(400).send(`Webhook Error: ${error.message}`);
   }
 }
