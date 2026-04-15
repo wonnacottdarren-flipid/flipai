@@ -19,10 +19,10 @@
       "email": "wonnacott.kelly@gmail.com",
       "passwordHash": "$2a$10$yOYO5eeuS09gP5alhWHEGu5D5zpfZduGGFUuraymtr1HIjm6pntae",
       "createdAt": "2026-04-14T17:17:53.158Z",
-      "stripeCustomerId": null,
-      "stripeSubscriptionId": null,
-      "subscriptionStatus": "free",
-      "plan": "free",
+      "stripeCustomerId": "cus_test_kelly",
+      "stripeSubscriptionId": "sub_test_kelly",
+      "subscriptionStatus": "active",
+      "plan": "pro",
       "usageCount": 1,
       "usagePeriod": "2026-04"
     }
