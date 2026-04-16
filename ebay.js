@@ -63,9 +63,15 @@ async function getEbayAccessToken() {
 function normaliseCondition(condition) {
   const text = String(condition || "").toLowerCase();
 
+  if (text.includes("certified refurbished")) return "Certified Refurbished";
+  if (text.includes("refurbished")) return "Refurbished";
+  if (text.includes("like new")) return "Like New";
+  if (text.includes("very good")) return "Very Good";
+  if (text.includes("good")) return "Good";
+  if (text.includes("acceptable")) return "Acceptable";
   if (text.includes("new")) return "New";
   if (text.includes("used")) return "Used";
-  if (text.includes("refurb")) return "Refurbished";
+
   return "Unknown";
 }
 
@@ -81,8 +87,8 @@ function mapEbayItem(item) {
     itemWebUrl: item?.itemWebUrl || "",
     imageUrl:
       item?.image?.imageUrl || item?.thumbnailImages?.[0]?.imageUrl || "",
-    price: priceValue,
-    shipping: shippingValue,
+    price: roundMoney(priceValue),
+    shipping: roundMoney(shippingValue),
     totalBuyPrice: roundMoney(priceValue + shippingValue),
     condition: normaliseCondition(item?.condition),
     location: item?.itemLocation?.country || "GB",
@@ -106,7 +112,7 @@ export async function searchEbayListings({
 
   const params = new URLSearchParams({
     q: String(query).trim(),
-    limit: String(Math.min(Math.max(Number(limit) || 10, 1), 20)),
+    limit: String(Math.min(Math.max(Number(limit) || 10, 1), 50)),
   });
 
   const filters = [];
@@ -115,12 +121,9 @@ export async function searchEbayListings({
     filters.push(`price:[..${Number(filterPriceMax)}]`);
   }
 
-  if (freeShippingOnly) {
-    filters.push("deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP|SHIP_TO_HOME}");
-  }
-
   if (condition && String(condition).trim()) {
     const clean = String(condition).trim().toUpperCase();
+
     if (
       [
         "NEW",
@@ -154,8 +157,14 @@ export async function searchEbayListings({
     throw new Error(data.errors?.[0]?.message || "Could not search eBay.");
   }
 
-  const items = Array.isArray(data.itemSummaries) ? data.itemSummaries : [];
-  return items.map(mapEbayItem);
+  let items = Array.isArray(data.itemSummaries) ? data.itemSummaries : [];
+  items = items.map(mapEbayItem);
+
+  if (freeShippingOnly) {
+    items = items.filter((item) => Number(item.shipping || 0) === 0);
+  }
+
+  return items;
 }
 
 function cleanSoldKeyword(title) {
