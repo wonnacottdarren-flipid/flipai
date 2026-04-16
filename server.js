@@ -1,253 +1,759 @@
+import "dotenv/config";
 import express from "express";
+import path from "path";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import bodyParser from "body-parser";
-import path from "path";
+import jwt from "jsonwebtoken";
 import { fileURLToPath } from "url";
+import {
+  enforceUsage,
+  getUserById,
+  incrementUsage,
+  safeUser,
+} from "./db.js";
+import {
+  loginHandler,
+  logoutHandler,
+  requireAuth,
+  signupHandler,
+} from "./auth.js";
+import {
+  createCheckoutSession,
+  createPortalSession,
+  stripeWebhookHandler,
+} from "./stripe.js";
+import { runAnalysis } from "./openai.js";
+import { searchEbayListings } from "./ebay.js";
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// =======================
-// PATH FIX (REQUIRED)
-// =======================
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const app = express();
+const port = process.env.PORT || 3000;
+const appUrl = process.env.APP_URL || `http://localhost:${port}`;
+const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 
-// =======================
-// MIDDLEWARE
-// =======================
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
+function roundMoney(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
 
-app.use(bodyParser.json({ limit: "2mb" }));
-app.use(cookieParser());
+function parseManualSoldPrices(input) {
+  if (!input) return [];
 
-// =======================
-// STATIC FRONTEND (CRITICAL FIX)
-// =======================
-// THIS IS WHAT WAS BROKEN BEFORE
-app.use(express.static(path.join(__dirname, "public")));
+  if (Array.isArray(input)) {
+    return input
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v) && v > 0);
+  }
 
-// FORCE FRONTEND LOAD ON "/"
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
+  const text = String(input)
+    .replace(/£/g, "")
+    .replace(/\n/g, ",")
+    .replace(/\r/g, ",")
+    .trim();
 
-// HEALTH CHECK (for debugging)
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", message: "FlipAI running" });
-});
+  if (!text) return [];
 
-// =======================
-// IN-MEMORY USERS (DEMO ONLY)
-// =======================
-const users = new Map();
-
-// =======================
-// PROFIT ENGINE
-// =======================
-const FEE_RATE = 0.1325;
-const FIXED_FEE = 0.30;
-
-function parseComps(text = "") {
   return text
     .split(",")
-    .map(v => parseFloat(v.trim()))
-    .filter(v => !isNaN(v) && v > 0);
+    .map((part) => Number(String(part).trim()))
+    .filter((v) => Number.isFinite(v) && v > 0);
 }
 
-function median(arr) {
-  if (!arr.length) return 0;
-  const s = [...arr].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+function getMedian(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 0) {
+    return roundMoney((sorted[mid - 1] + sorted[mid]) / 2);
+  }
+
+  return roundMoney(sorted[mid]);
 }
 
-function avg(arr) {
-  return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+function getAverage(values) {
+  if (!values.length) return 0;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return roundMoney(total / values.length);
 }
 
-function fees(resale) {
-  return resale * FEE_RATE + FIXED_FEE;
-}
+function buildManualSoldComps(input) {
+  const prices = parseManualSoldPrices(input);
 
-// =======================
-// ANALYSIS CORE
-// =======================
-function runAnalysis(payload, comps = []) {
-  const buy = Number(payload.buyPrice || 0);
-  const repair = Number(payload.repairCost || 0);
+  if (!prices.length) {
+    return {
+      connected: false,
+      pricingMode: "Estimated fallback model",
+      compCount: 0,
+      soldCount: 0,
+      samplePrices: [],
+      avgSoldPrice: 0,
+      medianSoldPrice: 0,
+      minSoldPrice: 0,
+      maxSoldPrice: 0,
+      confidence: 0,
+      confidenceLabel: "Low",
+      keywordUsed: "",
+      debug: {
+        source: "manual",
+        reason: "No manual sold prices entered",
+      },
+    };
+  }
 
-  const resale = comps.length ? median(comps) : buy * 1.35;
+  const avgSoldPrice = getAverage(prices);
+  const medianSoldPrice = getMedian(prices);
+  const minSoldPrice = roundMoney(Math.min(...prices));
+  const maxSoldPrice = roundMoney(Math.max(...prices));
 
-  const ebayFees = fees(resale);
-  const totalCost = buy + repair + ebayFees;
-  const profit = resale - totalCost;
+  let confidence = 35;
+  if (prices.length >= 3) confidence = 55;
+  if (prices.length >= 5) confidence = 72;
+  if (prices.length >= 8) confidence = 86;
+  if (prices.length >= 12) confidence = 94;
 
-  let verdict = "SKIP";
-  if (profit > 50) verdict = "GOOD";
-  else if (profit > 15) verdict = "OK";
-  else if (profit > 0) verdict = "MARGINAL";
-  else verdict = "AVOID";
+  let confidenceLabel = "Low";
+  if (confidence >= 80) confidenceLabel = "High";
+  else if (confidence >= 55) confidenceLabel = "Medium";
 
   return {
-    result: {
-      flipMetrics: {
-        profit: +profit.toFixed(2),
-        totalCost: +totalCost.toFixed(2),
-        estimatedResale: +resale.toFixed(2),
-        ebayFees: +ebayFees.toFixed(2),
-        pricingMode: comps.length ? "Live comps" : "Estimated",
-        soldComps: {
-          medianSoldPrice: +median(comps).toFixed(2),
-          avgSoldPrice: +avg(comps).toFixed(2),
-          minSoldPrice: Math.min(...comps) || 0,
-          maxSoldPrice: Math.max(...comps) || 0,
-          compCount: comps.length,
-          confidence: comps.length > 3 ? 0.85 : 0.4,
-          confidenceLabel: comps.length > 3 ? "High" : "Low"
-        },
-        verdict
-      },
-      flip_analysis: {
-        final_verdict: verdict,
-        risk_level: profit > 50 ? "Low" : profit > 15 ? "Medium" : "High",
-        time_to_sell_estimate:
-          profit > 50 ? "1–5 days" :
-          profit > 15 ? "3–14 days" : "2–6 weeks",
-        brief_reasoning:
-          `Buy £${buy}, Resale £${resale.toFixed(2)}, Profit £${profit.toFixed(2)}`
-      },
-      ebay_listing: {
-        title: `${payload.product || "Item"} - FlipAI Listing`
-      }
-    }
+    connected: true,
+    pricingMode: "Manual sold comps",
+    compCount: prices.length,
+    soldCount: prices.length,
+    samplePrices: prices.slice(0, 12).map(roundMoney),
+    avgSoldPrice,
+    medianSoldPrice,
+    minSoldPrice,
+    maxSoldPrice,
+    confidence,
+    confidenceLabel,
+    keywordUsed: "manual_entry",
+    debug: {
+      source: "manual",
+      prices,
+    },
   };
 }
 
-// =======================
-// AUTH (SIMPLE DEMO)
-// =======================
-app.post("/api/signup", (req, res) => {
-  const { email, password, name } = req.body;
+function calculateFlipMetrics({
+  buyPrice,
+  repairCost,
+  condition,
+  manualSoldPrices,
+  goal,
+}) {
+  const buy = Number(buyPrice || 0);
+  const repair = Number(repairCost || 0);
+  const text = String(condition || "").toLowerCase();
+  const goalText = String(goal || "").toLowerCase();
 
-  if (!email || !password) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
+  const soldComps = buildManualSoldComps(manualSoldPrices);
 
-  users.set(email, {
-    email,
-    name,
-    password,
-    plan: "free",
-    usageCount: 0
-  });
+  let estimatedResale = 0;
+  let pricingMode = "Estimated fallback model";
 
-  res.cookie("user", email);
-  res.json({ user: users.get(email) });
-});
+  if (soldComps.connected && soldComps.medianSoldPrice > 0) {
+    estimatedResale = soldComps.medianSoldPrice;
+    pricingMode = "Manual sold comps";
 
-app.post("/api/login", (req, res) => {
-  const { email, password } = req.body;
-  const user = users.get(email);
-
-  if (!user || user.password !== password) {
-    return res.status(401).json({ error: "Invalid login" });
-  }
-
-  res.cookie("user", email);
-  res.json({ user });
-});
-
-app.post("/api/logout", (req, res) => {
-  res.clearCookie("user");
-  res.json({ ok: true });
-});
-
-app.get("/api/me", (req, res) => {
-  const user = users.get(req.cookies.user);
-  if (!user) return res.status(401).json({ error: "Not logged in" });
-  res.json({ user });
-});
-
-// =======================
-// AUTO COMPS
-// =======================
-app.post("/api/auto-comps", (req, res) => {
-  const { product } = req.body;
-
-  const base = product.length * 3 + 60;
-
-  const comps = [base - 10, base, base + 12, base + 5];
-
-  res.json({
-    searchQuery: product,
-    autoComps: {
-      manualSoldPricesText: comps.join(", "),
-      compCount: comps.length,
-      confidence: 0.8,
-      confidenceLabel: "Simulated",
-      pricingMode: "Auto comps"
+    if (goalText.includes("fast")) {
+      estimatedResale = roundMoney(estimatedResale * 0.95);
+      pricingMode = "Manual sold comps (fast-sale adjusted)";
+    } else if (goalText.includes("maximum")) {
+      estimatedResale = roundMoney(estimatedResale * 1.03);
+      pricingMode = "Manual sold comps (profit adjusted)";
     }
-  });
-});
+  } else {
+    let multiplier = 2.0;
 
-// =======================
-// ANALYZE
-// =======================
-app.post("/api/analyze", (req, res) => {
-  const user = users.get(req.cookies.user);
+    if (text.includes("excellent")) multiplier = 2.5;
+    else if (text.includes("good")) multiplier = 2.3;
+    else if (text.includes("light")) multiplier = 2.2;
+    else if (text.includes("cracked")) multiplier = 2.0;
+    else if (text.includes("fault")) multiplier = 1.7;
+    else if (text.includes("parts")) multiplier = 1.45;
 
-  if (!user) return res.status(401).json({ error: "Not logged in" });
+    estimatedResale = roundMoney(buy * multiplier);
 
-  if (user.plan === "free" && user.usageCount >= 5) {
-    return res.status(403).json({ error: "Free limit reached", user });
+    if (goalText.includes("fast")) {
+      estimatedResale = roundMoney(estimatedResale * 0.95);
+      pricingMode = "Estimated fallback model (fast-sale adjusted)";
+    } else if (goalText.includes("maximum")) {
+      estimatedResale = roundMoney(estimatedResale * 1.03);
+      pricingMode = "Estimated fallback model (profit adjusted)";
+    }
   }
 
-  const comps = parseComps(req.body.manualSoldPrices || "");
+  const totalCost = roundMoney(buy + repair);
+  const ebayFees = roundMoney(estimatedResale * 0.15);
+  const profit = roundMoney(estimatedResale - totalCost - ebayFees);
 
-  const output = runAnalysis(req.body, comps);
+  let verdict = "AVOID ❌";
+  if (profit > 40) verdict = "GOOD DEAL ✅";
+  else if (profit > 15) verdict = "OK DEAL ⚠️";
 
-  user.usageCount++;
-  users.set(req.cookies.user, user);
+  return {
+    estimatedResale: roundMoney(estimatedResale),
+    totalCost,
+    ebayFees,
+    profit,
+    verdict,
+    pricingMode,
+    soldComps,
+  };
+}
 
-  res.json({
-    ...output,
-    user
-  });
-});
+function getScannerMultiplier(item) {
+  const title = String(item?.title || "").toLowerCase();
+  const condition = String(item?.condition || "").toLowerCase();
+  const buyingOptions = Array.isArray(item?.buyingOptions)
+    ? item.buyingOptions.join(" ").toLowerCase()
+    : "";
 
-// =======================
-// EBAY SEARCH (MOCK)
-// =======================
-app.post("/api/search-ebay", (req, res) => {
-  const { query } = req.body;
+  let multiplier = 1.33;
 
-  const base = query.length * 2 + 60;
+  if (condition.includes("new")) multiplier = 1.7;
+  else if (condition.includes("refurb")) multiplier = 1.52;
+  else if (condition.includes("used")) multiplier = 1.4;
 
-  const items = Array.from({ length: 6 }).map((_, i) => ({
-    title: `${query} - Item ${i + 1}`,
-    price: { value: base + i * 10 },
-    shipping: { value: i % 2 ? 4.99 : 0 },
-    scanner: {
-      estimatedResale: base + 30 + i * 8,
-      estimatedProfit: 20 + i * 6,
-      ebayFees: base * 0.13,
-      score: 70 + i,
-      risk: i % 2 ? "Medium" : "Low",
-      verdict: i % 2 ? "OK" : "GOOD"
+  if (title.includes("unlocked")) multiplier += 0.08;
+  if (title.includes("excellent")) multiplier += 0.08;
+  if (title.includes("very good")) multiplier += 0.05;
+  if (title.includes("91% battery")) multiplier += 0.06;
+  else if (title.includes("90% battery")) multiplier += 0.05;
+  else if (title.includes("89% battery")) multiplier += 0.04;
+  else if (title.includes("88% battery")) multiplier += 0.03;
+  else if (title.includes("87% battery")) multiplier += 0.02;
+
+  if (title.includes("cracked")) multiplier -= 0.35;
+  if (title.includes("faulty")) multiplier -= 0.45;
+  if (title.includes("spares")) multiplier -= 0.5;
+  if (title.includes("parts")) multiplier -= 0.5;
+  if (title.includes("locked")) multiplier -= 0.3;
+  if (buyingOptions.includes("auction")) multiplier -= 0.02;
+
+  if (multiplier < 1.02) multiplier = 1.02;
+  return multiplier;
+}
+
+function buildScannerMetrics(item) {
+  const itemPrice = Number(item?.price || 0);
+  const shipping = Number(item?.shipping || 0);
+  const repairCost = 0;
+  const totalBuyPrice = roundMoney(itemPrice + shipping);
+  const multiplier = getScannerMultiplier(item);
+
+  const estimatedResale = roundMoney(totalBuyPrice * multiplier);
+  const ebayFees = roundMoney(estimatedResale * 0.15);
+  const estimatedProfit = roundMoney(
+    estimatedResale - ebayFees - totalBuyPrice - repairCost
+  );
+
+  let verdict = "SKIP";
+  if (estimatedProfit >= 30) verdict = "GOOD DEAL";
+  else if (estimatedProfit >= 10) verdict = "MARGINAL";
+
+  let risk = "High";
+  if (verdict === "GOOD DEAL") risk = "Low";
+  else if (verdict === "MARGINAL") risk = "Medium";
+
+  let score = 0;
+  if (estimatedProfit > 0) {
+    score = Math.min(
+      99,
+      Math.max(
+        1,
+        Math.round(
+          estimatedProfit * 1.8 +
+            (verdict === "GOOD DEAL" ? 18 : verdict === "MARGINAL" ? 8 : 0) +
+            (String(item?.condition || "").toLowerCase().includes("used") ? 3 : 0)
+        )
+      )
+    );
+  }
+
+  return {
+    estimatedResale,
+    estimatedProfit,
+    totalBuyPrice,
+    ebayFees,
+    repairCost,
+    score,
+    risk,
+    verdict,
+    multiplier: roundMoney(multiplier),
+  };
+}
+
+function getUserFromCookie(req) {
+  try {
+    const token = req.cookies?.flipai_token;
+    if (!token) return null;
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = getUserById(decoded.userId);
+
+    return user || null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractStorageTokens(text) {
+  const matches = normalizeText(text).match(/\b(16|32|64|128|256|512|1024)\s?gb\b/g);
+  return matches ? matches.map((m) => m.replace(/\s+/g, "")) : [];
+}
+
+function extractEssentialTokens(product) {
+  const cleaned = normalizeText(product);
+  const words = cleaned.split(" ").filter(Boolean);
+
+  const stopWords = new Set([
+    "the",
+    "and",
+    "for",
+    "with",
+    "used",
+    "new",
+    "good",
+    "very",
+    "excellent",
+    "sale",
+    "phone",
+    "mobile",
+    "smartphone",
+    "black",
+    "white",
+    "blue",
+    "red",
+    "green",
+    "pink",
+    "purple",
+    "grey",
+    "gray",
+    "silver",
+    "gold",
+    "boxed",
+    "unboxed",
+  ]);
+
+  const tokens = words.filter((word) => word.length >= 2 && !stopWords.has(word));
+
+  return [...new Set(tokens)].slice(0, 8);
+}
+
+function buildAutoCompSearchQuery(product, condition) {
+  const productText = String(product || "").trim();
+  const conditionText = String(condition || "").trim().toLowerCase();
+  const essentialTokens = extractEssentialTokens(productText);
+  const storageTokens = extractStorageTokens(productText);
+
+  let query = essentialTokens.join(" ");
+
+  if (!query) {
+    query = productText;
+  }
+
+  if (storageTokens.length) {
+    const storage = storageTokens[0];
+    if (!query.toLowerCase().includes(storage.toLowerCase())) {
+      query += ` ${storage}`;
     }
-  }));
+  }
 
-  res.json({ items });
+  if (conditionText.includes("unlocked") && !query.toLowerCase().includes("unlocked")) {
+    query += " unlocked";
+  }
+
+  if (
+    (conditionText.includes("used") || conditionText.includes("fully working")) &&
+    !query.toLowerCase().includes("used")
+  ) {
+    query += " used";
+  }
+
+  return query.trim();
+}
+
+function isBadCompTitle(title) {
+  const text = normalizeText(title);
+
+  const banned = [
+    "spares",
+    "parts",
+    "not working",
+    "faulty",
+    "cracked",
+    "broken",
+    "read description",
+    "empty box",
+    "box only",
+    "case only",
+    "cover only",
+    "screen only",
+    "icloud locked",
+    "network locked",
+    "locked to",
+    "for repair",
+    "repair only",
+  ];
+
+  return banned.some((term) => text.includes(term));
+}
+
+function itemMatchesProduct(itemTitle, product, condition) {
+  const title = normalizeText(itemTitle);
+  const productText = normalizeText(product);
+  const conditionText = normalizeText(condition);
+
+  if (!title) return false;
+  if (isBadCompTitle(title)) return false;
+
+  const productTokens = extractEssentialTokens(productText);
+  const storageTokens = extractStorageTokens(productText);
+
+  const matchedCoreTokens = productTokens.filter((token) => title.includes(token));
+  const matchedStorageTokens = storageTokens.filter((token) =>
+    title.includes(token.replace(/\s+/g, ""))
+  );
+
+  const requiresUnlocked =
+    productText.includes("unlocked") || conditionText.includes("unlocked");
+
+  if (requiresUnlocked && !title.includes("unlocked")) {
+    return false;
+  }
+
+  if (storageTokens.length > 0 && matchedStorageTokens.length === 0) {
+    return false;
+  }
+
+  if (productTokens.length >= 3 && matchedCoreTokens.length < 2) {
+    return false;
+  }
+
+  return true;
+}
+
+function removePriceOutliers(prices) {
+  if (prices.length <= 4) return [...prices].sort((a, b) => a - b);
+
+  const sorted = [...prices].sort((a, b) => a - b);
+  const q1Index = Math.floor((sorted.length - 1) * 0.25);
+  const q3Index = Math.floor((sorted.length - 1) * 0.75);
+  const q1 = sorted[q1Index];
+  const q3 = sorted[q3Index];
+  const iqr = q3 - q1;
+  const minAllowed = q1 - iqr * 1.5;
+  const maxAllowed = q3 + iqr * 1.5;
+
+  const filtered = sorted.filter((price) => price >= minAllowed && price <= maxAllowed);
+  return filtered.length >= 3 ? filtered : sorted;
+}
+
+function selectCompPrices(prices) {
+  const cleaned = removePriceOutliers(prices);
+
+  if (!cleaned.length) return [];
+
+  const sorted = [...cleaned].sort((a, b) => a - b);
+
+  if (sorted.length <= 5) {
+    return sorted.map(roundMoney);
+  }
+
+  const start = Math.floor(sorted.length * 0.15);
+  const end = Math.ceil(sorted.length * 0.65);
+  const slice = sorted.slice(start, end);
+
+  return (slice.length ? slice : sorted.slice(0, 6)).map(roundMoney);
+}
+
+function buildAutoCompsFromItems({ items, product, condition }) {
+  const matched = items.filter((item) =>
+    itemMatchesProduct(item?.title || "", product, condition)
+  );
+
+  const priced = matched
+    .map((item) => ({
+      title: String(item?.title || ""),
+      price: roundMoney(Number(item?.price || 0)),
+      shipping: roundMoney(Number(item?.shipping || 0)),
+      total: roundMoney(Number(item?.price || 0) + Number(item?.shipping || 0)),
+      condition: String(item?.condition || ""),
+      url: item?.itemWebUrl || item?.viewItemURL || item?.url || "",
+    }))
+    .filter((item) => item.total > 0);
+
+  const totals = priced.map((item) => item.total);
+  const selectedPrices = selectCompPrices(totals);
+
+  let confidence = 25;
+  if (selectedPrices.length >= 3) confidence = 50;
+  if (selectedPrices.length >= 5) confidence = 68;
+  if (selectedPrices.length >= 7) confidence = 82;
+  if (selectedPrices.length >= 10) confidence = 92;
+
+  let confidenceLabel = "Low";
+  if (confidence >= 80) confidenceLabel = "High";
+  else if (confidence >= 55) confidenceLabel = "Medium";
+
+  return {
+    pricingMode: "Auto comps estimate",
+    searchCount: items.length,
+    matchedCount: matched.length,
+    compCount: selectedPrices.length,
+    prices: selectedPrices,
+    manualSoldPricesText: selectedPrices.join(", "),
+    avgPrice: selectedPrices.length ? getAverage(selectedPrices) : 0,
+    medianPrice: selectedPrices.length ? getMedian(selectedPrices) : 0,
+    minPrice: selectedPrices.length ? roundMoney(Math.min(...selectedPrices)) : 0,
+    maxPrice: selectedPrices.length ? roundMoney(Math.max(...selectedPrices)) : 0,
+    confidence,
+    confidenceLabel,
+    matchedItemsPreview: priced.slice(0, 8),
+  };
+}
+
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhookHandler
+);
+
+app.use(cors({ origin: appUrl, credentials: true }));
+app.use(cookieParser());
+app.use(express.json({ limit: "1mb" }));
+app.use(express.static(path.join(__dirname, "public")));
+
+app.post("/api/signup", signupHandler);
+app.post("/api/login", loginHandler);
+app.post("/api/logout", logoutHandler);
+
+app.get("/api/me", requireAuth, (req, res) => {
+  res.json({ user: safeUser(req.user) });
 });
 
-// =======================
-// START SERVER
-// =======================
-app.listen(PORT, () => {
-  console.log(`FlipAI running on port ${PORT}`);
+app.post("/api/create-checkout-session", requireAuth, async (req, res) => {
+  try {
+    const plan = String(req.body?.plan || "").toLowerCase();
+    const url = await createCheckoutSession(req.user, plan);
+    res.json({ url });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: error.message || "Could not create checkout session." });
+  }
+});
+
+app.post("/api/create-portal-session", requireAuth, async (req, res) => {
+  try {
+    const url = await createPortalSession(req.user);
+    res.json({ url });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: error.message || "Could not open billing portal." });
+  }
+});
+
+app.post("/api/analyze", async (req, res) => {
+  try {
+    const user = getUserFromCookie(req);
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Please sign in to use FlipAI analysis.",
+        locked: true,
+      });
+    }
+
+    const allowedUser = enforceUsage(user);
+
+    const {
+      product,
+      condition,
+      buyPrice,
+      repairCost,
+      extras,
+      goal,
+      manualSoldPrices,
+    } = req.body || {};
+
+    if (!product || !condition) {
+      return res.status(400).json({
+        error: "Product name and condition are required.",
+      });
+    }
+
+    const flipMetrics = calculateFlipMetrics({
+      buyPrice,
+      repairCost,
+      condition,
+      manualSoldPrices,
+      goal,
+    });
+
+    const aiResult = await runAnalysis({
+      product,
+      condition,
+      buyPrice,
+      repairCost,
+      extras,
+      goal,
+      manualSoldPrices,
+      manualSoldComps: flipMetrics.soldComps,
+      forcedEstimatedResale: flipMetrics.estimatedResale,
+      pricingMode: flipMetrics.pricingMode,
+    });
+
+    const updatedUser = incrementUsage(allowedUser.id);
+
+    return res.json({
+      result: {
+        ...aiResult,
+        flipMetrics,
+        manualSoldComps: flipMetrics.soldComps,
+        locked: false,
+      },
+      user: safeUser(updatedUser),
+    });
+  } catch (error) {
+    if (error.statusCode === 403) {
+      return res.status(403).json({
+        error: error.message,
+        locked: true,
+      });
+    }
+
+    console.error(error);
+    return res.status(500).json({
+      error: error.message || "Could not generate analysis.",
+    });
+  }
+});
+
+app.post("/api/auto-comps", async (req, res) => {
+  try {
+    const user = getUserFromCookie(req);
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Please sign in to auto-fill comps.",
+      });
+    }
+
+    const { product, condition } = req.body || {};
+
+    if (!product || !String(product).trim()) {
+      return res.status(400).json({
+        error: "Product is required.",
+      });
+    }
+
+    const searchQuery = buildAutoCompSearchQuery(product, condition);
+
+    const items = await searchEbayListings({
+      query: searchQuery,
+      limit: 30,
+      condition: "",
+      freeShippingOnly: false,
+    });
+
+    const autoComps = buildAutoCompsFromItems({
+      items,
+      product,
+      condition,
+    });
+
+    if (!autoComps.compCount) {
+      return res.status(404).json({
+        error: "No strong matching live comps were found.",
+        searchQuery,
+        autoComps,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      searchQuery,
+      autoComps,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: error.message || "Could not auto-fill comps.",
+    });
+  }
+});
+
+app.post("/api/search-ebay", async (req, res) => {
+  try {
+    const user = getUserFromCookie(req);
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Please sign in to search eBay.",
+      });
+    }
+
+    const { query, limit, filterPriceMax, condition, freeShippingOnly } =
+      req.body || {};
+
+    if (!query || !String(query).trim()) {
+      return res.status(400).json({
+        error: "Search query is required.",
+      });
+    }
+
+    const items = await searchEbayListings({
+      query,
+      limit,
+      filterPriceMax,
+      condition,
+      freeShippingOnly,
+    });
+
+    const scannedItems = items
+      .map((item) => ({
+        ...item,
+        scanner: buildScannerMetrics(item),
+      }))
+      .sort((a, b) => {
+        return (
+          Number(b?.scanner?.estimatedProfit || 0) -
+          Number(a?.scanner?.estimatedProfit || 0)
+        );
+      })
+      .map((item, index) => ({
+        ...item,
+        bestDeal: index === 0 && Number(item?.scanner?.estimatedProfit || 0) > 0,
+      }));
+
+    return res.json({ items: scannedItems });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: error.message || "Could not search eBay.",
+    });
+  }
+});
+
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.listen(port, () => {
+  console.log(`FlipAI running on ${appUrl}`);
 });
