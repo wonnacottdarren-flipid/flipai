@@ -23,7 +23,7 @@ import {
   stripeWebhookHandler,
 } from "./stripe.js";
 import { runAnalysis } from "./openai.js";
-import { searchEbayListings } from "./ebay.js";
+import { searchEbayListings, getSoldComparables } from "./ebay.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -115,7 +115,6 @@ function getConditionPenalty(item) {
 
   if (condition.includes("refurbished")) penalty -= 8;
   if (condition.includes("new")) penalty -= 15;
-  if (condition.includes("used")) penalty += 0;
 
   return Math.max(0, penalty);
 }
@@ -152,7 +151,7 @@ function getBatteryAdjustment(item) {
   return -25;
 }
 
-function getConfidenceScore(item, baseResale) {
+function getConfidenceScore(item, baseResale, soldCompsUsed) {
   const title = String(item?.title || "").toLowerCase();
   const condition = String(item?.condition || "").toLowerCase();
 
@@ -168,9 +167,9 @@ function getConfidenceScore(item, baseResale) {
     score += 6;
   }
   if (extractBatteryPercent(title) !== null) score += 6;
-
   if (condition.includes("used")) score += 2;
   if (condition.includes("refurbished")) score += 4;
+  if (soldCompsUsed) score += 12;
 
   if (title.includes("read description")) score -= 8;
   if (title.includes("job lot")) score -= 20;
@@ -193,7 +192,15 @@ function getSuggestedRepairCost(item) {
   return 0;
 }
 
-function buildScannerMetrics(item) {
+function buildReasonText({ soldComps, risk, soldCompsUsed }) {
+  if (soldCompsUsed && soldComps) {
+    return `Based on sold comparables (${soldComps.soldCount} sold items). Confidence: ${soldComps.confidence}. Risk: ${risk}.`;
+  }
+
+  return `Estimated resale based on conservative UK resale assumptions. Risk: ${risk}.`;
+}
+
+function buildScannerMetrics(item, soldComps = null) {
   const itemPrice = Number(item?.price || 0);
   const shipping = Number(item?.shipping || 0);
   const totalBuyPrice = roundMoney(itemPrice + shipping);
@@ -204,10 +211,21 @@ function buildScannerMetrics(item) {
   const batteryAdjustment = getBatteryAdjustment(item);
   const repairCost = getSuggestedRepairCost(item);
 
-  let estimatedResale = baseResale + bonus + batteryAdjustment - penalty;
+  const soldCompsUsed =
+    soldComps &&
+    Number(soldComps.soldCount || 0) > 0 &&
+    Number(soldComps.averageSoldPrice || 0) > 0;
 
-  if (!estimatedResale || estimatedResale <= 0) {
-    estimatedResale = totalBuyPrice * 1.18;
+  let estimatedResale = 0;
+
+  if (soldCompsUsed) {
+    const soldAverage = Number(soldComps.averageSoldPrice || 0);
+    estimatedResale = soldAverage + bonus + batteryAdjustment - penalty;
+  } else {
+    estimatedResale = baseResale + bonus + batteryAdjustment - penalty;
+    if (!estimatedResale || estimatedResale <= 0) {
+      estimatedResale = totalBuyPrice * 1.18;
+    }
   }
 
   estimatedResale = roundMoney(Math.max(0, estimatedResale));
@@ -224,7 +242,7 @@ function buildScannerMetrics(item) {
   if (verdict === "GOOD DEAL") risk = "Low";
   else if (verdict === "MARGINAL") risk = "Medium";
 
-  const confidence = getConfidenceScore(item, baseResale);
+  const confidence = getConfidenceScore(item, baseResale, soldCompsUsed);
 
   let score = Math.round(
     Math.max(
@@ -250,6 +268,15 @@ function buildScannerMetrics(item) {
     batteryAdjustment: roundMoney(batteryAdjustment),
     bonus: roundMoney(bonus),
     penalty: roundMoney(penalty),
+    soldCompsUsed,
+    soldAveragePrice: roundMoney(soldComps?.averageSoldPrice || 0),
+    soldMedianPrice: roundMoney(soldComps?.medianSoldPrice || 0),
+    soldMinPrice: roundMoney(soldComps?.minSoldPrice || 0),
+    soldMaxPrice: roundMoney(soldComps?.maxSoldPrice || 0),
+    soldCount: Number(soldComps?.soldCount || 0),
+    soldSource: soldComps?.source || null,
+    soldConfidence: soldComps?.confidence || null,
+    reason: buildReasonText({ soldComps, risk, soldCompsUsed }),
   };
 }
 
@@ -461,9 +488,15 @@ app.post("/api/search-ebay", async (req, res) => {
       freeShippingOnly,
     });
 
+    const soldComps = await getSoldComparables({ query }).catch((error) => {
+      console.error("Sold comps provider failed:", error.message);
+      return null;
+    });
+
     const scannedItems = items.map((item) => ({
       ...item,
-      scanner: buildScannerMetrics(item),
+      scanner: buildScannerMetrics(item, soldComps),
+      reason: buildScannerMetrics(item, soldComps).reason,
     }));
 
     const filteredAndSortedItems = applyScannerFiltersAndSort(scannedItems, {
@@ -480,7 +513,11 @@ app.post("/api/search-ebay", async (req, res) => {
         minProfit: Number(minProfit || 0),
         minScore: Number(minScore || 0),
         sortBy: String(sortBy || "best_profit"),
+        soldComparablesAvailable: Boolean(
+          soldComps && Number(soldComps.soldCount || 0) > 0
+        ),
       },
+      soldComparables: soldComps,
     });
   } catch (error) {
     console.error(error);
