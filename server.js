@@ -141,10 +141,12 @@ function calculateFlipMetrics({
   repairCost,
   condition,
   manualSoldPrices,
+  goal,
 }) {
   const buy = Number(buyPrice || 0);
   const repair = Number(repairCost || 0);
   const text = String(condition || "").toLowerCase();
+  const goalText = String(goal || "").toLowerCase();
 
   const soldComps = buildManualSoldComps(manualSoldPrices);
 
@@ -154,6 +156,14 @@ function calculateFlipMetrics({
   if (soldComps.connected && soldComps.medianSoldPrice > 0) {
     estimatedResale = soldComps.medianSoldPrice;
     pricingMode = "Manual sold comps";
+
+    if (goalText.includes("fast")) {
+      estimatedResale = roundMoney(estimatedResale * 0.95);
+      pricingMode = "Manual sold comps (fast-sale adjusted)";
+    } else if (goalText.includes("maximum")) {
+      estimatedResale = roundMoney(estimatedResale * 1.03);
+      pricingMode = "Manual sold comps (profit adjusted)";
+    }
   } else {
     let multiplier = 2.0;
 
@@ -161,8 +171,18 @@ function calculateFlipMetrics({
     else if (text.includes("good")) multiplier = 2.3;
     else if (text.includes("light")) multiplier = 2.2;
     else if (text.includes("cracked")) multiplier = 2.0;
+    else if (text.includes("fault")) multiplier = 1.7;
+    else if (text.includes("parts")) multiplier = 1.45;
 
-    estimatedResale = Math.round(buy * multiplier);
+    estimatedResale = roundMoney(buy * multiplier);
+
+    if (goalText.includes("fast")) {
+      estimatedResale = roundMoney(estimatedResale * 0.95);
+      pricingMode = "Estimated fallback model (fast-sale adjusted)";
+    } else if (goalText.includes("maximum")) {
+      estimatedResale = roundMoney(estimatedResale * 1.03);
+      pricingMode = "Estimated fallback model (profit adjusted)";
+    }
   }
 
   const totalCost = roundMoney(buy + repair);
@@ -358,6 +378,7 @@ app.post("/api/analyze", async (req, res) => {
       repairCost,
       condition,
       manualSoldPrices,
+      goal,
     });
 
     const aiResult = await runAnalysis({
@@ -367,6 +388,10 @@ app.post("/api/analyze", async (req, res) => {
       repairCost,
       extras,
       goal,
+      manualSoldPrices,
+      manualSoldComps: flipMetrics.soldComps,
+      forcedEstimatedResale: flipMetrics.estimatedResale,
+      pricingMode: flipMetrics.pricingMode,
     });
 
     const updatedUser = incrementUsage(allowedUser.id);
