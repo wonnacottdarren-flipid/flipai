@@ -1,6 +1,5 @@
 const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
-const EBAY_BROWSE_URL =
-  "https://api.ebay.com/buy/browse/v1/item_summary/search";
+const EBAY_BROWSE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
 const EBAY_SCOPE = "https://api.ebay.com/oauth/api_scope";
 
 let cachedToken = null;
@@ -46,9 +45,7 @@ async function getEbayAccessToken() {
 
   if (!res.ok) {
     throw new Error(
-      data.error_description ||
-        data.error ||
-        "Could not get eBay access token."
+      data.error_description || data.error || "Could not get eBay access token."
     );
   }
 
@@ -58,67 +55,13 @@ async function getEbayAccessToken() {
   return cachedToken;
 }
 
-function normaliseConditionLabel(condition) {
+function normaliseCondition(condition) {
   const text = String(condition || "").toLowerCase();
 
-  if (
-    text.includes("new") ||
-    text === "brand new" ||
-    text === "new"
-  ) {
-    return "New";
-  }
-
-  if (
-    text.includes("refurb") ||
-    text.includes("seller refurbished") ||
-    text.includes("manufacturer refurbished")
-  ) {
-    return "Refurbished";
-  }
-
-  if (
-    text.includes("used") ||
-    text.includes("pre-owned") ||
-    text.includes("preowned")
-  ) {
-    return "Used";
-  }
-
+  if (text.includes("new")) return "New";
+  if (text.includes("used")) return "Used";
+  if (text.includes("refurb")) return "Refurbished";
   return "Unknown";
-}
-
-function normaliseConditionFilter(condition) {
-  const text = String(condition || "").trim().toUpperCase();
-
-  if (!text) return "";
-
-  const directAllowed = new Set([
-    "NEW",
-    "USED",
-    "CERTIFIED_REFURBISHED",
-    "LIKE_NEW",
-    "VERY_GOOD",
-    "GOOD",
-    "ACCEPTABLE",
-  ]);
-
-  if (directAllowed.has(text)) {
-    return text;
-  }
-
-  const loose = String(condition || "").trim().toLowerCase();
-
-  if (loose.includes("new")) return "NEW";
-  if (loose.includes("used")) return "USED";
-  if (loose.includes("certified refurb")) return "CERTIFIED_REFURBISHED";
-  if (loose.includes("refurb")) return "CERTIFIED_REFURBISHED";
-  if (loose.includes("like new")) return "LIKE_NEW";
-  if (loose.includes("very good")) return "VERY_GOOD";
-  if (loose === "good" || loose.includes(" good")) return "GOOD";
-  if (loose.includes("acceptable")) return "ACCEPTABLE";
-
-  return "";
 }
 
 function mapEbayItem(item) {
@@ -138,12 +81,8 @@ function mapEbayItem(item) {
     price: priceValue,
     shipping: shippingValue,
     totalBuyPrice: priceValue + shippingValue,
-    condition: normaliseConditionLabel(item?.condition),
-    rawCondition: item?.condition || "",
-    location:
-      item?.itemLocation?.country ||
-      item?.itemLocation?.city ||
-      "GB",
+    condition: normaliseCondition(item?.condition),
+    location: item?.itemLocation?.country || "GB",
     buyingOptions: Array.isArray(item?.buyingOptions)
       ? item.buyingOptions
       : [],
@@ -164,11 +103,9 @@ export async function searchEbayListings({
   const token = await getEbayAccessToken();
   const marketplaceId = process.env.EBAY_MARKETPLACE_ID || "EBAY_GB";
 
-  const safeLimit = Math.min(Math.max(Number(limit) || 10, 1), 20);
-
   const params = new URLSearchParams({
     q: String(query).trim(),
-    limit: String(safeLimit),
+    limit: String(Math.min(Math.max(Number(limit) || 10, 1), 20)),
   });
 
   const filters = [];
@@ -181,9 +118,22 @@ export async function searchEbayListings({
     filters.push("maxDeliveryCost:0");
   }
 
-  const ebayCondition = normaliseConditionFilter(condition);
-  if (ebayCondition) {
-    filters.push(`conditions:{${ebayCondition}}`);
+  if (condition && String(condition).trim()) {
+    const clean = String(condition).trim().toUpperCase();
+
+    if (
+      [
+        "NEW",
+        "USED",
+        "CERTIFIED_REFURBISHED",
+        "LIKE_NEW",
+        "VERY_GOOD",
+        "GOOD",
+        "ACCEPTABLE",
+      ].includes(clean)
+    ) {
+      filters.push(`conditions:{${clean}}`);
+    }
   }
 
   if (filters.length) {
@@ -191,7 +141,6 @@ export async function searchEbayListings({
   }
 
   const res = await fetch(`${EBAY_BROWSE_URL}?${params.toString()}`, {
-    method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
       "X-EBAY-C-MARKETPLACE-ID": marketplaceId,
@@ -202,11 +151,72 @@ export async function searchEbayListings({
   const data = await res.json();
 
   if (!res.ok) {
+    throw new Error(data.errors?.[0]?.message || "Could not search eBay.");
+  }
+
+  const items = Array.isArray(data.itemSummaries) ? data.itemSummaries : [];
+  return items.map(mapEbayItem);
+}
+
+/**
+ * SOLD COMPS PROVIDER
+ *
+ * This is intentionally provider-agnostic.
+ * If you later connect a sold-comps API, put it here.
+ *
+ * Expected return shape:
+ * {
+ *   source: "provider-name",
+ *   soldCount: number,
+ *   averageSoldPrice: number,
+ *   medianSoldPrice: number,
+ *   minSoldPrice: number,
+ *   maxSoldPrice: number,
+ *   confidence: "Low" | "Medium" | "High"
+ * }
+ *
+ * If no provider is configured, return null and the server will fall back.
+ */
+export async function getSoldComparables({ query }) {
+  const providerUrl = process.env.SOLD_COMPS_API_URL;
+  const providerKey = process.env.SOLD_COMPS_API_KEY;
+
+  if (!providerUrl || !providerKey) {
+    return null;
+  }
+
+  const res = await fetch(providerUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${providerKey}`,
+    },
+    body: JSON.stringify({
+      query: String(query || "").trim(),
+      marketplace: process.env.EBAY_MARKETPLACE_ID || "EBAY_GB",
+      limit: 20,
+    }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
     throw new Error(
-      data?.errors?.[0]?.message || "Could not search eBay."
+      data?.error || data?.message || "Could not fetch sold comparables."
     );
   }
 
-  const items = Array.isArray(data?.itemSummaries) ? data.itemSummaries : [];
-  return items.map(mapEbayItem);
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  return {
+    source: data.source || "sold-comps-provider",
+    soldCount: Number(data.soldCount || 0),
+    averageSoldPrice: Number(data.averageSoldPrice || 0),
+    medianSoldPrice: Number(data.medianSoldPrice || 0),
+    minSoldPrice: Number(data.minSoldPrice || 0),
+    maxSoldPrice: Number(data.maxSoldPrice || 0),
+    confidence: data.confidence || "Low",
+  };
 }
