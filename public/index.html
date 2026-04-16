@@ -1337,6 +1337,8 @@
     }
 
     function mapDealFields(rawDeal = {}) {
+      const scanner = rawDeal.scanner || {};
+
       const price = Number(
         rawDeal.price?.value ??
         rawDeal.currentPrice?.value ??
@@ -1383,17 +1385,31 @@
         title,
         price,
         shipping,
-        estimatedResale: 0,
-        estimatedProfit: 0,
-        score: null,
-        reason: "eBay listing found. Load this into the analyzer to calculate resale value, fees, and profit.",
+        estimatedResale: Number(scanner.estimatedResale || 0),
+        estimatedProfit: Number(scanner.estimatedProfit || 0),
+        totalBuyPrice: Number(scanner.totalBuyPrice || price + shipping),
+        ebayFees: Number(scanner.ebayFees || 0),
+        score: Number(scanner.score || 0),
+        risk: scanner.risk || "High",
+        verdict: scanner.verdict || "SKIP",
+        reason:
+          rawDeal.reason ||
+          `Estimated resale based on conservative UK resale assumptions. Risk: ${scanner.risk || "High"}.`,
         condition,
         extras: "",
-        repairCost: 0,
+        repairCost: Number(scanner.repairCost || 0),
         url,
         source: "eBay",
-        image
+        image,
+        bestDeal: Boolean(rawDeal.bestDeal)
       };
+    }
+
+    function scannerVerdictColor(text) {
+      const value = String(text || "").toUpperCase();
+      if (value.includes("GOOD")) return "#4ade80";
+      if (value.includes("MARGINAL")) return "#f59e0b";
+      return "#f87171";
     }
 
     function useDealForAnalysis(index) {
@@ -1402,9 +1418,10 @@
       if (!deal) return;
 
       document.getElementById("product").value = deal.title || "";
-      document.getElementById("condition").value = deal.condition || "Used item from eBay search results.";
-      document.getElementById("buyPrice").value = Number(deal.price || 0).toFixed(2);
-      document.getElementById("repairCost").value = "0.00";
+      document.getElementById("condition").value =
+        deal.condition || "Used item from eBay search results.";
+      document.getElementById("buyPrice").value = Number(deal.totalBuyPrice || deal.price || 0).toFixed(2);
+      document.getElementById("repairCost").value = Number(deal.repairCost || 0).toFixed(2);
       document.getElementById("extras").value = deal.url || "";
       document.getElementById("goal").value = "Fast sale";
 
@@ -1413,7 +1430,10 @@
         block: "start"
       });
 
-      setAnalyzeStatus("Deal loaded into analyzer. Add any repair costs or extra notes, then click Analyze Flip.", "success");
+      setAnalyzeStatus(
+        "Deal loaded into analyzer with scanner pricing. Add any notes, then click Analyze Flip.",
+        "success"
+      );
     }
 
     window.useDealForAnalysis = useDealForAnalysis;
@@ -1424,42 +1444,84 @@
       window.__lastDeals = deals;
 
       if (!deals.length) {
-        dealResultsEl.innerHTML = '<div class="deal-empty">No matching listings found. Try a broader search or higher max price.</div>';
+        dealResultsEl.innerHTML =
+          '<div class="deal-empty">No matching listings found. Try a broader search or higher max price.</div>';
         return;
       }
 
-      dealResultsEl.innerHTML = deals.map((deal, index) => {
-        return `
-          <div class="deal-card">
-            <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
+      dealResultsEl.innerHTML = deals
+        .map((deal, index) => {
+          return `
+            <div class="deal-card" style="${
+              deal.bestDeal
+                ? "border:1px solid rgba(34,197,94,0.45); box-shadow: 0 0 0 1px rgba(34,197,94,0.18), 0 20px 60px rgba(0,0,0,0.28);"
+                : ""
+            }">
+              ${
+                deal.bestDeal
+                  ? `<div class="panel" style="margin-bottom:12px;font-weight:800;color:#4ade80;">BEST DEAL 🔥</div>`
+                  : ""
+              }
 
-            <div class="deal-price-row">
-              <div class="deal-price">${currency(deal.price)}</div>
-              <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
-              <div class="deal-source">${escapeHtml(deal.source)}</div>
-              ${deal.condition ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>` : ""}
-            </div>
+              <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
 
-            <div class="deal-metrics">
-              <div class="deal-metric">
-                <div class="label">Item price</div>
-                <div class="value">${currency(deal.price)}</div>
+              <div class="deal-price-row">
+                <div class="deal-price">${currency(deal.price)}</div>
+                <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
+                <div class="deal-source">${escapeHtml(deal.source)}</div>
+                ${
+                  deal.condition
+                    ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
+                    : ""
+                }
+                <div class="deal-score">Score ${escapeHtml(deal.score)}</div>
               </div>
-              <div class="deal-metric">
-                <div class="label">Shipping</div>
-                <div class="value">${currency(deal.shipping)}</div>
+
+              <div class="deal-metrics">
+                <div class="deal-metric">
+                  <div class="label">Estimated resale</div>
+                  <div class="value">${currency(deal.estimatedResale)}</div>
+                </div>
+                <div class="deal-metric">
+                  <div class="label">Estimated profit</div>
+                  <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
+                    ${currency(deal.estimatedProfit)}
+                  </div>
+                </div>
+                <div class="deal-metric">
+                  <div class="label">Total buy cost</div>
+                  <div class="value">${currency(deal.totalBuyPrice)}</div>
+                </div>
+                <div class="deal-metric">
+                  <div class="label">eBay fees</div>
+                  <div class="value">${currency(deal.ebayFees)}</div>
+                </div>
+              </div>
+
+              <div class="panel" style="font-weight:800;color:${scannerVerdictColor(deal.verdict)};">
+                Verdict: ${escapeHtml(deal.verdict)}
+              </div>
+
+              <div class="panel">
+                <strong>Risk:</strong> ${escapeHtml(deal.risk)}<br>
+                <strong>Item price:</strong> ${currency(deal.price)}<br>
+                <strong>Shipping:</strong> ${currency(deal.shipping)}
+              </div>
+
+              <div class="deal-summary">${escapeHtml(deal.reason)}</div>
+
+              <div class="deal-actions">
+                <button onclick="useDealForAnalysis(${index})">Send to Analyzer</button>
+                ${
+                  deal.url
+                    ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
+                    : ""
+                }
               </div>
             </div>
-
-            <div class="deal-summary">${escapeHtml(deal.reason)}</div>
-
-            <div class="deal-actions">
-              <button onclick="useDealForAnalysis(${index})">Send to Analyzer</button>
-              ${deal.url ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>` : ""}
-            </div>
-          </div>
-        `;
-      }).join("");
+          `;
+        })
+        .join("");
     }
 
     async function runAnalysis() {
