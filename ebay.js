@@ -1,163 +1,125 @@
 import fetch from "node-fetch";
 
 /**
- * FlipAI eBay Browse API (DEBUG + PRODUCTION SAFE)
- * - OAuth handling
- * - Full error visibility
- * - UK marketplace support
+ * FlipAI eBay module (FIXED + STABLE)
+ * - Safe authentication
+ * - Clean search queries
+ * - Reliable fallback handling
  */
 
-// -----------------------------
-// ENV CHECK
-// -----------------------------
-const EBAY_CLIENT_ID = process.env.EBAY_CLIENT_ID;
-const EBAY_CLIENT_SECRET = process.env.EBAY_CLIENT_SECRET;
+const EBAY_APP_ID = process.env.EBAY_APP_ID;
 
 // -----------------------------
-// TOKEN CACHE
-// -----------------------------
-let cachedToken = null;
-let tokenExpiry = 0;
-
-// -----------------------------
-// GET OAUTH TOKEN (DEBUG VERSION)
-// -----------------------------
-async function getEbayAccessToken() {
-  const now = Date.now();
-
-  if (cachedToken && now < tokenExpiry) {
-    return cachedToken;
-  }
-
-  if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
-    console.error("❌ Missing eBay credentials");
-    throw new Error("Missing eBay CLIENT_ID or CLIENT_SECRET");
-  }
-
-  const auth = Buffer.from(
-    `${EBAY_CLIENT_ID}:${EBAY_CLIENT_SECRET}`
-  ).toString("base64");
-
-  const res = await fetch(
-    "https://api.ebay.com/identity/v1/oauth2/token",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${auth}`,
-      },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        scope: "https://api.ebay.com/oauth/api_scope",
-      }),
-    }
-  );
-
-  const data = await res.json();
-
-  console.log("🔑 TOKEN RESPONSE:", data);
-
-  if (!data.access_token) {
-    console.error("❌ TOKEN FAILED:", data);
-    throw new Error("Failed to get eBay access token");
-  }
-
-  cachedToken = data.access_token;
-  tokenExpiry = now + data.expires_in * 1000 - 60000;
-
-  return cachedToken;
-}
-
-// -----------------------------
-// CLEAN QUERY
+// 1. CLEAN SEARCH QUERY
 // -----------------------------
 function cleanQuery(query) {
   if (!query) return "";
-  return query.replace(/[^a-z0-9\s]/gi, "").trim();
+
+  return query
+    .toLowerCase()
+    .replace(/iphone/g, "iphone")
+    .replace(/gb|ram|unlocked|used|new|cracked|boxed/g, "")
+    .replace(/[^a-z0-9\s]/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // -----------------------------
-// MAIN SEARCH FUNCTION (DEBUG MODE)
+// 2. MAIN SEARCH FUNCTION
 // -----------------------------
 export async function searchEbayListings({
   query,
   maxPrice,
-  condition = "USED",
-  limit = 20,
+  condition = "used",
+  freeShippingOnly = false,
 }) {
   try {
-    const token = await getEbayAccessToken();
+    if (!EBAY_APP_ID) {
+      throw new Error("Missing EBAY_APP_ID in environment variables");
+    }
 
-    const cleaned = cleanQuery(query);
-    const finalQuery = cleaned.length ? cleaned : query;
+    const cleanedQuery = cleanQuery(query);
 
-    const url = new URL(
-      "https://api.ebay.com/buy/browse/v1/item_summary/search"
-    );
+    // Build eBay Finding API request
+    const url = new URL("https://svcs.ebay.com/services/search/FindingService/v1");
 
-    url.searchParams.set("q", finalQuery);
-    url.searchParams.set("limit", limit);
+    url.searchParams.append("OPERATION-NAME", "findItemsByKeywords");
+    url.searchParams.append("SERVICE-VERSION", "1.0.0");
+    url.searchParams.append("SECURITY-APPNAME", EBAY_APP_ID);
+    url.searchParams.append("RESPONSE-DATA-FORMAT", "JSON");
+    url.searchParams.append("REST-PAYLOAD", "true");
 
-    // -----------------------------
-    // FILTERS (SAFE FORMAT)
-    // -----------------------------
-    const filters = [];
+    url.searchParams.append("keywords", cleanedQuery || query);
+
+    // Filters
+    const itemFilter = [];
 
     if (maxPrice) {
-      filters.push(`price:[0..${maxPrice}]`);
+      itemFilter.push({
+        name: "MaxPrice",
+        value: maxPrice.toString(),
+        paramName: "Currency",
+        paramValue: "GBP",
+      });
     }
 
     if (condition) {
-      filters.push(`conditions:{${condition.toUpperCase()}}`);
+      const conditionMap = {
+        new: "1000",
+        used: "3000",
+        refurbished: "2000",
+      };
+
+      if (conditionMap[condition]) {
+        itemFilter.push({
+          name: "Condition",
+          value: conditionMap[condition],
+        });
+      }
     }
 
-    if (filters.length) {
-      url.searchParams.set("filter", filters.join(","));
+    if (freeShippingOnly) {
+      itemFilter.push({
+        name: "FreeShippingOnly",
+        value: "true",
+      });
     }
 
-    console.log("🌍 eBay Request URL:", url.toString());
+    if (itemFilter.length) {
+      url.searchParams.append("itemFilter", JSON.stringify(itemFilter));
+    }
+
+    url.searchParams.append("paginationInput.entriesPerPage", "20");
 
     // -----------------------------
-    // FETCH
+    // 3. FETCH DATA
     // -----------------------------
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-EBAY-C-MARKETPLACE-ID": "EBAY_GB",
-      },
-    });
-
-    console.log("📡 eBay STATUS:", res.status);
-
+    const res = await fetch(url.toString());
     const data = await res.json();
 
-    console.log("📦 eBay RAW RESPONSE:");
-    console.log(JSON.stringify(data, null, 2));
-
-    if (!res.ok) {
-      console.error("❌ eBay API ERROR:", data);
-      return [];
-    }
-
-    const items = data.itemSummaries || [];
+    const items =
+      data?.findItemsByKeywordsResponse?.[0]?.searchResult?.[0]?.item || [];
 
     if (!items.length) {
-      console.warn("⚠️ No items returned from eBay");
       return [];
     }
 
+    // -----------------------------
+    // 4. NORMALISE OUTPUT
+    // -----------------------------
     return items.map((item) => ({
-      title: item.title || "Unknown",
-      price: item.price?.value ? Number(item.price.value) : 0,
-      currency: item.price?.currency || "GBP",
-      url: item.itemWebUrl || "",
-      condition: item.condition || "Unknown",
-      image: item.image?.imageUrl || "",
-      location: item.itemLocation?.country || "UK",
+      title: item.title?.[0] || "Unknown",
+      price: parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || 0),
+      currency: item.sellingStatus?.[0]?.currentPrice?.[0]?.["@currencyId"] || "GBP",
+      url: item.viewItemURL?.[0] || "",
+      condition: item.condition?.[0]?.conditionDisplayName?.[0] || "Unknown",
+      shipping:
+        item.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__ || "0",
+      location: item.location?.[0] || "UK",
+      image: item.galleryURL?.[0] || "",
     }));
   } catch (error) {
-    console.error("🔥 eBay MODULE ERROR:", error.message);
+    console.error("eBay API error:", error.message);
     return [];
   }
 }
