@@ -450,17 +450,10 @@
       margin-bottom: 16px;
     }
 
-    .filters-grid {
+    .field-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-    }
-
-    .meta-line {
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.6;
     }
 
     label {
@@ -689,7 +682,9 @@
     .deal-shipping,
     .deal-source,
     .deal-score,
-    .deal-condition {
+    .deal-condition,
+    .deal-confidence,
+    .deal-sold {
       font-size: 12px;
       color: var(--muted);
       padding: 6px 10px;
@@ -760,6 +755,13 @@
       padding: 4px 0;
     }
 
+    .search-meta {
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 14px;
+      margin-top: 12px;
+    }
+
     .footer {
       margin-top: 30px;
       padding: 18px 0 10px;
@@ -780,7 +782,7 @@
       .hero-points,
       .deal-layout,
       .deal-metrics,
-      .filters-grid {
+      .field-row {
         grid-template-columns: 1fr;
       }
 
@@ -1022,7 +1024,7 @@
             />
           </div>
 
-          <div class="filters-grid">
+          <div class="field-row">
             <div class="field">
               <label for="dealMaxPrice">Max price (£)</label>
               <input
@@ -1041,15 +1043,17 @@
                 <option value="true">Yes</option>
               </select>
             </div>
+          </div>
 
+          <div class="field-row">
             <div class="field">
               <label for="minProfit">Minimum profit (£)</label>
               <input
                 id="minProfit"
                 type="number"
                 step="0.01"
-                placeholder="0"
-                value="10"
+                placeholder="25"
+                value="25"
               />
             </div>
 
@@ -1059,8 +1063,8 @@
                 id="minScore"
                 type="number"
                 step="1"
-                placeholder="0"
-                value="10"
+                placeholder="55"
+                value="55"
               />
             </div>
           </div>
@@ -1077,7 +1081,7 @@
 
           <button id="findDealsBtn">Search eBay</button>
           <div id="dealStatus"></div>
-          <div id="dealMeta" class="meta-line"></div>
+          <div id="dealMeta" class="search-meta"></div>
         </div>
 
         <div>
@@ -1254,6 +1258,13 @@
       return "#e2e8f0";
     }
 
+    function scannerVerdictColor(text) {
+      const value = String(text || "").toUpperCase();
+      if (value.includes("GOOD")) return "#4ade80";
+      if (value.includes("MARGINAL")) return "#f59e0b";
+      return "#f87171";
+    }
+
     function setAuthStatus(message, type) {
       if (!message) {
         authStatusEl.innerHTML = "";
@@ -1279,21 +1290,6 @@
       }
 
       dealStatusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
-    }
-
-    function setDealMeta(meta) {
-      if (!meta) {
-        dealMetaEl.innerHTML = "";
-        return;
-      }
-
-      dealMetaEl.innerHTML = `
-        Found ${escapeHtml(meta.totalAfterFilters)} result(s) after filters
-        from ${escapeHtml(meta.totalFound)} total.
-        Min profit: ${escapeHtml(meta.minProfit)} |
-        Min score: ${escapeHtml(meta.minScore)} |
-        Sort: ${escapeHtml(meta.sortBy)}
-      `;
     }
 
     function renderLockedState(message, options = {}) {
@@ -1458,26 +1454,33 @@
         totalBuyPrice: Number(scanner.totalBuyPrice || price + shipping),
         ebayFees: Number(scanner.ebayFees || 0),
         score: Number(scanner.score || 0),
+        confidence: Number(scanner.confidence || 0),
         risk: scanner.risk || "High",
         verdict: scanner.verdict || "SKIP",
         reason:
+          scanner.reason ||
           rawDeal.reason ||
-          `Estimated resale based on conservative UK resale assumptions. Risk: ${scanner.risk || "High"}.`,
+          "Estimated resale based on available pricing data.",
         condition,
         extras: "",
         repairCost: Number(scanner.repairCost || 0),
         url,
         source: "eBay",
         image,
-        bestDeal: Boolean(rawDeal.bestDeal)
+        bestDeal: Boolean(rawDeal.bestDeal),
+        soldCompsUsed: Boolean(scanner.soldCompsUsed),
+        soldAveragePrice: Number(scanner.soldAveragePrice || 0),
+        soldMedianPrice: Number(scanner.soldMedianPrice || 0),
+        soldMinPrice: Number(scanner.soldMinPrice || 0),
+        soldMaxPrice: Number(scanner.soldMaxPrice || 0),
+        soldCount: Number(scanner.soldCount || 0),
+        soldSource: scanner.soldSource || "",
+        soldConfidence: scanner.soldConfidence || "",
+        baseResale: Number(scanner.baseResale || 0),
+        batteryAdjustment: Number(scanner.batteryAdjustment || 0),
+        bonus: Number(scanner.bonus || 0),
+        penalty: Number(scanner.penalty || 0)
       };
-    }
-
-    function scannerVerdictColor(text) {
-      const value = String(text || "").toUpperCase();
-      if (value.includes("GOOD")) return "#4ade80";
-      if (value.includes("MARGINAL")) return "#f59e0b";
-      return "#f87171";
     }
 
     function useDealForAnalysis(index) {
@@ -1506,14 +1509,32 @@
 
     window.useDealForAnalysis = useDealForAnalysis;
 
+    function renderDealMeta(meta = {}) {
+      const totalFound = Number(meta.totalFound || 0);
+      const totalAfterFilters = Number(meta.totalAfterFilters || 0);
+      const minProfit = Number(meta.minProfit || 0);
+      const minScore = Number(meta.minScore || 0);
+      const sortBy = String(meta.sortBy || "best_profit");
+      const soldComparablesAvailable = Boolean(meta.soldComparablesAvailable);
+
+      dealMetaEl.innerHTML = `
+        Found ${totalAfterFilters} result(s) after filters from ${totalFound} total.
+        Min profit: ${escapeHtml(minProfit)} | Min score: ${escapeHtml(minScore)} |
+        Sort: ${escapeHtml(sortBy)} |
+        Sold comps: ${soldComparablesAvailable ? "available" : "not connected"}
+      `;
+    }
+
     function renderDealResults(data) {
       const rawDeals = data.items || data.results || data.deals || [];
       const deals = rawDeals.map(mapDealFields);
       window.__lastDeals = deals;
 
+      renderDealMeta(data.meta || {});
+
       if (!deals.length) {
         dealResultsEl.innerHTML =
-          '<div class="deal-empty">No matching listings found. Try lower filters or a broader search.</div>';
+          '<div class="deal-empty">No matching listings found. Try a broader search or lower your minimum profit / score.</div>';
         return;
       }
 
@@ -1537,12 +1558,14 @@
                 <div class="deal-price">${currency(deal.price)}</div>
                 <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
                 <div class="deal-source">${escapeHtml(deal.source)}</div>
+                ${deal.condition ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>` : ""}
+                <div class="deal-score">Score ${escapeHtml(deal.score)}</div>
+                <div class="deal-confidence">Confidence ${escapeHtml(deal.confidence)}</div>
                 ${
-                  deal.condition
-                    ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
+                  deal.soldCompsUsed
+                    ? `<div class="deal-sold">Sold comps ${escapeHtml(deal.soldCount)}</div>`
                     : ""
                 }
-                <div class="deal-score">Score ${escapeHtml(deal.score)}</div>
               </div>
 
               <div class="deal-metrics">
@@ -1564,6 +1587,29 @@
                   <div class="label">eBay fees</div>
                   <div class="value">${currency(deal.ebayFees)}</div>
                 </div>
+                ${
+                  deal.soldCompsUsed
+                    ? `
+                      <div class="deal-metric">
+                        <div class="label">Sold average</div>
+                        <div class="value">${currency(deal.soldAveragePrice)}</div>
+                      </div>
+                      <div class="deal-metric">
+                        <div class="label">Sold range</div>
+                        <div class="value">${currency(deal.soldMinPrice)} - ${currency(deal.soldMaxPrice)}</div>
+                      </div>
+                    `
+                    : `
+                      <div class="deal-metric">
+                        <div class="label">Base resale</div>
+                        <div class="value">${currency(deal.baseResale)}</div>
+                      </div>
+                      <div class="deal-metric">
+                        <div class="label">Penalty / bonus</div>
+                        <div class="value">-${currency(deal.penalty)} / +${currency(deal.bonus)}</div>
+                      </div>
+                    `
+                }
               </div>
 
               <div class="panel" style="font-weight:800;color:${scannerVerdictColor(deal.verdict)};">
@@ -1573,7 +1619,13 @@
               <div class="panel">
                 <strong>Risk:</strong> ${escapeHtml(deal.risk)}<br>
                 <strong>Item price:</strong> ${currency(deal.price)}<br>
-                <strong>Shipping:</strong> ${currency(deal.shipping)}
+                <strong>Shipping:</strong> ${currency(deal.shipping)}<br>
+                ${
+                  deal.soldCompsUsed
+                    ? `<strong>Sold confidence:</strong> ${escapeHtml(deal.soldConfidence || "N/A")}<br>
+                       <strong>Sold source:</strong> ${escapeHtml(deal.soldSource || "Connected provider")}`
+                    : `<strong>Pricing mode:</strong> Estimated fallback model`
+                }
               </div>
 
               <div class="deal-summary">${escapeHtml(deal.reason)}</div>
@@ -1692,7 +1744,6 @@
         }
 
         setDealStatus("Search complete.", "success");
-        setDealMeta(data.meta || null);
         renderDealResults(data);
       } catch (err) {
         setDealStatus(`Error: ${err.message}`, "error");
@@ -1831,7 +1882,7 @@
         setAuthStatus("Logged out.", "success");
         resultArea.innerHTML = '<div class="placeholder">Run an analysis and your profit estimate, verdict, risk, and resale guidance will appear here.</div>';
         dealResultsEl.innerHTML = 'Search eBay listings and matching results will appear here.';
-        dealMetaEl.innerHTML = '';
+        dealMetaEl.innerHTML = "";
         setAnalyzeStatus("", "");
         setDealStatus("", "");
         await loadUser();
