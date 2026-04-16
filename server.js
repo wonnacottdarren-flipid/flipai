@@ -33,49 +33,107 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
 const port = process.env.PORT || 3000;
 const appUrl = process.env.APP_URL || `http://localhost:${port}`;
 const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 
+// -----------------------------
+// HELPERS
+// -----------------------------
 function roundMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
-// -----------------------------
-// HELPERS (UNCHANGED)
-// -----------------------------
 function getUserFromCookie(req) {
   try {
     const token = req.cookies?.flipai_token;
     if (!token) return null;
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = getUserById(decoded.userId);
-
-    return user || null;
+    return getUserById(decoded.userId) || null;
   } catch {
     return null;
   }
 }
 
 // -----------------------------
-// EBAY AUTO-COMP SEARCH FIX
+// PROFIT ENGINE (FIXED)
 // -----------------------------
-function buildAutoCompSearchQuery(product, condition) {
-  const text = String(product || "").toLowerCase();
+function calculateFlipMetrics({
+  buyPrice,
+  repairCost,
+  condition,
+  manualSoldPrices,
+  goal,
+}) {
+  const buy = Number(buyPrice || 0);
+  const repair = Number(repairCost || 0);
 
-  let query = text;
+  const conditionText = String(condition || "").toLowerCase();
+  const goalText = String(goal || "").toLowerCase();
 
-  if (condition?.toLowerCase().includes("unlocked")) {
-    query += " unlocked";
-  }
+  // fallback resale estimate (simple safe model)
+  let estimatedResale = buy * 2.0;
+  let pricingMode = "Estimated fallback model";
 
-  if (condition?.toLowerCase().includes("used")) {
-    query += " used";
-  }
+  if (conditionText.includes("excellent")) estimatedResale = buy * 2.4;
+  else if (conditionText.includes("good")) estimatedResale = buy * 2.25;
+  else if (conditionText.includes("used")) estimatedResale = buy * 2.1;
+  else if (conditionText.includes("fault")) estimatedResale = buy * 1.6;
+  else if (conditionText.includes("parts")) estimatedResale = buy * 1.4;
 
-  return query.trim();
+  if (goalText.includes("fast")) estimatedResale *= 0.93;
+  if (goalText.includes("maximum")) estimatedResale *= 1.05;
+
+  estimatedResale = roundMoney(estimatedResale);
+
+  // fees
+  const ebayFeeRate = 0.1325;
+  const paymentFeeRate = 0.034;
+
+  const ebayFees = roundMoney(estimatedResale * ebayFeeRate);
+  const paymentFees = roundMoney(estimatedResale * paymentFeeRate);
+
+  // costs
+  const shippingCost = 4.5;
+  const safetyBuffer = 5;
+
+  const totalCost = roundMoney(buy + repair + shippingCost);
+  const totalFees = roundMoney(ebayFees + paymentFees + safetyBuffer);
+
+  const profit = roundMoney(
+    estimatedResale - totalCost - totalFees
+  );
+
+  let verdict = "SKIP ❌";
+  if (profit >= 35) verdict = "GOOD DEAL ✅";
+  else if (profit >= 15) verdict = "OK DEAL ⚠️";
+  else if (profit >= 5) verdict = "LOW PROFIT ⚠️";
+
+  return {
+    estimatedResale,
+    buyPrice: buy,
+    repairCost: repair,
+    totalCost,
+    ebayFees,
+    paymentFees,
+    shippingCost,
+    safetyBuffer,
+    totalFees,
+    profit,
+    verdict,
+    pricingMode,
+  };
 }
+
+// -----------------------------
+// MIDDLEWARE
+// -----------------------------
+app.use(cors({ origin: appUrl, credentials: true }));
+app.use(cookieParser());
+app.use(express.json({ limit: "1mb" }));
+app.use(express.static(path.join(__dirname, "public")));
 
 // -----------------------------
 // STRIPE WEBHOOK
@@ -87,15 +145,7 @@ app.post(
 );
 
 // -----------------------------
-// MIDDLEWARE
-// -----------------------------
-app.use(cors({ origin: appUrl, credentials: true }));
-app.use(cookieParser());
-app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "public")));
-
-// -----------------------------
-// AUTH
+// AUTH ROUTES
 // -----------------------------
 app.post("/api/signup", signupHandler);
 app.post("/api/login", loginHandler);
@@ -110,11 +160,10 @@ app.get("/api/me", requireAuth, (req, res) => {
 // -----------------------------
 app.post("/api/create-checkout-session", requireAuth, async (req, res) => {
   try {
-    const plan = String(req.body?.plan || "").toLowerCase();
-    const url = await createCheckoutSession(req.user, plan);
+    const url = await createCheckoutSession(req.user, req.body?.plan);
     res.json({ url });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -122,37 +171,39 @@ app.post("/api/create-portal-session", requireAuth, async (req, res) => {
   try {
     const url = await createPortalSession(req.user);
     res.json({ url });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
 // -----------------------------
-// ANALYZE (UNCHANGED)
+// ANALYZE
 // -----------------------------
 app.post("/api/analyze", async (req, res) => {
   try {
     const user = getUserFromCookie(req);
-
     if (!user) {
-      return res.status(401).json({
-        error: "Please sign in to use FlipAI analysis.",
-        locked: true,
-      });
+      return res.status(401).json({ error: "Not logged in" });
     }
 
     const allowedUser = enforceUsage(user);
 
-    const result = await runAnalysis(req.body);
+    const flipMetrics = calculateFlipMetrics(req.body);
+
+    const aiResult = await runAnalysis({
+      ...req.body,
+      flipMetrics,
+    });
 
     const updatedUser = incrementUsage(allowedUser.id);
 
-    return res.json({
-      result,
+    res.json({
+      result: aiResult,
+      flipMetrics,
       user: safeUser(updatedUser),
     });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -162,48 +213,34 @@ app.post("/api/analyze", async (req, res) => {
 app.post("/api/auto-comps", async (req, res) => {
   try {
     const user = getUserFromCookie(req);
-    if (!user) {
-      return res.status(401).json({
-        error: "Please sign in to auto-fill comps.",
-      });
-    }
+    if (!user) return res.status(401).json({ error: "Not logged in" });
 
-    const { product, condition } = req.body || {};
+    const { product, condition } = req.body;
 
-    if (!product) {
-      return res.status(400).json({ error: "Product is required" });
-    }
-
-    const searchQuery = buildAutoCompSearchQuery(product, condition);
+    const searchQuery = `${product} ${condition || ""}`.trim();
 
     const items = await searchEbayListings({
       query: searchQuery,
       limit: 30,
-      condition: "USED", // ✅ FIXED
+      condition: "USED",
     });
 
-    return res.json({
+    res.json({
       ok: true,
-      searchQuery,
       items,
     });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
 // -----------------------------
-// SEARCH EBAY (FIXED PARAM MAPPING)
+// SEARCH EBAY (FIXED PARAMS)
 // -----------------------------
 app.post("/api/search-ebay", async (req, res) => {
   try {
     const user = getUserFromCookie(req);
-
-    if (!user) {
-      return res.status(401).json({
-        error: "Please sign in to search eBay.",
-      });
-    }
+    if (!user) return res.status(401).json({ error: "Not logged in" });
 
     const {
       query,
@@ -211,31 +248,31 @@ app.post("/api/search-ebay", async (req, res) => {
       filterPriceMax,
       condition,
       freeShippingOnly,
-    } = req.body || {};
+    } = req.body;
 
     const items = await searchEbayListings({
       query,
       limit,
-      maxPrice: filterPriceMax, // ✅ FIXED
-      condition: condition || "USED", // ✅ FIXED
+      maxPrice: filterPriceMax,
+      condition: condition || "USED",
       freeShippingOnly,
     });
 
-    return res.json({ items });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
+    res.json({ items });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
 // -----------------------------
-// FRONTEND ROUTE
+// FRONTEND
 // -----------------------------
 app.get("*", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // -----------------------------
-// START SERVER
+// START
 // -----------------------------
 app.listen(port, () => {
   console.log(`FlipAI running on ${appUrl}`);
