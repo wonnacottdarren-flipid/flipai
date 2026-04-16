@@ -300,6 +300,230 @@ function getUserFromCookie(req) {
   }
 }
 
+function normalizeText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractStorageTokens(text) {
+  const matches = normalizeText(text).match(/\b(16|32|64|128|256|512|1024)\s?gb\b/g);
+  return matches ? matches.map((m) => m.replace(/\s+/g, "")) : [];
+}
+
+function extractEssentialTokens(product) {
+  const cleaned = normalizeText(product);
+  const words = cleaned.split(" ").filter(Boolean);
+
+  const stopWords = new Set([
+    "the",
+    "and",
+    "for",
+    "with",
+    "used",
+    "new",
+    "good",
+    "very",
+    "excellent",
+    "sale",
+    "phone",
+    "mobile",
+    "smartphone",
+    "black",
+    "white",
+    "blue",
+    "red",
+    "green",
+    "pink",
+    "purple",
+    "grey",
+    "gray",
+    "silver",
+    "gold",
+    "boxed",
+    "unboxed",
+  ]);
+
+  const tokens = words.filter((word) => word.length >= 2 && !stopWords.has(word));
+
+  return [...new Set(tokens)].slice(0, 8);
+}
+
+function buildAutoCompSearchQuery(product, condition) {
+  const productText = String(product || "").trim();
+  const conditionText = String(condition || "").trim().toLowerCase();
+  const essentialTokens = extractEssentialTokens(productText);
+  const storageTokens = extractStorageTokens(productText);
+
+  let query = essentialTokens.join(" ");
+
+  if (!query) {
+    query = productText;
+  }
+
+  if (storageTokens.length) {
+    const storage = storageTokens[0];
+    if (!query.toLowerCase().includes(storage.toLowerCase())) {
+      query += ` ${storage}`;
+    }
+  }
+
+  if (conditionText.includes("unlocked") && !query.toLowerCase().includes("unlocked")) {
+    query += " unlocked";
+  }
+
+  if (
+    (conditionText.includes("used") || conditionText.includes("fully working")) &&
+    !query.toLowerCase().includes("used")
+  ) {
+    query += " used";
+  }
+
+  return query.trim();
+}
+
+function isBadCompTitle(title) {
+  const text = normalizeText(title);
+
+  const banned = [
+    "spares",
+    "parts",
+    "not working",
+    "faulty",
+    "cracked",
+    "broken",
+    "read description",
+    "empty box",
+    "box only",
+    "case only",
+    "cover only",
+    "screen only",
+    "icloud locked",
+    "network locked",
+    "locked to",
+    "for repair",
+    "repair only",
+  ];
+
+  return banned.some((term) => text.includes(term));
+}
+
+function itemMatchesProduct(itemTitle, product, condition) {
+  const title = normalizeText(itemTitle);
+  const productText = normalizeText(product);
+  const conditionText = normalizeText(condition);
+
+  if (!title) return false;
+  if (isBadCompTitle(title)) return false;
+
+  const productTokens = extractEssentialTokens(productText);
+  const storageTokens = extractStorageTokens(productText);
+
+  const matchedCoreTokens = productTokens.filter((token) => title.includes(token));
+  const matchedStorageTokens = storageTokens.filter((token) =>
+    title.includes(token.replace(/\s+/g, ""))
+  );
+
+  const requiresUnlocked =
+    productText.includes("unlocked") || conditionText.includes("unlocked");
+
+  if (requiresUnlocked && !title.includes("unlocked")) {
+    return false;
+  }
+
+  if (storageTokens.length > 0 && matchedStorageTokens.length === 0) {
+    return false;
+  }
+
+  if (productTokens.length >= 3 && matchedCoreTokens.length < 2) {
+    return false;
+  }
+
+  return true;
+}
+
+function removePriceOutliers(prices) {
+  if (prices.length <= 4) return [...prices].sort((a, b) => a - b);
+
+  const sorted = [...prices].sort((a, b) => a - b);
+  const q1Index = Math.floor((sorted.length - 1) * 0.25);
+  const q3Index = Math.floor((sorted.length - 1) * 0.75);
+  const q1 = sorted[q1Index];
+  const q3 = sorted[q3Index];
+  const iqr = q3 - q1;
+  const minAllowed = q1 - iqr * 1.5;
+  const maxAllowed = q3 + iqr * 1.5;
+
+  const filtered = sorted.filter((price) => price >= minAllowed && price <= maxAllowed);
+  return filtered.length >= 3 ? filtered : sorted;
+}
+
+function selectCompPrices(prices) {
+  const cleaned = removePriceOutliers(prices);
+
+  if (!cleaned.length) return [];
+
+  const sorted = [...cleaned].sort((a, b) => a - b);
+
+  if (sorted.length <= 5) {
+    return sorted.map(roundMoney);
+  }
+
+  const start = Math.floor(sorted.length * 0.15);
+  const end = Math.ceil(sorted.length * 0.65);
+  const slice = sorted.slice(start, end);
+
+  return (slice.length ? slice : sorted.slice(0, 6)).map(roundMoney);
+}
+
+function buildAutoCompsFromItems({ items, product, condition }) {
+  const matched = items.filter((item) =>
+    itemMatchesProduct(item?.title || "", product, condition)
+  );
+
+  const priced = matched
+    .map((item) => ({
+      title: String(item?.title || ""),
+      price: roundMoney(Number(item?.price || 0)),
+      shipping: roundMoney(Number(item?.shipping || 0)),
+      total: roundMoney(Number(item?.price || 0) + Number(item?.shipping || 0)),
+      condition: String(item?.condition || ""),
+      url: item?.itemWebUrl || item?.viewItemURL || item?.url || "",
+    }))
+    .filter((item) => item.total > 0);
+
+  const totals = priced.map((item) => item.total);
+  const selectedPrices = selectCompPrices(totals);
+
+  let confidence = 25;
+  if (selectedPrices.length >= 3) confidence = 50;
+  if (selectedPrices.length >= 5) confidence = 68;
+  if (selectedPrices.length >= 7) confidence = 82;
+  if (selectedPrices.length >= 10) confidence = 92;
+
+  let confidenceLabel = "Low";
+  if (confidence >= 80) confidenceLabel = "High";
+  else if (confidence >= 55) confidenceLabel = "Medium";
+
+  return {
+    pricingMode: "Auto comps estimate",
+    searchCount: items.length,
+    matchedCount: matched.length,
+    compCount: selectedPrices.length,
+    prices: selectedPrices,
+    manualSoldPricesText: selectedPrices.join(", "),
+    avgPrice: selectedPrices.length ? getAverage(selectedPrices) : 0,
+    medianPrice: selectedPrices.length ? getMedian(selectedPrices) : 0,
+    minPrice: selectedPrices.length ? roundMoney(Math.min(...selectedPrices)) : 0,
+    maxPrice: selectedPrices.length ? roundMoney(Math.max(...selectedPrices)) : 0,
+    confidence,
+    confidenceLabel,
+    matchedItemsPreview: priced.slice(0, 8),
+  };
+}
+
 app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
@@ -416,6 +640,60 @@ app.post("/api/analyze", async (req, res) => {
     console.error(error);
     return res.status(500).json({
       error: error.message || "Could not generate analysis.",
+    });
+  }
+});
+
+app.post("/api/auto-comps", async (req, res) => {
+  try {
+    const user = getUserFromCookie(req);
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Please sign in to auto-fill comps.",
+      });
+    }
+
+    const { product, condition } = req.body || {};
+
+    if (!product || !String(product).trim()) {
+      return res.status(400).json({
+        error: "Product is required.",
+      });
+    }
+
+    const searchQuery = buildAutoCompSearchQuery(product, condition);
+
+    const items = await searchEbayListings({
+      query: searchQuery,
+      limit: 30,
+      condition: "",
+      freeShippingOnly: false,
+    });
+
+    const autoComps = buildAutoCompsFromItems({
+      items,
+      product,
+      condition,
+    });
+
+    if (!autoComps.compCount) {
+      return res.status(404).json({
+        error: "No strong matching live comps were found.",
+        searchQuery,
+        autoComps,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      searchQuery,
+      autoComps,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: error.message || "Could not auto-fill comps.",
     });
   }
 });
