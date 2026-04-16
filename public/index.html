@@ -450,6 +450,19 @@
       margin-bottom: 16px;
     }
 
+    .filters-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .meta-line {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
     label {
       display: block;
       margin-bottom: 7px;
@@ -766,7 +779,8 @@
       .mini-grid,
       .hero-points,
       .deal-layout,
-      .deal-metrics {
+      .deal-metrics,
+      .filters-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1008,27 +1022,62 @@
             />
           </div>
 
-          <div class="field">
-            <label for="dealMaxPrice">Max price (£)</label>
-            <input
-              id="dealMaxPrice"
-              type="number"
-              step="0.01"
-              placeholder="150"
-              value="150"
-            />
+          <div class="filters-grid">
+            <div class="field">
+              <label for="dealMaxPrice">Max price (£)</label>
+              <input
+                id="dealMaxPrice"
+                type="number"
+                step="0.01"
+                placeholder="150"
+                value="150"
+              />
+            </div>
+
+            <div class="field">
+              <label for="freeShippingOnly">Free shipping only</label>
+              <select id="freeShippingOnly">
+                <option value="false" selected>No</option>
+                <option value="true">Yes</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="minProfit">Minimum profit (£)</label>
+              <input
+                id="minProfit"
+                type="number"
+                step="0.01"
+                placeholder="0"
+                value="10"
+              />
+            </div>
+
+            <div class="field">
+              <label for="minScore">Minimum score</label>
+              <input
+                id="minScore"
+                type="number"
+                step="1"
+                placeholder="0"
+                value="10"
+              />
+            </div>
           </div>
 
           <div class="field">
-            <label for="freeShippingOnly">Free shipping only</label>
-            <select id="freeShippingOnly">
-              <option value="false" selected>No</option>
-              <option value="true">Yes</option>
+            <label for="sortBy">Sort by</label>
+            <select id="sortBy">
+              <option value="best_profit" selected>Best profit</option>
+              <option value="best_score">Best score</option>
+              <option value="lowest_price">Lowest price</option>
+              <option value="highest_resale">Highest resale</option>
             </select>
           </div>
 
           <button id="findDealsBtn">Search eBay</button>
           <div id="dealStatus"></div>
+          <div id="dealMeta" class="meta-line"></div>
         </div>
 
         <div>
@@ -1144,6 +1193,7 @@
     const findDealsBtn = document.getElementById("findDealsBtn");
     const dealStatusEl = document.getElementById("dealStatus");
     const dealResultsEl = document.getElementById("dealResults");
+    const dealMetaEl = document.getElementById("dealMeta");
 
     function getPayload() {
       return {
@@ -1162,7 +1212,10 @@
         condition: document.getElementById("dealCondition").value.trim(),
         filterPriceMax: Number(document.getElementById("dealMaxPrice").value || 0),
         limit: 8,
-        freeShippingOnly: document.getElementById("freeShippingOnly").value === "true"
+        freeShippingOnly: document.getElementById("freeShippingOnly").value === "true",
+        minProfit: Number(document.getElementById("minProfit").value || 0),
+        minScore: Number(document.getElementById("minScore").value || 0),
+        sortBy: document.getElementById("sortBy").value
       };
     }
 
@@ -1226,6 +1279,21 @@
       }
 
       dealStatusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+    }
+
+    function setDealMeta(meta) {
+      if (!meta) {
+        dealMetaEl.innerHTML = "";
+        return;
+      }
+
+      dealMetaEl.innerHTML = `
+        Found ${escapeHtml(meta.totalAfterFilters)} result(s) after filters
+        from ${escapeHtml(meta.totalFound)} total.
+        Min profit: ${escapeHtml(meta.minProfit)} |
+        Min score: ${escapeHtml(meta.minScore)} |
+        Sort: ${escapeHtml(meta.sortBy)}
+      `;
     }
 
     function renderLockedState(message, options = {}) {
@@ -1445,7 +1513,7 @@
 
       if (!deals.length) {
         dealResultsEl.innerHTML =
-          '<div class="deal-empty">No matching listings found. Try a broader search or higher max price.</div>';
+          '<div class="deal-empty">No matching listings found. Try lower filters or a broader search.</div>';
         return;
       }
 
@@ -1596,6 +1664,7 @@
     async function findDeals() {
       setDealStatus("Searching eBay...", "loading");
       dealResultsEl.innerHTML = "";
+      dealMetaEl.innerHTML = "";
       findDealsBtn.disabled = true;
 
       try {
@@ -1623,6 +1692,7 @@
         }
 
         setDealStatus("Search complete.", "success");
+        setDealMeta(data.meta || null);
         renderDealResults(data);
       } catch (err) {
         setDealStatus(`Error: ${err.message}`, "error");
@@ -1761,6 +1831,7 @@
         setAuthStatus("Logged out.", "success");
         resultArea.innerHTML = '<div class="placeholder">Run an analysis and your profit estimate, verdict, risk, and resale guidance will appear here.</div>';
         dealResultsEl.innerHTML = 'Search eBay listings and matching results will appear here.';
+        dealMetaEl.innerHTML = '';
         setAnalyzeStatus("", "");
         setDealStatus("", "");
         await loadUser();
