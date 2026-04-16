@@ -66,84 +66,175 @@ function calculateFlipMetrics({ buyPrice, repairCost, condition }) {
   };
 }
 
-function getScannerMultiplier(item) {
+function extractBatteryPercent(text) {
+  const match = String(text || "").match(/(\d{2})\s*%?\s*battery/i);
+  if (!match) return null;
+
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return null;
+
+  return value;
+}
+
+function getBaseResaleFromTitle(item) {
+  const title = String(item?.title || "").toLowerCase();
+
+  if (title.includes("iphone 12 mini")) return 150;
+  if (title.includes("iphone 12 pro max")) return 320;
+  if (title.includes("iphone 12 pro")) return 255;
+
+  if (title.includes("iphone 12")) {
+    if (title.includes("128gb")) return 210;
+    if (title.includes("256gb")) return 240;
+    return 190;
+  }
+
+  return 0;
+}
+
+function getConditionPenalty(item) {
   const title = String(item?.title || "").toLowerCase();
   const condition = String(item?.condition || "").toLowerCase();
-  const buyingOptions = Array.isArray(item?.buyingOptions)
-    ? item.buyingOptions.join(" ").toLowerCase()
-    : "";
 
-  let multiplier = 1.33;
+  let penalty = 0;
 
-  if (condition.includes("new")) multiplier = 1.7;
-  else if (condition.includes("refurb")) multiplier = 1.52;
-  else if (condition.includes("used")) multiplier = 1.4;
+  if (title.includes("cracked")) penalty += 70;
+  if (title.includes("faulty")) penalty += 90;
+  if (title.includes("spares")) penalty += 110;
+  if (title.includes("parts")) penalty += 110;
+  if (title.includes("locked")) penalty += 60;
+  if (title.includes("not opened")) penalty += 10;
+  if (title.includes("read description")) penalty += 8;
+  if (title.includes("battery issue")) penalty += 25;
+  if (
+    title.includes("face id") &&
+    (title.includes("not working") || title.includes("doesn't work"))
+  ) {
+    penalty += 18;
+  }
 
-  if (title.includes("unlocked")) multiplier += 0.08;
-  if (title.includes("excellent")) multiplier += 0.08;
-  if (title.includes("very good")) multiplier += 0.05;
-  if (title.includes("great condition")) multiplier += 0.04;
-  if (title.includes("mint")) multiplier += 0.08;
+  if (condition.includes("refurbished")) penalty -= 8;
+  if (condition.includes("new")) penalty -= 15;
+  if (condition.includes("used")) penalty += 0;
 
-  if (title.includes("91% battery")) multiplier += 0.06;
-  else if (title.includes("90% battery")) multiplier += 0.05;
-  else if (title.includes("89% battery")) multiplier += 0.04;
-  else if (title.includes("88% battery")) multiplier += 0.03;
-  else if (title.includes("87% battery")) multiplier += 0.02;
-  else if (title.includes("84% battery")) multiplier -= 0.03;
-  else if (title.includes("83% battery")) multiplier -= 0.04;
-  else if (title.includes("82% battery")) multiplier -= 0.06;
-  else if (title.includes("81% battery")) multiplier -= 0.08;
-  else if (title.includes("80% battery")) multiplier -= 0.1;
+  return Math.max(0, penalty);
+}
 
-  if (title.includes("cracked")) multiplier -= 0.35;
-  if (title.includes("faulty")) multiplier -= 0.45;
-  if (title.includes("spares")) multiplier -= 0.5;
-  if (title.includes("parts")) multiplier -= 0.5;
-  if (title.includes("locked")) multiplier -= 0.3;
-  if (title.includes("not opened")) multiplier -= 0.06;
-  if (title.includes("read description")) multiplier -= 0.05;
-  if (buyingOptions.includes("auction")) multiplier -= 0.02;
+function getConditionBonus(item) {
+  const title = String(item?.title || "").toLowerCase();
+  const condition = String(item?.condition || "").toLowerCase();
 
-  if (multiplier < 1.02) multiplier = 1.02;
-  return multiplier;
+  let bonus = 0;
+
+  if (title.includes("unlocked")) bonus += 12;
+  if (title.includes("excellent")) bonus += 10;
+  if (title.includes("very good")) bonus += 6;
+  if (title.includes("mint")) bonus += 14;
+  if (title.includes("great condition")) bonus += 6;
+  if (condition.includes("refurbished")) bonus += 10;
+
+  return bonus;
+}
+
+function getBatteryAdjustment(item) {
+  const title = String(item?.title || "");
+  const battery = extractBatteryPercent(title);
+
+  if (battery === null) return 0;
+
+  if (battery >= 95) return 12;
+  if (battery >= 90) return 8;
+  if (battery >= 87) return 4;
+  if (battery >= 85) return 0;
+  if (battery >= 83) return -8;
+  if (battery >= 80) return -15;
+
+  return -25;
+}
+
+function getConfidenceScore(item, baseResale) {
+  const title = String(item?.title || "").toLowerCase();
+  const condition = String(item?.condition || "").toLowerCase();
+
+  let score = 50;
+
+  if (baseResale > 0) score += 15;
+  if (title.includes("unlocked")) score += 8;
+  if (
+    title.includes("128gb") ||
+    title.includes("64gb") ||
+    title.includes("256gb")
+  ) {
+    score += 6;
+  }
+  if (extractBatteryPercent(title) !== null) score += 6;
+
+  if (condition.includes("used")) score += 2;
+  if (condition.includes("refurbished")) score += 4;
+
+  if (title.includes("read description")) score -= 8;
+  if (title.includes("job lot")) score -= 20;
+  if (title.includes("spares")) score -= 25;
+  if (title.includes("parts")) score -= 25;
+  if (title.includes("faulty")) score -= 20;
+  if (title.includes("locked")) score -= 15;
+
+  return Math.max(1, Math.min(99, score));
+}
+
+function getSuggestedRepairCost(item) {
+  const title = String(item?.title || "").toLowerCase();
+
+  if (title.includes("cracked")) return 45;
+  if (title.includes("back glass")) return 35;
+  if (title.includes("battery")) return 25;
+  if (title.includes("faulty")) return 40;
+
+  return 0;
 }
 
 function buildScannerMetrics(item) {
   const itemPrice = Number(item?.price || 0);
   const shipping = Number(item?.shipping || 0);
-  const repairCost = 0;
   const totalBuyPrice = roundMoney(itemPrice + shipping);
-  const multiplier = getScannerMultiplier(item);
 
-  const estimatedResale = roundMoney(totalBuyPrice * multiplier);
+  const baseResale = getBaseResaleFromTitle(item);
+  const bonus = getConditionBonus(item);
+  const penalty = getConditionPenalty(item);
+  const batteryAdjustment = getBatteryAdjustment(item);
+  const repairCost = getSuggestedRepairCost(item);
+
+  let estimatedResale = baseResale + bonus + batteryAdjustment - penalty;
+
+  if (!estimatedResale || estimatedResale <= 0) {
+    estimatedResale = totalBuyPrice * 1.18;
+  }
+
+  estimatedResale = roundMoney(Math.max(0, estimatedResale));
   const ebayFees = roundMoney(estimatedResale * 0.15);
   const estimatedProfit = roundMoney(
     estimatedResale - ebayFees - totalBuyPrice - repairCost
   );
 
   let verdict = "SKIP";
-  if (estimatedProfit >= 30) verdict = "GOOD DEAL";
-  else if (estimatedProfit >= 10) verdict = "MARGINAL";
+  if (estimatedProfit >= 35) verdict = "GOOD DEAL";
+  else if (estimatedProfit >= 15) verdict = "MARGINAL";
 
   let risk = "High";
   if (verdict === "GOOD DEAL") risk = "Low";
   else if (verdict === "MARGINAL") risk = "Medium";
 
-  let score = 0;
-  if (estimatedProfit > 0) {
-    score = Math.min(
-      99,
-      Math.max(
-        1,
-        Math.round(
-          estimatedProfit * 1.8 +
-            (verdict === "GOOD DEAL" ? 18 : verdict === "MARGINAL" ? 8 : 0) +
-            (String(item?.condition || "").toLowerCase().includes("used") ? 3 : 0)
-        )
-      )
-    );
-  }
+  const confidence = getConfidenceScore(item, baseResale);
+
+  let score = Math.round(
+    Math.max(
+      1,
+      Math.min(99, confidence * 0.55 + Math.max(0, estimatedProfit) * 1.1)
+    )
+  );
+
+  if (estimatedProfit < 10) score = Math.min(score, 45);
+  if (estimatedProfit < 0) score = Math.min(score, 20);
 
   return {
     estimatedResale,
@@ -152,10 +243,67 @@ function buildScannerMetrics(item) {
     ebayFees,
     repairCost,
     score,
+    confidence,
     risk,
     verdict,
-    multiplier: roundMoney(multiplier),
+    baseResale: roundMoney(baseResale),
+    batteryAdjustment: roundMoney(batteryAdjustment),
+    bonus: roundMoney(bonus),
+    penalty: roundMoney(penalty),
   };
+}
+
+function applyScannerFiltersAndSort(items, filters = {}) {
+  const minProfit = Number(filters.minProfit || 0);
+  const minScore = Number(filters.minScore || 0);
+  const sortBy = String(filters.sortBy || "best_profit");
+
+  let filtered = items.filter((item) => {
+    const scanner = item?.scanner || {};
+    const estimatedProfit = Number(scanner.estimatedProfit || 0);
+    const score = Number(scanner.score || 0);
+
+    return estimatedProfit >= minProfit && score >= minScore;
+  });
+
+  filtered.sort((a, b) => {
+    const aScanner = a?.scanner || {};
+    const bScanner = b?.scanner || {};
+
+    if (sortBy === "best_score") {
+      return Number(bScanner.score || 0) - Number(aScanner.score || 0);
+    }
+
+    if (sortBy === "lowest_price") {
+      return Number(a?.price || 0) - Number(b?.price || 0);
+    }
+
+    if (sortBy === "highest_resale") {
+      return (
+        Number(bScanner.estimatedResale || 0) -
+        Number(aScanner.estimatedResale || 0)
+      );
+    }
+
+    return (
+      Number(bScanner.estimatedProfit || 0) -
+      Number(aScanner.estimatedProfit || 0)
+    );
+  });
+
+  return filtered.map((item, index) => {
+    const scanner = item?.scanner || {};
+    const bestDeal =
+      index === 0 &&
+      Number(scanner.estimatedProfit || 0) >= 25 &&
+      Number(scanner.score || 0) >= 55 &&
+      String(scanner.verdict || "") === "GOOD DEAL";
+
+    return {
+      ...item,
+      bestDeal,
+    };
+  });
 }
 
 function getUserFromCookie(req) {
@@ -170,72 +318,6 @@ function getUserFromCookie(req) {
   } catch {
     return null;
   }
-}
-
-function sortScannedItems(items, sortBy) {
-  const selectedSort = String(sortBy || "best_profit").toLowerCase();
-
-  const sorted = [...items];
-
-  if (selectedSort === "best_score") {
-    sorted.sort((a, b) => {
-      return (
-        Number(b?.scanner?.score || 0) - Number(a?.scanner?.score || 0) ||
-        Number(b?.scanner?.estimatedProfit || 0) -
-          Number(a?.scanner?.estimatedProfit || 0)
-      );
-    });
-    return sorted;
-  }
-
-  if (selectedSort === "lowest_price") {
-    sorted.sort((a, b) => {
-      return (
-        Number(a?.scanner?.totalBuyPrice || 0) -
-          Number(b?.scanner?.totalBuyPrice || 0) ||
-        Number(b?.scanner?.estimatedProfit || 0) -
-          Number(a?.scanner?.estimatedProfit || 0)
-      );
-    });
-    return sorted;
-  }
-
-  if (selectedSort === "highest_resale") {
-    sorted.sort((a, b) => {
-      return (
-        Number(b?.scanner?.estimatedResale || 0) -
-          Number(a?.scanner?.estimatedResale || 0) ||
-        Number(b?.scanner?.estimatedProfit || 0) -
-          Number(a?.scanner?.estimatedProfit || 0)
-      );
-    });
-    return sorted;
-  }
-
-  sorted.sort((a, b) => {
-    return (
-      Number(b?.scanner?.estimatedProfit || 0) -
-        Number(a?.scanner?.estimatedProfit || 0) ||
-      Number(b?.scanner?.score || 0) - Number(a?.scanner?.score || 0)
-    );
-  });
-
-  return sorted;
-}
-
-function filterScannedItems(items, { minProfit, minScore }) {
-  const safeMinProfit = Number(minProfit || 0);
-  const safeMinScore = Number(minScore || 0);
-
-  return items.filter((item) => {
-    const profit = Number(item?.scanner?.estimatedProfit || 0);
-    const score = Number(item?.scanner?.score || 0);
-
-    if (profit < safeMinProfit) return false;
-    if (score < safeMinScore) return false;
-
-    return true;
-  });
 }
 
 app.post(
@@ -384,26 +466,20 @@ app.post("/api/search-ebay", async (req, res) => {
       scanner: buildScannerMetrics(item),
     }));
 
-    const filteredItems = filterScannedItems(scannedItems, {
+    const filteredAndSortedItems = applyScannerFiltersAndSort(scannedItems, {
       minProfit,
       minScore,
+      sortBy,
     });
 
-    const sortedItems = sortScannedItems(filteredItems, sortBy);
-
-    const finalItems = sortedItems.map((item, index) => ({
-      ...item,
-      bestDeal: index === 0 && Number(item?.scanner?.estimatedProfit || 0) > 0,
-    }));
-
     return res.json({
-      items: finalItems,
+      items: filteredAndSortedItems,
       meta: {
-        totalFound: items.length,
-        totalAfterFilters: finalItems.length,
+        totalFound: scannedItems.length,
+        totalAfterFilters: filteredAndSortedItems.length,
         minProfit: Number(minProfit || 0),
         minScore: Number(minScore || 0),
-        sortBy: String(sortBy || "best_profit").toLowerCase(),
+        sortBy: String(sortBy || "best_profit"),
       },
     });
   } catch (error) {
