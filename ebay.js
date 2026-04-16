@@ -80,56 +80,14 @@ function mapEbayItem(item) {
     title: item?.title || "",
     itemWebUrl: item?.itemWebUrl || "",
     imageUrl:
-      item?.image?.imageUrl ||
-      item?.thumbnailImages?.[0]?.imageUrl ||
-      "",
+      item?.image?.imageUrl || item?.thumbnailImages?.[0]?.imageUrl || "",
     price: priceValue,
     shipping: shippingValue,
     totalBuyPrice: roundMoney(priceValue + shippingValue),
     condition: normaliseCondition(item?.condition),
     location: item?.itemLocation?.country || "GB",
-    buyingOptions: Array.isArray(item?.buyingOptions)
-      ? item.buyingOptions
-      : [],
+    buyingOptions: Array.isArray(item?.buyingOptions) ? item.buyingOptions : [],
   };
-}
-
-function buildBrowseFilters({
-  filterPriceMax,
-  condition,
-  freeShippingOnly,
-}) {
-  const filters = [];
-
-  if (filterPriceMax && Number(filterPriceMax) > 0) {
-    filters.push(`price:[..${Number(filterPriceMax)}]`);
-  }
-
-  if (freeShippingOnly) {
-    filters.push("maxDeliveryCost:0");
-  }
-
-  if (condition && String(condition).trim()) {
-    const clean = String(condition).trim().toUpperCase();
-
-    const allowed = [
-      "NEW",
-      "USED",
-      "CERTIFIED_REFURBISHED",
-      "LIKE_NEW",
-      "VERY_GOOD",
-      "GOOD",
-      "ACCEPTABLE",
-      "NEW_OTHER",
-      "FOR_PARTS_OR_NOT_WORKING",
-    ];
-
-    if (allowed.includes(clean)) {
-      filters.push(`conditions:{${clean}}`);
-    }
-  }
-
-  return filters;
 }
 
 export async function searchEbayListings({
@@ -151,11 +109,32 @@ export async function searchEbayListings({
     limit: String(Math.min(Math.max(Number(limit) || 10, 1), 20)),
   });
 
-  const filters = buildBrowseFilters({
-    filterPriceMax,
-    condition,
-    freeShippingOnly,
-  });
+  const filters = [];
+
+  if (filterPriceMax && Number(filterPriceMax) > 0) {
+    filters.push(`price:[..${Number(filterPriceMax)}]`);
+  }
+
+  if (freeShippingOnly) {
+    filters.push("deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP|SHIP_TO_HOME}");
+  }
+
+  if (condition && String(condition).trim()) {
+    const clean = String(condition).trim().toUpperCase();
+    if (
+      [
+        "NEW",
+        "USED",
+        "CERTIFIED_REFURBISHED",
+        "LIKE_NEW",
+        "VERY_GOOD",
+        "GOOD",
+        "ACCEPTABLE",
+      ].includes(clean)
+    ) {
+      filters.push(`conditions:{${clean}}`);
+    }
+  }
 
   if (filters.length) {
     params.set("filter", filters.join(","));
@@ -172,9 +151,7 @@ export async function searchEbayListings({
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(
-      data.errors?.[0]?.message || "Could not search eBay."
-    );
+    throw new Error(data.errors?.[0]?.message || "Could not search eBay.");
   }
 
   const items = Array.isArray(data.itemSummaries) ? data.itemSummaries : [];
@@ -182,107 +159,110 @@ export async function searchEbayListings({
 }
 
 function cleanSoldKeyword(title) {
-  let keyword = String(title || "").toLowerCase();
+  if (!title) return "";
+
+  let keyword = String(title).toLowerCase();
 
   keyword = keyword
     .replace(/\[[^\]]*\]/g, " ")
     .replace(/\([^)]*\)/g, " ")
-    .replace(/\b(read description|see description|please read|free post|free postage|spares|repair|faulty|broken|parts only|for parts|not working)\b/g, " ")
-    .replace(/\b(a\d{4})\b/g, " ")
-    .replace(/\b(ee|o2|vodafone|three|tesco|sky|id|giffgaff)\b/g, " ")
+    .replace(
+      /read description|see description|please read|free post|free postage/gi,
+      " "
+    )
+    .replace(/spares|repair|faulty|broken|parts only|not working/gi, " ")
+    .replace(/\b[a-z]\d{3,}\b/gi, " ")
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
-  const tokens = keyword.split(" ").filter(Boolean);
+  const words = keyword
+    .split(" ")
+    .filter(Boolean)
+    .filter((word) => word.length > 1);
 
-  const keepers = [];
-  const preferred = [
-    "apple",
-    "iphone",
-    "ipad",
-    "macbook",
-    "samsung",
-    "galaxy",
-    "google",
-    "pixel",
-    "pro",
-    "mini",
-    "plus",
-    "max",
-    "ultra",
-    "unlocked",
-    "64gb",
-    "128gb",
-    "256gb",
-    "512gb",
-    "1tb",
-  ];
+  return words.slice(0, 6).join(" ");
+}
 
-  for (const token of tokens) {
-    if (
-      /^\d+gb$/.test(token) ||
-      preferred.includes(token) ||
-      /^iphone$/.test(token) ||
-      /^ipad$/.test(token) ||
-      /^pixel$/.test(token) ||
-      /^galaxy$/.test(token) ||
-      /^\d+$/.test(token)
-    ) {
-      keepers.push(token);
-    } else if (
-      token.length > 1 &&
-      keepers.length < 6 &&
-      !["the", "and", "with", "for"].includes(token)
-    ) {
-      keepers.push(token);
-    }
+function pickFindingKeywords({ title, query }) {
+  const fromTitle = cleanSoldKeyword(title);
+  if (fromTitle) return fromTitle;
 
-    if (keepers.length >= 6) break;
+  const fromQuery = cleanSoldKeyword(query);
+  if (fromQuery) return fromQuery;
+
+  return "";
+}
+
+function getFindingAppId() {
+  return (
+    process.env.EBAY_APP_ID ||
+    process.env.EBAY_CLIENT_ID ||
+    process.env.EBAY_APPID ||
+    ""
+  );
+}
+
+function parseFindingPrice(value) {
+  return roundMoney(Number(value || 0));
+}
+
+function extractFindingItems(json) {
+  const response =
+    json?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
+
+  if (!Array.isArray(response)) {
+    return [];
   }
 
-  return keepers.join(" ").trim();
+  return response.map((item) => {
+    const price = parseFindingPrice(
+      item?.sellingStatus?.[0]?.currentPrice?.[0]?.__value__
+    );
+
+    const shipping = parseFindingPrice(
+      item?.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__
+    );
+
+    const title = String(item?.title?.[0] || "").trim();
+    const itemId = String(item?.itemId?.[0] || "").trim();
+    const viewItemURL = String(item?.viewItemURL?.[0] || "").trim();
+
+    return {
+      itemId,
+      title,
+      viewItemURL,
+      price,
+      shipping,
+      total: roundMoney(price + shipping),
+    };
+  });
+}
+
+function average(values) {
+  if (!values.length) return 0;
+  return roundMoney(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
 function median(values) {
   if (!values.length) return 0;
-  const copy = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(copy.length / 2);
 
-  if (copy.length % 2 === 0) {
-    return (copy[middle - 1] + copy[middle]) / 2;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 0) {
+    return roundMoney((sorted[mid - 1] + sorted[mid]) / 2);
   }
 
-  return copy[middle];
+  return roundMoney(sorted[mid]);
 }
 
-function buildSoldComparablesUrl(appId, keyword) {
-  const params = new URLSearchParams({
-    "OPERATION-NAME": "findCompletedItems",
-    "SERVICE-VERSION": "1.13.0",
-    "SECURITY-APPNAME": appId,
-    "RESPONSE-DATA-FORMAT": "JSON",
-    "REST-PAYLOAD": "",
-    keywords: keyword,
-    "itemFilter(0).name": "SoldItemsOnly",
-    "itemFilter(0).value": "true",
-    "paginationInput.entriesPerPage": "20",
-  });
+function buildSoldCompsStats(items, debug = {}) {
+  const totals = items
+    .map((item) => Number(item.total || 0))
+    .filter((value) => Number.isFinite(value) && value > 0);
 
-  return `${EBAY_FINDING_URL}?${params.toString()}`;
-}
-
-export async function getSoldComparables(title) {
-  const appId = process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID;
-
-  const debug = {
-    hasAppId: Boolean(process.env.EBAY_APP_ID),
-    hasClientId: Boolean(process.env.EBAY_CLIENT_ID),
-    appIdUsed: appId || null,
-    originalTitle: title || "",
-  };
-
-  if (!appId) {
+  if (!totals.length) {
     return {
       connected: false,
       pricingMode: "Estimated fallback model",
@@ -295,19 +275,89 @@ export async function getSoldComparables(title) {
       maxSoldPrice: 0,
       confidence: 0,
       confidenceLabel: "Low",
-      keywordUsed: "",
+      keywordUsed: debug.keywordUsed || "",
+      debug,
+    };
+  }
+
+  const avgSoldPrice = average(totals);
+  const medianSoldPrice = median(totals);
+  const minSoldPrice = roundMoney(Math.min(...totals));
+  const maxSoldPrice = roundMoney(Math.max(...totals));
+
+  let confidence = 35;
+  confidence += Math.min(40, totals.length * 6);
+
+  if (totals.length >= 3) confidence += 10;
+  if (totals.length >= 5) confidence += 10;
+
+  confidence = Math.min(95, confidence);
+
+  let confidenceLabel = "Low";
+  if (confidence >= 70) confidenceLabel = "High";
+  else if (confidence >= 45) confidenceLabel = "Medium";
+
+  return {
+    connected: true,
+    pricingMode: "Sold market data",
+    compCount: totals.length,
+    soldCount: totals.length,
+    samplePrices: totals.slice(0, 8),
+    avgSoldPrice,
+    medianSoldPrice,
+    minSoldPrice,
+    maxSoldPrice,
+    confidence,
+    confidenceLabel,
+    keywordUsed: debug.keywordUsed || "",
+    debug,
+  };
+}
+
+export async function getSoldComparables({
+  title,
+  query,
+  limit = 10,
+  debug = false,
+}) {
+  const appId = getFindingAppId();
+  const hasAppId = Boolean(appId);
+  const hasClientId = Boolean(process.env.EBAY_CLIENT_ID);
+
+  const keywordUsed = pickFindingKeywords({ title, query });
+
+  const baseDebug = {
+    hasAppId,
+    hasClientId,
+    appIdUsed: appId || "",
+    originalTitle: { title, query },
+    keywordUsed,
+  };
+
+  if (!hasAppId) {
+    return {
+      connected: false,
+      pricingMode: "Estimated fallback model",
+      compCount: 0,
+      soldCount: 0,
+      samplePrices: [],
+      avgSoldPrice: 0,
+      medianSoldPrice: 0,
+      minSoldPrice: 0,
+      maxSoldPrice: 0,
+      confidence: 0,
+      confidenceLabel: "Low",
+      keywordUsed,
       debug: {
-        ...debug,
+        ...baseDebug,
         stage: "missing_app_id",
-        errorMessage: "No eBay App ID found.",
+        errorMessage:
+          "EBAY_APP_ID or EBAY_CLIENT_ID is missing. Finding API cannot run.",
       },
     };
   }
 
-  const keyword = cleanSoldKeyword(title);
-  debug.keywordUsed = keyword;
-
-  if (!keyword) {
+  if (!keywordUsed) {
     return {
       connected: false,
       pricingMode: "Estimated fallback model",
@@ -322,29 +372,71 @@ export async function getSoldComparables(title) {
       confidenceLabel: "Low",
       keywordUsed: "",
       debug: {
-        ...debug,
+        ...baseDebug,
         stage: "empty_keyword",
         errorMessage: "Could not build a sold-comps search keyword.",
       },
     };
   }
 
-  const url = buildSoldComparablesUrl(appId, keyword);
-  debug.endpoint = EBAY_FINDING_URL;
-  debug.apiUrl = url;
+  const params = new URLSearchParams({
+    "OPERATION-NAME": "findCompletedItems",
+    "SERVICE-VERSION": "1.13.0",
+    "SECURITY-APPNAME": appId,
+    "RESPONSE-DATA-FORMAT": "JSON",
+    "REST-PAYLOAD": "true",
+    keywords: keywordUsed,
+    "paginationInput.entriesPerPage": String(
+      Math.min(Math.max(Number(limit) || 10, 1), 25)
+    ),
+    "itemFilter(0).name": "SoldItemsOnly",
+    "itemFilter(0).value": "true",
+    "itemFilter(1).name": "LocatedIn",
+    "itemFilter(1).value": "GB",
+    "itemFilter(2).name": "Currency",
+    "itemFilter(2).value": "GBP",
+    sortOrder: "EndTimeSoonest",
+  });
+
+  const url = `${EBAY_FINDING_URL}?${params.toString()}`;
 
   try {
     const res = await fetch(url, {
-      method: "GET",
       headers: {
         Accept: "application/json",
+        "X-EBAY-SOA-GLOBAL-ID": "EBAY-GB",
       },
     });
 
-    const rawText = await res.text();
+    const text = await res.text();
 
-    debug.httpStatus = res.status;
-    debug.rawSnippet = rawText.slice(0, 500);
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      return {
+        connected: false,
+        pricingMode: "Estimated fallback model",
+        compCount: 0,
+        soldCount: 0,
+        samplePrices: [],
+        avgSoldPrice: 0,
+        medianSoldPrice: 0,
+        minSoldPrice: 0,
+        maxSoldPrice: 0,
+        confidence: 0,
+        confidenceLabel: "Low",
+        keywordUsed,
+        debug: {
+          ...baseDebug,
+          endpoint: url,
+          stage: "parse_failed",
+          httpStatus: res.status,
+          errorMessage: "Finding API response was not valid JSON.",
+          rawSnippet: text.slice(0, 500),
+        },
+      };
+    }
 
     if (!res.ok) {
       return {
@@ -359,21 +451,22 @@ export async function getSoldComparables(title) {
         maxSoldPrice: 0,
         confidence: 0,
         confidenceLabel: "Low",
-        keywordUsed: keyword,
+        keywordUsed,
         debug: {
-          ...debug,
-          stage: "http_or_parse_failed",
-          ack: "",
+          ...baseDebug,
+          endpoint: url,
+          stage: "http_error",
+          httpStatus: res.status,
           errorMessage: `HTTP ${res.status}`,
+          rawSnippet: text.slice(0, 500),
         },
       };
     }
 
-    let data;
+    const ack = json?.findCompletedItemsResponse?.[0]?.ack?.[0] || "";
+    const items = extractFindingItems(json);
 
-    try {
-      data = JSON.parse(rawText);
-    } catch (error) {
+    if (String(ack).toLowerCase() !== "success" && !items.length) {
       return {
         connected: false,
         pricingMode: "Estimated fallback model",
@@ -386,82 +479,25 @@ export async function getSoldComparables(title) {
         maxSoldPrice: 0,
         confidence: 0,
         confidenceLabel: "Low",
-        keywordUsed: keyword,
+        keywordUsed,
         debug: {
-          ...debug,
-          stage: "json_parse_failed",
-          ack: "",
-          errorMessage: error.message,
+          ...baseDebug,
+          endpoint: url,
+          stage: "ack_not_success",
+          ack,
+          rawSnippet: text.slice(0, 500),
         },
       };
     }
 
-    const response = data?.findCompletedItemsResponse?.[0] || {};
-    const ack = response?.ack?.[0] || "";
-    debug.ack = ack;
-
-    const items = response?.searchResult?.[0]?.item || [];
-
-    const soldPrices = items
-      .map((item) =>
-        Number(item?.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || 0)
-      )
-      .filter((value) => Number.isFinite(value) && value > 0)
-      .map((value) => roundMoney(value));
-
-    if (!soldPrices.length) {
-      return {
-        connected: false,
-        pricingMode: "Estimated fallback model",
-        compCount: 0,
-        soldCount: 0,
-        samplePrices: [],
-        avgSoldPrice: 0,
-        medianSoldPrice: 0,
-        minSoldPrice: 0,
-        maxSoldPrice: 0,
-        confidence: 15,
-        confidenceLabel: "Low",
-        keywordUsed: keyword,
-        debug: {
-          ...debug,
-          stage: "no_results",
-          errorMessage: "No sold comparables found.",
-        },
-      };
-    }
-
-    soldPrices.sort((a, b) => a - b);
-
-    const avgSoldPrice = roundMoney(
-      soldPrices.reduce((sum, value) => sum + value, 0) / soldPrices.length
-    );
-    const medianSoldPrice = roundMoney(median(soldPrices));
-    const minSoldPrice = roundMoney(soldPrices[0]);
-    const maxSoldPrice = roundMoney(soldPrices[soldPrices.length - 1]);
-
-    const confidence = Math.min(95, 25 + soldPrices.length * 8);
-    const confidenceLabel =
-      confidence >= 75 ? "High" : confidence >= 45 ? "Medium" : "Low";
-
-    return {
-      connected: true,
-      pricingMode: "Sold market data",
-      compCount: soldPrices.length,
-      soldCount: soldPrices.length,
-      samplePrices: soldPrices.slice(0, 5),
-      avgSoldPrice,
-      medianSoldPrice,
-      minSoldPrice,
-      maxSoldPrice,
-      confidence,
-      confidenceLabel,
-      keywordUsed: keyword,
-      debug: {
-        ...debug,
-        stage: "success",
-      },
-    };
+    return buildSoldCompsStats(items, {
+      ...baseDebug,
+      endpoint: url,
+      stage: "success",
+      ack,
+      sampleTitles: items.slice(0, 5).map((item) => item.title),
+      debugEnabled: Boolean(debug),
+    });
   } catch (error) {
     return {
       connected: false,
@@ -475,11 +511,11 @@ export async function getSoldComparables(title) {
       maxSoldPrice: 0,
       confidence: 0,
       confidenceLabel: "Low",
-      keywordUsed: keyword,
+      keywordUsed,
       debug: {
-        ...debug,
-        stage: "exception",
-        errorMessage: error.message,
+        ...baseDebug,
+        stage: "fetch_failed",
+        errorMessage: error.message || "Unknown fetch error",
       },
     };
   }
