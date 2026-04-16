@@ -533,6 +533,12 @@
       align-items: start;
     }
 
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
     .status {
       margin-top: 14px;
       padding: 12px 14px;
@@ -766,7 +772,8 @@
       .mini-grid,
       .hero-points,
       .deal-layout,
-      .deal-metrics {
+      .deal-metrics,
+      .button-row {
         grid-template-columns: 1fr;
       }
 
@@ -810,7 +817,7 @@
         <h1>Analyse flips before you buy.</h1>
         <p>
           Estimate resale value, fees, profit, and time to sell before you spend money.
-          FlipAI now lets you search eBay listings and use manual sold comps for more accurate decisions.
+          FlipAI now lets you search eBay listings and auto-fill comps from similar live listings.
         </p>
 
         <div class="hero-cta-row">
@@ -821,7 +828,7 @@
         <div class="hero-points">
           <div class="hero-point">See projected profit and total cost instantly before committing to a deal.</div>
           <div class="hero-point">Search eBay listings quickly and shortlist promising items.</div>
-          <div class="hero-point">Paste real sold prices to improve pricing accuracy.</div>
+          <div class="hero-point">Auto-fill comps from similar live listings to speed up pricing.</div>
           <div class="hero-point">Designed for fast decision-making when browsing marketplaces on the go.</div>
         </div>
       </div>
@@ -1084,14 +1091,22 @@
         </div>
 
         <div class="field">
-          <label for="manualSoldPrices">Manual sold prices (optional)</label>
+          <label for="manualSoldPrices">Comp prices</label>
           <textarea
             id="manualSoldPrices"
-            placeholder="e.g. 165, 172, 180, 176"
+            placeholder="Auto-filled comps will appear here, or enter your own prices"
           ></textarea>
         </div>
 
-        <div class="field">
+        <div class="button-row">
+          <button id="autoCompsBtn" class="secondary-btn" type="button">Auto-fill comps</button>
+          <button id="analyzeBtn" type="button">Analyze Flip</button>
+        </div>
+
+        <div id="autoCompsStatus"></div>
+        <div id="status"></div>
+
+        <div class="field" style="margin-top: 16px;">
           <label for="extras">Extras</label>
           <input
             id="extras"
@@ -1109,9 +1124,6 @@
             <option>Low risk</option>
           </select>
         </div>
-
-        <button id="analyzeBtn">Analyze Flip</button>
-        <div id="status"></div>
       </div>
 
       <div class="card">
@@ -1129,7 +1141,9 @@
 
   <script>
     const analyzeBtn = document.getElementById("analyzeBtn");
+    const autoCompsBtn = document.getElementById("autoCompsBtn");
     const statusEl = document.getElementById("status");
+    const autoCompsStatusEl = document.getElementById("autoCompsStatus");
     const resultArea = document.getElementById("resultArea");
 
     const authArea = document.getElementById("authArea");
@@ -1162,6 +1176,13 @@
         manualSoldPrices: document.getElementById("manualSoldPrices").value.trim(),
         extras: document.getElementById("extras").value.trim(),
         goal: document.getElementById("goal").value
+      };
+    }
+
+    function getAutoCompsPayload() {
+      return {
+        product: document.getElementById("product").value.trim(),
+        condition: document.getElementById("condition").value.trim()
       };
     }
 
@@ -1234,6 +1255,15 @@
       }
 
       statusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+    }
+
+    function setAutoCompsStatus(message, type) {
+      if (!message) {
+        autoCompsStatusEl.innerHTML = "";
+        return;
+      }
+
+      autoCompsStatusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
     }
 
     function setDealStatus(message, type) {
@@ -1464,8 +1494,9 @@
         block: "start"
       });
 
+      setAutoCompsStatus("", "");
       setAnalyzeStatus(
-        "Deal loaded into analyzer. Manual sold prices were prefilled from the scanner estimate — replace them with real sold comps for better accuracy.",
+        "Deal loaded into analyzer. Click Auto-fill comps for better market-based pricing, or analyze immediately with the prefilled estimate.",
         "success"
       );
     }
@@ -1556,6 +1587,57 @@
           `;
         })
         .join("");
+    }
+
+    async function autoFillComps() {
+      const payload = getAutoCompsPayload();
+
+      if (!payload.product) {
+        setAutoCompsStatus("Enter a product first, then click Auto-fill comps.", "error");
+        return;
+      }
+
+      autoCompsBtn.disabled = true;
+      setAutoCompsStatus("Finding similar live comps...", "loading");
+
+      try {
+        const res = await fetch("/api/auto-comps", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (res.status === 401) {
+          setAutoCompsStatus("Please sign in to auto-fill comps.", "error");
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(data.error || "Could not auto-fill comps.");
+        }
+
+        const autoComps = data.autoComps || {};
+        const manualSoldPricesText = autoComps.manualSoldPricesText || "";
+
+        document.getElementById("manualSoldPrices").value = manualSoldPricesText;
+
+        setAutoCompsStatus(
+          `Auto comps filled. Query used: ${data.searchQuery || "N/A"}. ` +
+          `Mode: ${autoComps.pricingMode || "Auto comps estimate"}. ` +
+          `Confidence: ${autoComps.confidenceLabel || "Low"} (${Number(autoComps.confidence || 0)}). ` +
+          `Comps: ${Number(autoComps.compCount || 0)}.`,
+          "success"
+        );
+      } catch (err) {
+        setAutoCompsStatus(`Error: ${err.message}`, "error");
+      } finally {
+        autoCompsBtn.disabled = false;
+      }
     }
 
     async function runAnalysis() {
@@ -1795,7 +1877,9 @@
         setAuthStatus("Logged out.", "success");
         resultArea.innerHTML = '<div class="placeholder">Run an analysis and your profit estimate, verdict, risk, and resale guidance will appear here.</div>';
         dealResultsEl.innerHTML = 'Search eBay listings and matching results will appear here.';
+        document.getElementById("manualSoldPrices").value = "";
         setAnalyzeStatus("", "");
+        setAutoCompsStatus("", "");
         setDealStatus("", "");
         await loadUser();
       } catch (err) {
@@ -1863,6 +1947,7 @@
     }
 
     analyzeBtn.addEventListener("click", runAnalysis);
+    autoCompsBtn.addEventListener("click", autoFillComps);
     findDealsBtn.addEventListener("click", findDeals);
     loginBtn.addEventListener("click", login);
     signupBtn.addEventListener("click", signup);
