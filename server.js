@@ -82,17 +82,27 @@ function getScannerMultiplier(item) {
   if (title.includes("unlocked")) multiplier += 0.08;
   if (title.includes("excellent")) multiplier += 0.08;
   if (title.includes("very good")) multiplier += 0.05;
+  if (title.includes("great condition")) multiplier += 0.04;
+  if (title.includes("mint")) multiplier += 0.08;
+
   if (title.includes("91% battery")) multiplier += 0.06;
   else if (title.includes("90% battery")) multiplier += 0.05;
   else if (title.includes("89% battery")) multiplier += 0.04;
   else if (title.includes("88% battery")) multiplier += 0.03;
   else if (title.includes("87% battery")) multiplier += 0.02;
+  else if (title.includes("84% battery")) multiplier -= 0.03;
+  else if (title.includes("83% battery")) multiplier -= 0.04;
+  else if (title.includes("82% battery")) multiplier -= 0.06;
+  else if (title.includes("81% battery")) multiplier -= 0.08;
+  else if (title.includes("80% battery")) multiplier -= 0.1;
 
   if (title.includes("cracked")) multiplier -= 0.35;
   if (title.includes("faulty")) multiplier -= 0.45;
   if (title.includes("spares")) multiplier -= 0.5;
   if (title.includes("parts")) multiplier -= 0.5;
   if (title.includes("locked")) multiplier -= 0.3;
+  if (title.includes("not opened")) multiplier -= 0.06;
+  if (title.includes("read description")) multiplier -= 0.05;
   if (buyingOptions.includes("auction")) multiplier -= 0.02;
 
   if (multiplier < 1.02) multiplier = 1.02;
@@ -160,6 +170,72 @@ function getUserFromCookie(req) {
   } catch {
     return null;
   }
+}
+
+function sortScannedItems(items, sortBy) {
+  const selectedSort = String(sortBy || "best_profit").toLowerCase();
+
+  const sorted = [...items];
+
+  if (selectedSort === "best_score") {
+    sorted.sort((a, b) => {
+      return (
+        Number(b?.scanner?.score || 0) - Number(a?.scanner?.score || 0) ||
+        Number(b?.scanner?.estimatedProfit || 0) -
+          Number(a?.scanner?.estimatedProfit || 0)
+      );
+    });
+    return sorted;
+  }
+
+  if (selectedSort === "lowest_price") {
+    sorted.sort((a, b) => {
+      return (
+        Number(a?.scanner?.totalBuyPrice || 0) -
+          Number(b?.scanner?.totalBuyPrice || 0) ||
+        Number(b?.scanner?.estimatedProfit || 0) -
+          Number(a?.scanner?.estimatedProfit || 0)
+      );
+    });
+    return sorted;
+  }
+
+  if (selectedSort === "highest_resale") {
+    sorted.sort((a, b) => {
+      return (
+        Number(b?.scanner?.estimatedResale || 0) -
+          Number(a?.scanner?.estimatedResale || 0) ||
+        Number(b?.scanner?.estimatedProfit || 0) -
+          Number(a?.scanner?.estimatedProfit || 0)
+      );
+    });
+    return sorted;
+  }
+
+  sorted.sort((a, b) => {
+    return (
+      Number(b?.scanner?.estimatedProfit || 0) -
+        Number(a?.scanner?.estimatedProfit || 0) ||
+      Number(b?.scanner?.score || 0) - Number(a?.scanner?.score || 0)
+    );
+  });
+
+  return sorted;
+}
+
+function filterScannedItems(items, { minProfit, minScore }) {
+  const safeMinProfit = Number(minProfit || 0);
+  const safeMinScore = Number(minScore || 0);
+
+  return items.filter((item) => {
+    const profit = Number(item?.scanner?.estimatedProfit || 0);
+    const score = Number(item?.scanner?.score || 0);
+
+    if (profit < safeMinProfit) return false;
+    if (score < safeMinScore) return false;
+
+    return true;
+  });
 }
 
 app.post(
@@ -278,8 +354,16 @@ app.post("/api/search-ebay", async (req, res) => {
       });
     }
 
-    const { query, limit, filterPriceMax, condition, freeShippingOnly } =
-      req.body || {};
+    const {
+      query,
+      limit,
+      filterPriceMax,
+      condition,
+      freeShippingOnly,
+      minProfit,
+      minScore,
+      sortBy,
+    } = req.body || {};
 
     if (!query || !String(query).trim()) {
       return res.status(400).json({
@@ -295,23 +379,33 @@ app.post("/api/search-ebay", async (req, res) => {
       freeShippingOnly,
     });
 
-    const scannedItems = items
-      .map((item) => ({
-        ...item,
-        scanner: buildScannerMetrics(item),
-      }))
-      .sort((a, b) => {
-        return (
-          Number(b?.scanner?.estimatedProfit || 0) -
-          Number(a?.scanner?.estimatedProfit || 0)
-        );
-      })
-      .map((item, index) => ({
-        ...item,
-        bestDeal: index === 0 && Number(item?.scanner?.estimatedProfit || 0) > 0,
-      }));
+    const scannedItems = items.map((item) => ({
+      ...item,
+      scanner: buildScannerMetrics(item),
+    }));
 
-    return res.json({ items: scannedItems });
+    const filteredItems = filterScannedItems(scannedItems, {
+      minProfit,
+      minScore,
+    });
+
+    const sortedItems = sortScannedItems(filteredItems, sortBy);
+
+    const finalItems = sortedItems.map((item, index) => ({
+      ...item,
+      bestDeal: index === 0 && Number(item?.scanner?.estimatedProfit || 0) > 0,
+    }));
+
+    return res.json({
+      items: finalItems,
+      meta: {
+        totalFound: items.length,
+        totalAfterFilters: finalItems.length,
+        minProfit: Number(minProfit || 0),
+        minScore: Number(minScore || 0),
+        sortBy: String(sortBy || "best_profit").toLowerCase(),
+      },
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({
