@@ -32,6 +32,10 @@ const port = process.env.PORT || 3000;
 const appUrl = process.env.APP_URL || `http://localhost:${port}`;
 const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 
+function roundMoney(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
 function calculateFlipMetrics({ buyPrice, repairCost, condition }) {
   const buy = Number(buyPrice || 0);
   const repair = Number(repairCost || 0);
@@ -59,6 +63,88 @@ function calculateFlipMetrics({ buyPrice, repairCost, condition }) {
     ebayFees,
     profit,
     verdict,
+  };
+}
+
+function getScannerMultiplier(item) {
+  const title = String(item?.title || "").toLowerCase();
+  const condition = String(item?.condition || "").toLowerCase();
+  const buyingOptions = Array.isArray(item?.buyingOptions)
+    ? item.buyingOptions.join(" ").toLowerCase()
+    : "";
+
+  let multiplier = 1.33;
+
+  if (condition.includes("new")) multiplier = 1.7;
+  else if (condition.includes("refurb")) multiplier = 1.52;
+  else if (condition.includes("used")) multiplier = 1.4;
+
+  if (title.includes("unlocked")) multiplier += 0.08;
+  if (title.includes("excellent")) multiplier += 0.08;
+  if (title.includes("very good")) multiplier += 0.05;
+  if (title.includes("91% battery")) multiplier += 0.06;
+  else if (title.includes("90% battery")) multiplier += 0.05;
+  else if (title.includes("89% battery")) multiplier += 0.04;
+  else if (title.includes("88% battery")) multiplier += 0.03;
+  else if (title.includes("87% battery")) multiplier += 0.02;
+
+  if (title.includes("cracked")) multiplier -= 0.35;
+  if (title.includes("faulty")) multiplier -= 0.45;
+  if (title.includes("spares")) multiplier -= 0.5;
+  if (title.includes("parts")) multiplier -= 0.5;
+  if (title.includes("locked")) multiplier -= 0.3;
+  if (buyingOptions.includes("auction")) multiplier -= 0.02;
+
+  if (multiplier < 1.02) multiplier = 1.02;
+  return multiplier;
+}
+
+function buildScannerMetrics(item) {
+  const itemPrice = Number(item?.price || 0);
+  const shipping = Number(item?.shipping || 0);
+  const repairCost = 0;
+  const totalBuyPrice = roundMoney(itemPrice + shipping);
+  const multiplier = getScannerMultiplier(item);
+
+  const estimatedResale = roundMoney(totalBuyPrice * multiplier);
+  const ebayFees = roundMoney(estimatedResale * 0.15);
+  const estimatedProfit = roundMoney(
+    estimatedResale - ebayFees - totalBuyPrice - repairCost
+  );
+
+  let verdict = "SKIP";
+  if (estimatedProfit >= 30) verdict = "GOOD DEAL";
+  else if (estimatedProfit >= 10) verdict = "MARGINAL";
+
+  let risk = "High";
+  if (verdict === "GOOD DEAL") risk = "Low";
+  else if (verdict === "MARGINAL") risk = "Medium";
+
+  let score = 0;
+  if (estimatedProfit > 0) {
+    score = Math.min(
+      99,
+      Math.max(
+        1,
+        Math.round(
+          estimatedProfit * 1.8 +
+            (verdict === "GOOD DEAL" ? 18 : verdict === "MARGINAL" ? 8 : 0) +
+            (String(item?.condition || "").toLowerCase().includes("used") ? 3 : 0)
+        )
+      )
+    );
+  }
+
+  return {
+    estimatedResale,
+    estimatedProfit,
+    totalBuyPrice,
+    ebayFees,
+    repairCost,
+    score,
+    risk,
+    verdict,
+    multiplier: roundMoney(multiplier),
   };
 }
 
@@ -209,7 +295,23 @@ app.post("/api/search-ebay", async (req, res) => {
       freeShippingOnly,
     });
 
-    return res.json({ items });
+    const scannedItems = items
+      .map((item) => ({
+        ...item,
+        scanner: buildScannerMetrics(item),
+      }))
+      .sort((a, b) => {
+        return (
+          Number(b?.scanner?.estimatedProfit || 0) -
+          Number(a?.scanner?.estimatedProfit || 0)
+        );
+      })
+      .map((item, index) => ({
+        ...item,
+        bestDeal: index === 0 && Number(item?.scanner?.estimatedProfit || 0) > 0,
+      }));
+
+    return res.json({ items: scannedItems });
   } catch (error) {
     console.error(error);
     return res.status(500).json({
