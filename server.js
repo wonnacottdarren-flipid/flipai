@@ -1,242 +1,163 @@
-import "dotenv/config";
-import express from "express";
-import path from "path";
-import cors from "cors";
-import cookieParser from "cookie-parser";
-import jwt from "jsonwebtoken";
-import { fileURLToPath } from "url";
+import fetch from "node-fetch";
 
-import {
-  enforceUsage,
-  getUserById,
-  incrementUsage,
-  safeUser,
-} from "./db.js";
+/**
+ * FlipAI eBay Browse API (DEBUG + PRODUCTION SAFE)
+ * - OAuth handling
+ * - Full error visibility
+ * - UK marketplace support
+ */
 
-import {
-  loginHandler,
-  logoutHandler,
-  requireAuth,
-  signupHandler,
-} from "./auth.js";
+// -----------------------------
+// ENV CHECK
+// -----------------------------
+const EBAY_CLIENT_ID = process.env.EBAY_CLIENT_ID;
+const EBAY_CLIENT_SECRET = process.env.EBAY_CLIENT_SECRET;
 
-import {
-  createCheckoutSession,
-  createPortalSession,
-  stripeWebhookHandler,
-} from "./stripe.js";
+// -----------------------------
+// TOKEN CACHE
+// -----------------------------
+let cachedToken = null;
+let tokenExpiry = 0;
 
-import { runAnalysis } from "./openai.js";
-import { searchEbayListings } from "./ebay.js";
+// -----------------------------
+// GET OAUTH TOKEN (DEBUG VERSION)
+// -----------------------------
+async function getEbayAccessToken() {
+  const now = Date.now();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+  if (cachedToken && now < tokenExpiry) {
+    return cachedToken;
+  }
 
-const app = express();
-const port = process.env.PORT || 3000;
-const appUrl = process.env.APP_URL || `http://localhost:${port}`;
-const JWT_SECRET = process.env.JWT_SECRET || "change_me";
+  if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
+    console.error("❌ Missing eBay credentials");
+    throw new Error("Missing eBay CLIENT_ID or CLIENT_SECRET");
+  }
 
-function roundMoney(value) {
-  return Math.round(Number(value || 0) * 100) / 100;
+  const auth = Buffer.from(
+    `${EBAY_CLIENT_ID}:${EBAY_CLIENT_SECRET}`
+  ).toString("base64");
+
+  const res = await fetch(
+    "https://api.ebay.com/identity/v1/oauth2/token",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${auth}`,
+      },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        scope: "https://api.ebay.com/oauth/api_scope",
+      }),
+    }
+  );
+
+  const data = await res.json();
+
+  console.log("🔑 TOKEN RESPONSE:", data);
+
+  if (!data.access_token) {
+    console.error("❌ TOKEN FAILED:", data);
+    throw new Error("Failed to get eBay access token");
+  }
+
+  cachedToken = data.access_token;
+  tokenExpiry = now + data.expires_in * 1000 - 60000;
+
+  return cachedToken;
 }
 
 // -----------------------------
-// HELPERS (UNCHANGED)
+// CLEAN QUERY
 // -----------------------------
-function getUserFromCookie(req) {
-  try {
-    const token = req.cookies?.flipai_token;
-    if (!token) return null;
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = getUserById(decoded.userId);
-
-    return user || null;
-  } catch {
-    return null;
-  }
+function cleanQuery(query) {
+  if (!query) return "";
+  return query.replace(/[^a-z0-9\s]/gi, "").trim();
 }
 
 // -----------------------------
-// EBAY AUTO-COMP SEARCH FIX
+// MAIN SEARCH FUNCTION (DEBUG MODE)
 // -----------------------------
-function buildAutoCompSearchQuery(product, condition) {
-  const text = String(product || "").toLowerCase();
+export async function searchEbayListings({
+  query,
+  maxPrice,
+  condition = "USED",
+  limit = 20,
+}) {
+  try {
+    const token = await getEbayAccessToken();
 
-  let query = text;
+    const cleaned = cleanQuery(query);
+    const finalQuery = cleaned.length ? cleaned : query;
 
-  if (condition?.toLowerCase().includes("unlocked")) {
-    query += " unlocked";
+    const url = new URL(
+      "https://api.ebay.com/buy/browse/v1/item_summary/search"
+    );
+
+    url.searchParams.set("q", finalQuery);
+    url.searchParams.set("limit", limit);
+
+    // -----------------------------
+    // FILTERS (SAFE FORMAT)
+    // -----------------------------
+    const filters = [];
+
+    if (maxPrice) {
+      filters.push(`price:[0..${maxPrice}]`);
+    }
+
+    if (condition) {
+      filters.push(`conditions:{${condition.toUpperCase()}}`);
+    }
+
+    if (filters.length) {
+      url.searchParams.set("filter", filters.join(","));
+    }
+
+    console.log("🌍 eBay Request URL:", url.toString());
+
+    // -----------------------------
+    // FETCH
+    // -----------------------------
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_GB",
+      },
+    });
+
+    console.log("📡 eBay STATUS:", res.status);
+
+    const data = await res.json();
+
+    console.log("📦 eBay RAW RESPONSE:");
+    console.log(JSON.stringify(data, null, 2));
+
+    if (!res.ok) {
+      console.error("❌ eBay API ERROR:", data);
+      return [];
+    }
+
+    const items = data.itemSummaries || [];
+
+    if (!items.length) {
+      console.warn("⚠️ No items returned from eBay");
+      return [];
+    }
+
+    return items.map((item) => ({
+      title: item.title || "Unknown",
+      price: item.price?.value ? Number(item.price.value) : 0,
+      currency: item.price?.currency || "GBP",
+      url: item.itemWebUrl || "",
+      condition: item.condition || "Unknown",
+      image: item.image?.imageUrl || "",
+      location: item.itemLocation?.country || "UK",
+    }));
+  } catch (error) {
+    console.error("🔥 eBay MODULE ERROR:", error.message);
+    return [];
   }
-
-  if (condition?.toLowerCase().includes("used")) {
-    query += " used";
-  }
-
-  return query.trim();
 }
-
-// -----------------------------
-// STRIPE WEBHOOK
-// -----------------------------
-app.post(
-  "/api/stripe/webhook",
-  express.raw({ type: "application/json" }),
-  stripeWebhookHandler
-);
-
-// -----------------------------
-// MIDDLEWARE
-// -----------------------------
-app.use(cors({ origin: appUrl, credentials: true }));
-app.use(cookieParser());
-app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "public")));
-
-// -----------------------------
-// AUTH
-// -----------------------------
-app.post("/api/signup", signupHandler);
-app.post("/api/login", loginHandler);
-app.post("/api/logout", logoutHandler);
-
-app.get("/api/me", requireAuth, (req, res) => {
-  res.json({ user: safeUser(req.user) });
-});
-
-// -----------------------------
-// STRIPE
-// -----------------------------
-app.post("/api/create-checkout-session", requireAuth, async (req, res) => {
-  try {
-    const plan = String(req.body?.plan || "").toLowerCase();
-    const url = await createCheckoutSession(req.user, plan);
-    res.json({ url });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post("/api/create-portal-session", requireAuth, async (req, res) => {
-  try {
-    const url = await createPortalSession(req.user);
-    res.json({ url });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// -----------------------------
-// ANALYZE (UNCHANGED)
-// -----------------------------
-app.post("/api/analyze", async (req, res) => {
-  try {
-    const user = getUserFromCookie(req);
-
-    if (!user) {
-      return res.status(401).json({
-        error: "Please sign in to use FlipAI analysis.",
-        locked: true,
-      });
-    }
-
-    const allowedUser = enforceUsage(user);
-
-    const result = await runAnalysis(req.body);
-
-    const updatedUser = incrementUsage(allowedUser.id);
-
-    return res.json({
-      result,
-      user: safeUser(updatedUser),
-    });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-// -----------------------------
-// AUTO COMPS (FIXED EBAY CALL)
-// -----------------------------
-app.post("/api/auto-comps", async (req, res) => {
-  try {
-    const user = getUserFromCookie(req);
-    if (!user) {
-      return res.status(401).json({
-        error: "Please sign in to auto-fill comps.",
-      });
-    }
-
-    const { product, condition } = req.body || {};
-
-    if (!product) {
-      return res.status(400).json({ error: "Product is required" });
-    }
-
-    const searchQuery = buildAutoCompSearchQuery(product, condition);
-
-    const items = await searchEbayListings({
-      query: searchQuery,
-      limit: 30,
-      condition: "USED", // ✅ FIXED
-    });
-
-    return res.json({
-      ok: true,
-      searchQuery,
-      items,
-    });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-// -----------------------------
-// SEARCH EBAY (FIXED PARAM MAPPING)
-// -----------------------------
-app.post("/api/search-ebay", async (req, res) => {
-  try {
-    const user = getUserFromCookie(req);
-
-    if (!user) {
-      return res.status(401).json({
-        error: "Please sign in to search eBay.",
-      });
-    }
-
-    const {
-      query,
-      limit,
-      filterPriceMax,
-      condition,
-      freeShippingOnly,
-    } = req.body || {};
-
-    const items = await searchEbayListings({
-      query,
-      limit,
-      maxPrice: filterPriceMax, // ✅ FIXED
-      condition: condition || "USED", // ✅ FIXED
-      freeShippingOnly,
-    });
-
-    return res.json({ items });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-// -----------------------------
-// FRONTEND ROUTE
-// -----------------------------
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// -----------------------------
-// START SERVER
-// -----------------------------
-app.listen(port, () => {
-  console.log(`FlipAI running on ${appUrl}`);
-});
