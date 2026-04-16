@@ -43,7 +43,15 @@ Rules:
 - Focus on FAST turnover over highest possible price.
 - If details are missing, make sensible assumptions and keep them conservative.
 - The eBay title must be 80 characters or fewer.
-- Return valid JSON only.`;
+- Return valid JSON only.
+
+Very important pricing rules:
+- If forcedEstimatedResale is provided and greater than 0, you MUST anchor pricing to it.
+- If manualSoldComps.connected is true, treat manual sold comps as the strongest pricing signal.
+- If manualSoldComps.compCount is 2 or more, do not invent a resale value far away from the manual sold comp range.
+- quick_sale_price should usually be at or slightly below sale_price.
+- max_value_price can be slightly above sale_price, but should still stay realistic.
+- brief_reasoning should mention when manual sold comps were used if they were provided.`;
 
 const responseSchema = {
   name: "flipai_analysis",
@@ -119,6 +127,10 @@ const responseSchema = {
   },
 };
 
+function roundMoney(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
 function toMoney(value) {
   return Number(value || 0).toFixed(2);
 }
@@ -131,12 +143,117 @@ function safeJsonParse(text) {
   }
 }
 
-function normaliseOutput(parsed) {
+function clampTitle(title) {
+  const text = String(title || "").trim();
+  if (text.length <= 80) return text;
+  return text.slice(0, 80).trim();
+}
+
+function buildEstimatedRange(forcedEstimatedResale, manualSoldComps) {
+  const forced = Number(forcedEstimatedResale || 0);
+
   if (
-    parsed?.ebay_listing?.title &&
-    parsed.ebay_listing.title.length > 80
+    manualSoldComps &&
+    manualSoldComps.connected &&
+    Number(manualSoldComps.minSoldPrice || 0) > 0 &&
+    Number(manualSoldComps.maxSoldPrice || 0) > 0
   ) {
-    parsed.ebay_listing.title = parsed.ebay_listing.title.slice(0, 80).trim();
+    return `£${toMoney(manualSoldComps.minSoldPrice)} - £${toMoney(
+      manualSoldComps.maxSoldPrice
+    )}`;
+  }
+
+  if (forced > 0) {
+    const low = roundMoney(forced * 0.97);
+    const high = roundMoney(forced * 1.03);
+    return `£${toMoney(low)} - £${toMoney(high)}`;
+  }
+
+  return "£0.00 - £0.00";
+}
+
+function buildReasoningPrefix({ manualSoldComps, pricingMode, forcedEstimatedResale }) {
+  const forced = Number(forcedEstimatedResale || 0);
+
+  if (manualSoldComps?.connected && Number(manualSoldComps.compCount || 0) > 0) {
+    return `Manual sold comps were used as the main pricing anchor. Pricing mode: ${
+      pricingMode || "Manual sold comps"
+    }. Median sold price: £${toMoney(manualSoldComps.medianSoldPrice)}. `;
+  }
+
+  if (forced > 0) {
+    return `Pricing was anchored to a forced estimated resale value of £${toMoney(
+      forced
+    )}. `;
+  }
+
+  return "";
+}
+
+function normaliseOutput(parsed, context) {
+  const manualSoldComps = context.manualSoldComps || {};
+  const forcedEstimatedResale = Number(context.forcedEstimatedResale || 0);
+  const buyPrice = Number(context.buyPrice || 0);
+  const repairCost = Number(context.repairCost || 0);
+
+  if (!parsed.flip_analysis) parsed.flip_analysis = {};
+  if (!parsed.ebay_listing) parsed.ebay_listing = {};
+
+  let salePrice = Number(parsed.flip_analysis.sale_price || 0);
+
+  if (forcedEstimatedResale > 0) {
+    salePrice = roundMoney(forcedEstimatedResale);
+  }
+
+  const costs = roundMoney(buyPrice + repairCost);
+  const fees = roundMoney(salePrice * 0.15);
+  const netProfit = roundMoney(salePrice - fees - buyPrice - repairCost);
+
+  const prefix = buildReasoningPrefix({
+    manualSoldComps,
+    pricingMode: context.pricingMode,
+    forcedEstimatedResale,
+  });
+
+  const modelReasoning = String(parsed.flip_analysis.brief_reasoning || "").trim();
+  const combinedReasoning = `${prefix}${modelReasoning}`.trim();
+
+  parsed.flip_analysis.estimated_resale_value_range =
+    buildEstimatedRange(forcedEstimatedResale, manualSoldComps);
+
+  parsed.flip_analysis.brief_reasoning =
+    combinedReasoning || "Conservative UK resale estimate based on the details provided.";
+
+  parsed.flip_analysis.estimated_repair_or_refurbishment_cost = `£${toMoney(repairCost)}`;
+  parsed.flip_analysis.buy_price = roundMoney(buyPrice);
+  parsed.flip_analysis.sale_price = salePrice;
+  parsed.flip_analysis.fees = fees;
+  parsed.flip_analysis.costs = costs;
+  parsed.flip_analysis.net_profit = netProfit;
+
+  parsed.ebay_listing.quick_sale_price =
+    forcedEstimatedResale > 0
+      ? roundMoney(forcedEstimatedResale)
+      : roundMoney(Number(parsed.ebay_listing.quick_sale_price || salePrice || 0));
+
+  parsed.ebay_listing.max_value_price =
+    forcedEstimatedResale > 0
+      ? roundMoney(forcedEstimatedResale * 1.03)
+      : roundMoney(Number(parsed.ebay_listing.max_value_price || salePrice || 0));
+
+  parsed.ebay_listing.title = clampTitle(parsed.ebay_listing.title || context.product || "");
+
+  if (!Array.isArray(parsed.ebay_listing.keywords)) {
+    parsed.ebay_listing.keywords = [];
+  }
+
+  parsed.ebay_listing.keywords = parsed.ebay_listing.keywords
+    .map((k) => String(k || "").trim())
+    .filter(Boolean)
+    .slice(0, 12);
+
+  while (parsed.ebay_listing.keywords.length < 8) {
+    parsed.ebay_listing.keywords.push("uk ebay");
   }
 
   return parsed;
@@ -149,6 +266,10 @@ export async function runAnalysis({
   repairCost,
   extras,
   goal,
+  manualSoldPrices,
+  manualSoldComps,
+  forcedEstimatedResale,
+  pricingMode,
 }) {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OpenAI is not configured yet.");
@@ -165,14 +286,37 @@ export async function runAnalysis({
     throw new Error("Condition is required.");
   }
 
-  const userPrompt = `Analyse this product for UK eBay flipping and generate a listing.
+  const cleanExtras = extras ? String(extras).trim() : "None stated";
+  const cleanGoal = goal ? String(goal).trim() : "Fast sale";
+  const forcedResale = Number(forcedEstimatedResale || 0);
 
-Product: ${cleanProduct}
-Condition: ${cleanCondition}
-Buy price: £${toMoney(buyPrice)}
-Repair cost: £${toMoney(repairCost)}
-Extras: ${extras ? String(extras).trim() : "None stated"}
-Selling goal: ${goal ? String(goal).trim() : "Fast sale"}`;
+  const userPayload = {
+    product: cleanProduct,
+    condition: cleanCondition,
+    buyPrice: roundMoney(buyPrice),
+    repairCost: roundMoney(repairCost),
+    extras: cleanExtras,
+    goal: cleanGoal,
+    pricingMode: pricingMode || "Unknown",
+    forcedEstimatedResale: forcedResale,
+    manualSoldPrices: manualSoldPrices || "",
+    manualSoldComps: manualSoldComps || {
+      connected: false,
+      compCount: 0,
+      avgSoldPrice: 0,
+      medianSoldPrice: 0,
+      minSoldPrice: 0,
+      maxSoldPrice: 0,
+      confidence: 0,
+      confidenceLabel: "Low",
+    },
+    instructions: {
+      useForcedEstimatedResaleAsPrimaryAnchor: forcedResale > 0,
+      mentionManualCompsIfPresent: Boolean(manualSoldComps?.connected),
+      keepPricingConservative: true,
+      market: "UK eBay",
+    },
+  };
 
   const completion = await client.chat.completions.create({
     model,
@@ -183,7 +327,7 @@ Selling goal: ${goal ? String(goal).trim() : "Fast sale"}`;
       },
       {
         role: "user",
-        content: userPrompt,
+        content: JSON.stringify(userPayload),
       },
     ],
     response_format: {
@@ -199,5 +343,13 @@ Selling goal: ${goal ? String(goal).trim() : "Fast sale"}`;
   }
 
   const parsed = safeJsonParse(content);
-  return normaliseOutput(parsed);
+
+  return normaliseOutput(parsed, {
+    product: cleanProduct,
+    buyPrice: roundMoney(buyPrice),
+    repairCost: roundMoney(repairCost),
+    manualSoldComps,
+    forcedEstimatedResale: forcedResale,
+    pricingMode,
+  });
 }
