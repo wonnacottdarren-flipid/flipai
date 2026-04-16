@@ -8,15 +8,15 @@ import { fileURLToPath } from "url";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// =========================
-// PATH SETUP (REQUIRED)
-// =========================
+// =======================
+// PATH FIX (REQUIRED)
+// =======================
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// =========================
+// =======================
 // MIDDLEWARE
-// =========================
+// =======================
 app.use(cors({
   origin: true,
   credentials: true
@@ -25,27 +25,34 @@ app.use(cors({
 app.use(bodyParser.json({ limit: "2mb" }));
 app.use(cookieParser());
 
-// =========================
-// SERVE FRONTEND (CRITICAL FIX)
-// =========================
+// =======================
+// STATIC FRONTEND (CRITICAL FIX)
+// =======================
+// THIS IS WHAT WAS BROKEN BEFORE
 app.use(express.static(path.join(__dirname, "public")));
 
+// FORCE FRONTEND LOAD ON "/"
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// =========================
-// SIMPLE IN-MEMORY USERS
-// =========================
+// HEALTH CHECK (for debugging)
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", message: "FlipAI running" });
+});
+
+// =======================
+// IN-MEMORY USERS (DEMO ONLY)
+// =======================
 const users = new Map();
 
-// =========================
-// HELPERS (PROFIT ENGINE)
-// =========================
+// =======================
+// PROFIT ENGINE
+// =======================
 const FEE_RATE = 0.1325;
 const FIXED_FEE = 0.30;
 
-function parsePrices(text = "") {
+function parseComps(text = "") {
   return text
     .split(",")
     .map(v => parseFloat(v.trim()))
@@ -54,30 +61,27 @@ function parsePrices(text = "") {
 
 function median(arr) {
   if (!arr.length) return 0;
-  const sorted = [...arr].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 function avg(arr) {
-  if (!arr.length) return 0;
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
+  return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 }
 
 function fees(resale) {
   return resale * FEE_RATE + FIXED_FEE;
 }
 
-// =========================
-// CORE ANALYSIS ENGINE
-// =========================
-function analyze(payload, comps = []) {
+// =======================
+// ANALYSIS CORE
+// =======================
+function runAnalysis(payload, comps = []) {
   const buy = Number(payload.buyPrice || 0);
   const repair = Number(payload.repairCost || 0);
 
-  let resale = comps.length ? median(comps) : buy * 1.35;
+  const resale = comps.length ? median(comps) : buy * 1.35;
 
   const ebayFees = fees(resale);
   const totalCost = buy + repair + ebayFees;
@@ -115,21 +119,24 @@ function analyze(payload, comps = []) {
           profit > 50 ? "1–5 days" :
           profit > 15 ? "3–14 days" : "2–6 weeks",
         brief_reasoning:
-          `Resale £${resale.toFixed(2)} | Cost £${totalCost.toFixed(2)} | Profit £${profit.toFixed(2)}`
+          `Buy £${buy}, Resale £${resale.toFixed(2)}, Profit £${profit.toFixed(2)}`
       },
       ebay_listing: {
-        title: `${payload.product || "Item"} - Fast Sale`
+        title: `${payload.product || "Item"} - FlipAI Listing`
       }
     }
   };
 }
 
-// =========================
+// =======================
 // AUTH (SIMPLE DEMO)
-// =========================
+// =======================
 app.post("/api/signup", (req, res) => {
   const { email, password, name } = req.body;
-  if (!email || !password) return res.status(400).json({ error: "Missing fields" });
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
 
   users.set(email, {
     email,
@@ -166,20 +173,15 @@ app.get("/api/me", (req, res) => {
   res.json({ user });
 });
 
-// =========================
-// AUTO COMPS (FAKE BUT WORKING)
-// =========================
+// =======================
+// AUTO COMPS
+// =======================
 app.post("/api/auto-comps", (req, res) => {
   const { product } = req.body;
 
   const base = product.length * 3 + 60;
 
-  const comps = [
-    base - 12,
-    base,
-    base + 10,
-    base + 5
-  ];
+  const comps = [base - 10, base, base + 12, base + 5];
 
   res.json({
     searchQuery: product,
@@ -193,22 +195,23 @@ app.post("/api/auto-comps", (req, res) => {
   });
 });
 
-// =========================
-// ANALYSIS ROUTE (IMPORTANT)
-// =========================
+// =======================
+// ANALYZE
+// =======================
 app.post("/api/analyze", (req, res) => {
   const user = users.get(req.cookies.user);
+
   if (!user) return res.status(401).json({ error: "Not logged in" });
 
   if (user.plan === "free" && user.usageCount >= 5) {
     return res.status(403).json({ error: "Free limit reached", user });
   }
 
-  const comps = parsePrices(req.body.manualSoldPrices || "");
+  const comps = parseComps(req.body.manualSoldPrices || "");
 
-  const output = analyze(req.body, comps);
+  const output = runAnalysis(req.body, comps);
 
-  user.usageCount += 1;
+  user.usageCount++;
   users.set(req.cookies.user, user);
 
   res.json({
@@ -217,16 +220,16 @@ app.post("/api/analyze", (req, res) => {
   });
 });
 
-// =========================
-// eBay SEARCH (MOCK DATA)
-// =========================
+// =======================
+// EBAY SEARCH (MOCK)
+// =======================
 app.post("/api/search-ebay", (req, res) => {
   const { query } = req.body;
 
   const base = query.length * 2 + 60;
 
   const items = Array.from({ length: 6 }).map((_, i) => ({
-    title: `${query} Item ${i + 1}`,
+    title: `${query} - Item ${i + 1}`,
     price: { value: base + i * 10 },
     shipping: { value: i % 2 ? 4.99 : 0 },
     scanner: {
@@ -242,20 +245,9 @@ app.post("/api/search-ebay", (req, res) => {
   res.json({ items });
 });
 
-// =========================
-// CHECKOUT STUB
-// =========================
-app.post("/api/create-checkout-session", (req, res) => {
-  res.json({ url: "https://example.com/checkout" });
-});
-
-app.post("/api/create-portal-session", (req, res) => {
-  res.json({ url: "https://example.com/billing" });
-});
-
-// =========================
+// =======================
 // START SERVER
-// =========================
+// =======================
 app.listen(PORT, () => {
   console.log(`FlipAI running on port ${PORT}`);
 });
