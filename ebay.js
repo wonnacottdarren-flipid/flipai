@@ -53,7 +53,6 @@ function average(numbers) {
 
 function median(numbers) {
   if (!Array.isArray(numbers) || numbers.length === 0) return 0;
-
   const sorted = [...numbers].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
 
@@ -114,6 +113,7 @@ async function getEbayAccessToken() {
     throw new Error(
       data?.error_description ||
         data?.error ||
+        rawText ||
         "Could not get eBay access token."
     );
   }
@@ -159,7 +159,7 @@ function buildSoldKeywordFromText(text) {
   keyword = keyword
     .replace(/[()[\]{}]/g, " ")
     .replace(
-      /\b(sim free|no offers|fast dispatch|delivery|posted|postage)\b/gi,
+      /\b(sim free|no offers|fast dispatch|delivery|posted|postage|read description)\b/gi,
       " "
     )
     .replace(/\s+/g, " ")
@@ -245,7 +245,9 @@ async function fetchBrowseListings({
 
   if (!res.ok || !data) {
     throw new Error(
-      data?.errors?.[0]?.message || "Could not search eBay listings."
+      data?.errors?.[0]?.message ||
+        rawText ||
+        "Could not search eBay listings."
     );
   }
 
@@ -258,12 +260,28 @@ export async function getSoldComparables({
   condition = "",
   entriesPerPage = 12,
 } = {}) {
-  const appId = getOptionalEnv(
-    "EBAY_APP_ID",
-    getOptionalEnv("EBAY_CLIENT_ID", "")
-  );
+  const appId = getOptionalEnv("EBAY_APP_ID", "");
+  const fallbackClientId = getOptionalEnv("EBAY_CLIENT_ID", "");
+  const keyword = buildSoldKeywordFromText(title);
 
-  if (!appId) {
+  const debug = {
+    hasAppId: Boolean(appId),
+    hasClientId: Boolean(fallbackClientId),
+    appIdUsed: appId || fallbackClientId || "",
+    keywordUsed: keyword,
+    conditionInput: condition || "",
+    endpoint: EBAY_FINDING_URL,
+    stage: "init",
+    httpStatus: null,
+    ack: "",
+    errorMessage: "",
+    rawSnippet: "",
+  };
+
+  if (!appId && !fallbackClientId) {
+    debug.stage = "missing_credentials";
+    debug.errorMessage = "Missing EBAY_APP_ID and EBAY_CLIENT_ID";
+
     return {
       connected: false,
       pricingMode: "Estimated fallback model",
@@ -276,13 +294,15 @@ export async function getSoldComparables({
       maxSoldPrice: 0,
       confidence: 0,
       confidenceLabel: "Not connected",
-      keywordUsed: "",
+      keywordUsed: keyword,
+      debug,
     };
   }
 
-  const keyword = buildSoldKeywordFromText(title);
-
   if (!keyword) {
+    debug.stage = "missing_keyword";
+    debug.errorMessage = "No keyword available for sold comps lookup";
+
     return {
       connected: true,
       pricingMode: "Estimated fallback model",
@@ -296,15 +316,17 @@ export async function getSoldComparables({
       confidence: 10,
       confidenceLabel: "Low",
       keywordUsed: "",
+      debug,
     };
   }
 
   const safeEntriesPerPage = clamp(Number(entriesPerPage || 12), 5, 20);
+  const appIdToUse = appId || fallbackClientId;
 
   const params = new URLSearchParams({
     "OPERATION-NAME": "findCompletedItems",
     "SERVICE-VERSION": "1.13.0",
-    "SECURITY-APPNAME": appId,
+    "SECURITY-APPNAME": appIdToUse,
     "RESPONSE-DATA-FORMAT": "JSON",
     "REST-PAYLOAD": "true",
     keywords: keyword,
@@ -324,6 +346,8 @@ export async function getSoldComparables({
   }
 
   try {
+    debug.stage = "requesting";
+
     const res = await fetch(`${EBAY_FINDING_URL}?${params.toString()}`, {
       headers: {
         Accept: "application/json",
@@ -333,9 +357,17 @@ export async function getSoldComparables({
     const rawText = await res.text();
     const data = safeJsonParse(rawText);
 
+    debug.httpStatus = res.status;
+    debug.rawSnippet = String(rawText || "").slice(0, 500);
+
     if (!res.ok || !data) {
+      debug.stage = "http_or_parse_failed";
+      debug.errorMessage = !res.ok
+        ? `HTTP ${res.status}`
+        : "Could not parse JSON response";
+
       return {
-        connected: true,
+        connected: false,
         pricingMode: "Estimated fallback model",
         compCount: 0,
         soldCount: 0,
@@ -347,6 +379,7 @@ export async function getSoldComparables({
         confidence: 15,
         confidenceLabel: "Low",
         keywordUsed: keyword,
+        debug,
       };
     }
 
@@ -354,6 +387,21 @@ export async function getSoldComparables({
       data?.findCompletedItemsResponse?.[0] ||
       data?.findCompletedItemsResponse ||
       {};
+
+    debug.ack =
+      responseRoot?.ack?.[0] ||
+      responseRoot?.ack ||
+      "";
+
+    const errorMessage =
+      responseRoot?.errorMessage?.[0]?.error?.[0]?.message?.[0] ||
+      responseRoot?.errorMessage?.error?.[0]?.message?.[0] ||
+      "";
+
+    if (errorMessage) {
+      debug.stage = "api_error";
+      debug.errorMessage = errorMessage;
+    }
 
     const searchResult =
       responseRoot?.searchResult?.[0] ||
@@ -387,13 +435,8 @@ export async function getSoldComparables({
     else if (compCount >= 3) confidence += 15;
     else if (compCount >= 1) confidence += 8;
 
-    if (conditionFilterValue) {
-      confidence += 8;
-    }
-
-    if (keyword.split(" ").length >= 4) {
-      confidence += 8;
-    }
+    if (conditionFilterValue) confidence += 8;
+    if (keyword.split(" ").length >= 4) confidence += 8;
 
     confidence = clamp(confidence, 0, 99);
 
@@ -401,8 +444,10 @@ export async function getSoldComparables({
     if (confidence >= 75) confidenceLabel = "High";
     else if (confidence >= 45) confidenceLabel = "Medium";
 
+    debug.stage = compCount > 0 ? "success" : "no_comps_found";
+
     return {
-      connected: true,
+      connected: compCount > 0,
       pricingMode: compCount > 0 ? "Sold comps model" : "Estimated fallback model",
       compCount,
       soldCount: compCount,
@@ -414,10 +459,14 @@ export async function getSoldComparables({
       confidence,
       confidenceLabel,
       keywordUsed: keyword,
+      debug,
     };
-  } catch {
+  } catch (error) {
+    debug.stage = "exception";
+    debug.errorMessage = error?.message || "Unknown error";
+
     return {
-      connected: true,
+      connected: false,
       pricingMode: "Estimated fallback model",
       compCount: 0,
       soldCount: 0,
@@ -429,6 +478,7 @@ export async function getSoldComparables({
       confidence: 15,
       confidenceLabel: "Low",
       keywordUsed: keyword,
+      debug,
     };
   }
 }
@@ -465,7 +515,7 @@ export async function searchEbayListings({
         });
 
         return enrichListingWithSoldComp(item, soldComp);
-      } catch {
+      } catch (error) {
         return enrichListingWithSoldComp(item, {
           connected: false,
           pricingMode: "Estimated fallback model",
@@ -479,6 +529,10 @@ export async function searchEbayListings({
           confidence: 0,
           confidenceLabel: "Not connected",
           keywordUsed: "",
+          debug: {
+            stage: "wrapper_exception",
+            errorMessage: error?.message || "Wrapper exception",
+          },
         });
       }
     })
