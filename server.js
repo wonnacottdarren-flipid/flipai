@@ -23,7 +23,7 @@ import {
   stripeWebhookHandler,
 } from "./stripe.js";
 import { runAnalysis } from "./openai.js";
-import { searchEbayListings, getSoldComparables } from "./ebay.js";
+import { searchEbayListings } from "./ebay.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,223 +36,222 @@ function roundMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
-function calculateFlipMetrics({ buyPrice, repairCost, condition }) {
+function parseManualSoldPrices(input) {
+  if (!input) return [];
+
+  if (Array.isArray(input)) {
+    return input
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v) && v > 0);
+  }
+
+  const text = String(input)
+    .replace(/£/g, "")
+    .replace(/\n/g, ",")
+    .replace(/\r/g, ",")
+    .trim();
+
+  if (!text) return [];
+
+  return text
+    .split(",")
+    .map((part) => Number(String(part).trim()))
+    .filter((v) => Number.isFinite(v) && v > 0);
+}
+
+function getMedian(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 0) {
+    return roundMoney((sorted[mid - 1] + sorted[mid]) / 2);
+  }
+
+  return roundMoney(sorted[mid]);
+}
+
+function getAverage(values) {
+  if (!values.length) return 0;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return roundMoney(total / values.length);
+}
+
+function buildManualSoldComps(input) {
+  const prices = parseManualSoldPrices(input);
+
+  if (!prices.length) {
+    return {
+      connected: false,
+      pricingMode: "Estimated fallback model",
+      compCount: 0,
+      soldCount: 0,
+      samplePrices: [],
+      avgSoldPrice: 0,
+      medianSoldPrice: 0,
+      minSoldPrice: 0,
+      maxSoldPrice: 0,
+      confidence: 0,
+      confidenceLabel: "Low",
+      keywordUsed: "",
+      debug: {
+        source: "manual",
+        reason: "No manual sold prices entered",
+      },
+    };
+  }
+
+  const avgSoldPrice = getAverage(prices);
+  const medianSoldPrice = getMedian(prices);
+  const minSoldPrice = roundMoney(Math.min(...prices));
+  const maxSoldPrice = roundMoney(Math.max(...prices));
+
+  let confidence = 35;
+  if (prices.length >= 3) confidence = 55;
+  if (prices.length >= 5) confidence = 72;
+  if (prices.length >= 8) confidence = 86;
+  if (prices.length >= 12) confidence = 94;
+
+  let confidenceLabel = "Low";
+  if (confidence >= 80) confidenceLabel = "High";
+  else if (confidence >= 55) confidenceLabel = "Medium";
+
+  return {
+    connected: true,
+    pricingMode: "Manual sold comps",
+    compCount: prices.length,
+    soldCount: prices.length,
+    samplePrices: prices.slice(0, 12).map(roundMoney),
+    avgSoldPrice,
+    medianSoldPrice,
+    minSoldPrice,
+    maxSoldPrice,
+    confidence,
+    confidenceLabel,
+    keywordUsed: "manual_entry",
+    debug: {
+      source: "manual",
+      prices,
+    },
+  };
+}
+
+function calculateFlipMetrics({
+  buyPrice,
+  repairCost,
+  condition,
+  manualSoldPrices,
+}) {
   const buy = Number(buyPrice || 0);
   const repair = Number(repairCost || 0);
   const text = String(condition || "").toLowerCase();
 
-  let multiplier = 2.0;
+  const soldComps = buildManualSoldComps(manualSoldPrices);
 
-  if (text.includes("excellent")) multiplier = 2.5;
-  else if (text.includes("good")) multiplier = 2.3;
-  else if (text.includes("light")) multiplier = 2.2;
-  else if (text.includes("cracked")) multiplier = 2.0;
+  let estimatedResale = 0;
+  let pricingMode = "Estimated fallback model";
 
-  const estimatedResale = Math.round(buy * multiplier);
-  const totalCost = buy + repair;
-  const ebayFees = Math.round(estimatedResale * 0.15);
-  const profit = estimatedResale - totalCost - ebayFees;
+  if (soldComps.connected && soldComps.medianSoldPrice > 0) {
+    estimatedResale = soldComps.medianSoldPrice;
+    pricingMode = "Manual sold comps";
+  } else {
+    let multiplier = 2.0;
+
+    if (text.includes("excellent")) multiplier = 2.5;
+    else if (text.includes("good")) multiplier = 2.3;
+    else if (text.includes("light")) multiplier = 2.2;
+    else if (text.includes("cracked")) multiplier = 2.0;
+
+    estimatedResale = Math.round(buy * multiplier);
+  }
+
+  const totalCost = roundMoney(buy + repair);
+  const ebayFees = roundMoney(estimatedResale * 0.15);
+  const profit = roundMoney(estimatedResale - totalCost - ebayFees);
 
   let verdict = "AVOID ❌";
   if (profit > 40) verdict = "GOOD DEAL ✅";
   else if (profit > 15) verdict = "OK DEAL ⚠️";
 
   return {
-    estimatedResale,
+    estimatedResale: roundMoney(estimatedResale),
     totalCost,
     ebayFees,
     profit,
     verdict,
+    pricingMode,
+    soldComps,
   };
 }
 
-function extractBatteryPercent(text) {
-  const match = String(text || "").match(/(\d{2})\s*%?\s*battery/i);
-  if (!match) return null;
-
-  const value = Number(match[1]);
-  if (!Number.isFinite(value)) return null;
-
-  return value;
-}
-
-function getBaseResaleFromTitle(item) {
-  const title = String(item?.title || "").toLowerCase();
-
-  if (title.includes("iphone 12 mini")) return 150;
-  if (title.includes("iphone 12 pro max")) return 320;
-  if (title.includes("iphone 12 pro")) return 255;
-
-  if (title.includes("iphone 12")) {
-    if (title.includes("128gb")) return 210;
-    if (title.includes("256gb")) return 240;
-    return 190;
-  }
-
-  return 0;
-}
-
-function getConditionPenalty(item) {
+function getScannerMultiplier(item) {
   const title = String(item?.title || "").toLowerCase();
   const condition = String(item?.condition || "").toLowerCase();
+  const buyingOptions = Array.isArray(item?.buyingOptions)
+    ? item.buyingOptions.join(" ").toLowerCase()
+    : "";
 
-  let penalty = 0;
+  let multiplier = 1.33;
 
-  if (title.includes("cracked")) penalty += 70;
-  if (title.includes("faulty")) penalty += 90;
-  if (title.includes("spares")) penalty += 110;
-  if (title.includes("parts")) penalty += 110;
-  if (title.includes("locked")) penalty += 60;
-  if (title.includes("not opened")) penalty += 10;
-  if (title.includes("read description")) penalty += 8;
-  if (title.includes("battery issue")) penalty += 25;
-  if (
-    title.includes("face id") &&
-    (title.includes("not working") || title.includes("doesn't work"))
-  ) {
-    penalty += 18;
-  }
+  if (condition.includes("new")) multiplier = 1.7;
+  else if (condition.includes("refurb")) multiplier = 1.52;
+  else if (condition.includes("used")) multiplier = 1.4;
 
-  if (condition.includes("refurbished")) penalty -= 8;
-  if (condition.includes("new")) penalty -= 15;
+  if (title.includes("unlocked")) multiplier += 0.08;
+  if (title.includes("excellent")) multiplier += 0.08;
+  if (title.includes("very good")) multiplier += 0.05;
+  if (title.includes("91% battery")) multiplier += 0.06;
+  else if (title.includes("90% battery")) multiplier += 0.05;
+  else if (title.includes("89% battery")) multiplier += 0.04;
+  else if (title.includes("88% battery")) multiplier += 0.03;
+  else if (title.includes("87% battery")) multiplier += 0.02;
 
-  return Math.max(0, penalty);
+  if (title.includes("cracked")) multiplier -= 0.35;
+  if (title.includes("faulty")) multiplier -= 0.45;
+  if (title.includes("spares")) multiplier -= 0.5;
+  if (title.includes("parts")) multiplier -= 0.5;
+  if (title.includes("locked")) multiplier -= 0.3;
+  if (buyingOptions.includes("auction")) multiplier -= 0.02;
+
+  if (multiplier < 1.02) multiplier = 1.02;
+  return multiplier;
 }
 
-function getConditionBonus(item) {
-  const title = String(item?.title || "").toLowerCase();
-  const condition = String(item?.condition || "").toLowerCase();
-
-  let bonus = 0;
-
-  if (title.includes("unlocked")) bonus += 12;
-  if (title.includes("excellent")) bonus += 10;
-  if (title.includes("very good")) bonus += 6;
-  if (title.includes("mint")) bonus += 14;
-  if (title.includes("great condition")) bonus += 6;
-  if (condition.includes("refurbished")) bonus += 10;
-
-  return bonus;
-}
-
-function getBatteryAdjustment(item) {
-  const title = String(item?.title || "");
-  const battery = extractBatteryPercent(title);
-
-  if (battery === null) return 0;
-
-  if (battery >= 95) return 12;
-  if (battery >= 90) return 8;
-  if (battery >= 87) return 4;
-  if (battery >= 85) return 0;
-  if (battery >= 83) return -8;
-  if (battery >= 80) return -15;
-
-  return -25;
-}
-
-function getConfidenceScore(item, baseResale, soldCompsUsed) {
-  const title = String(item?.title || "").toLowerCase();
-  const condition = String(item?.condition || "").toLowerCase();
-
-  let score = 50;
-
-  if (baseResale > 0) score += 15;
-  if (title.includes("unlocked")) score += 8;
-  if (
-    title.includes("128gb") ||
-    title.includes("64gb") ||
-    title.includes("256gb")
-  ) {
-    score += 6;
-  }
-  if (extractBatteryPercent(title) !== null) score += 6;
-  if (condition.includes("used")) score += 2;
-  if (condition.includes("refurbished")) score += 4;
-  if (soldCompsUsed) score += 12;
-
-  if (title.includes("read description")) score -= 8;
-  if (title.includes("job lot")) score -= 20;
-  if (title.includes("spares")) score -= 25;
-  if (title.includes("parts")) score -= 25;
-  if (title.includes("faulty")) score -= 20;
-  if (title.includes("locked")) score -= 15;
-
-  return Math.max(1, Math.min(99, score));
-}
-
-function getSuggestedRepairCost(item) {
-  const title = String(item?.title || "").toLowerCase();
-
-  if (title.includes("cracked")) return 45;
-  if (title.includes("back glass")) return 35;
-  if (title.includes("battery")) return 25;
-  if (title.includes("faulty")) return 40;
-
-  return 0;
-}
-
-function buildReasonText({ soldComps, risk, soldCompsUsed }) {
-  if (soldCompsUsed && soldComps) {
-    return `Based on sold comparables (${soldComps.soldCount} sold items). Confidence: ${soldComps.confidence}. Risk: ${risk}.`;
-  }
-
-  return `Estimated resale based on conservative UK resale assumptions. Risk: ${risk}.`;
-}
-
-function buildScannerMetrics(item, soldComps = null) {
+function buildScannerMetrics(item) {
   const itemPrice = Number(item?.price || 0);
   const shipping = Number(item?.shipping || 0);
+  const repairCost = 0;
   const totalBuyPrice = roundMoney(itemPrice + shipping);
+  const multiplier = getScannerMultiplier(item);
 
-  const baseResale = getBaseResaleFromTitle(item);
-  const bonus = getConditionBonus(item);
-  const penalty = getConditionPenalty(item);
-  const batteryAdjustment = getBatteryAdjustment(item);
-  const repairCost = getSuggestedRepairCost(item);
-
-  const soldCompsUsed =
-    soldComps &&
-    Number(soldComps.soldCount || 0) > 0 &&
-    Number(soldComps.averageSoldPrice || 0) > 0;
-
-  let estimatedResale = 0;
-
-  if (soldCompsUsed) {
-    const soldAverage = Number(soldComps.averageSoldPrice || 0);
-    estimatedResale = soldAverage + bonus + batteryAdjustment - penalty;
-  } else {
-    estimatedResale = baseResale + bonus + batteryAdjustment - penalty;
-    if (!estimatedResale || estimatedResale <= 0) {
-      estimatedResale = totalBuyPrice * 1.18;
-    }
-  }
-
-  estimatedResale = roundMoney(Math.max(0, estimatedResale));
+  const estimatedResale = roundMoney(totalBuyPrice * multiplier);
   const ebayFees = roundMoney(estimatedResale * 0.15);
   const estimatedProfit = roundMoney(
     estimatedResale - ebayFees - totalBuyPrice - repairCost
   );
 
   let verdict = "SKIP";
-  if (estimatedProfit >= 35) verdict = "GOOD DEAL";
-  else if (estimatedProfit >= 15) verdict = "MARGINAL";
+  if (estimatedProfit >= 30) verdict = "GOOD DEAL";
+  else if (estimatedProfit >= 10) verdict = "MARGINAL";
 
   let risk = "High";
   if (verdict === "GOOD DEAL") risk = "Low";
   else if (verdict === "MARGINAL") risk = "Medium";
 
-  const confidence = getConfidenceScore(item, baseResale, soldCompsUsed);
-
-  let score = Math.round(
-    Math.max(
-      1,
-      Math.min(99, confidence * 0.55 + Math.max(0, estimatedProfit) * 1.1)
-    )
-  );
-
-  if (estimatedProfit < 10) score = Math.min(score, 45);
-  if (estimatedProfit < 0) score = Math.min(score, 20);
+  let score = 0;
+  if (estimatedProfit > 0) {
+    score = Math.min(
+      99,
+      Math.max(
+        1,
+        Math.round(
+          estimatedProfit * 1.8 +
+            (verdict === "GOOD DEAL" ? 18 : verdict === "MARGINAL" ? 8 : 0) +
+            (String(item?.condition || "").toLowerCase().includes("used") ? 3 : 0)
+        )
+      )
+    );
+  }
 
   return {
     estimatedResale,
@@ -261,76 +260,10 @@ function buildScannerMetrics(item, soldComps = null) {
     ebayFees,
     repairCost,
     score,
-    confidence,
     risk,
     verdict,
-    baseResale: roundMoney(baseResale),
-    batteryAdjustment: roundMoney(batteryAdjustment),
-    bonus: roundMoney(bonus),
-    penalty: roundMoney(penalty),
-    soldCompsUsed,
-    soldAveragePrice: roundMoney(soldComps?.averageSoldPrice || 0),
-    soldMedianPrice: roundMoney(soldComps?.medianSoldPrice || 0),
-    soldMinPrice: roundMoney(soldComps?.minSoldPrice || 0),
-    soldMaxPrice: roundMoney(soldComps?.maxSoldPrice || 0),
-    soldCount: Number(soldComps?.soldCount || 0),
-    soldSource: soldComps?.source || null,
-    soldConfidence: soldComps?.confidence || null,
-    reason: buildReasonText({ soldComps, risk, soldCompsUsed }),
+    multiplier: roundMoney(multiplier),
   };
-}
-
-function applyScannerFiltersAndSort(items, filters = {}) {
-  const minProfit = Number(filters.minProfit || 0);
-  const minScore = Number(filters.minScore || 0);
-  const sortBy = String(filters.sortBy || "best_profit");
-
-  let filtered = items.filter((item) => {
-    const scanner = item?.scanner || {};
-    const estimatedProfit = Number(scanner.estimatedProfit || 0);
-    const score = Number(scanner.score || 0);
-
-    return estimatedProfit >= minProfit && score >= minScore;
-  });
-
-  filtered.sort((a, b) => {
-    const aScanner = a?.scanner || {};
-    const bScanner = b?.scanner || {};
-
-    if (sortBy === "best_score") {
-      return Number(bScanner.score || 0) - Number(aScanner.score || 0);
-    }
-
-    if (sortBy === "lowest_price") {
-      return Number(a?.price || 0) - Number(b?.price || 0);
-    }
-
-    if (sortBy === "highest_resale") {
-      return (
-        Number(bScanner.estimatedResale || 0) -
-        Number(aScanner.estimatedResale || 0)
-      );
-    }
-
-    return (
-      Number(bScanner.estimatedProfit || 0) -
-      Number(aScanner.estimatedProfit || 0)
-    );
-  });
-
-  return filtered.map((item, index) => {
-    const scanner = item?.scanner || {};
-    const bestDeal =
-      index === 0 &&
-      Number(scanner.estimatedProfit || 0) >= 25 &&
-      Number(scanner.score || 0) >= 55 &&
-      String(scanner.verdict || "") === "GOOD DEAL";
-
-    return {
-      ...item,
-      bestDeal,
-    };
-  });
 }
 
 function getUserFromCookie(req) {
@@ -404,8 +337,15 @@ app.post("/api/analyze", async (req, res) => {
 
     const allowedUser = enforceUsage(user);
 
-    const { product, condition, buyPrice, repairCost, extras, goal } =
-      req.body || {};
+    const {
+      product,
+      condition,
+      buyPrice,
+      repairCost,
+      extras,
+      goal,
+      manualSoldPrices,
+    } = req.body || {};
 
     if (!product || !condition) {
       return res.status(400).json({
@@ -417,6 +357,7 @@ app.post("/api/analyze", async (req, res) => {
       buyPrice,
       repairCost,
       condition,
+      manualSoldPrices,
     });
 
     const aiResult = await runAnalysis({
@@ -434,6 +375,7 @@ app.post("/api/analyze", async (req, res) => {
       result: {
         ...aiResult,
         flipMetrics,
+        manualSoldComps: flipMetrics.soldComps,
         locked: false,
       },
       user: safeUser(updatedUser),
@@ -463,16 +405,8 @@ app.post("/api/search-ebay", async (req, res) => {
       });
     }
 
-    const {
-      query,
-      limit,
-      filterPriceMax,
-      condition,
-      freeShippingOnly,
-      minProfit,
-      minScore,
-      sortBy,
-    } = req.body || {};
+    const { query, limit, filterPriceMax, condition, freeShippingOnly } =
+      req.body || {};
 
     if (!query || !String(query).trim()) {
       return res.status(400).json({
@@ -488,37 +422,23 @@ app.post("/api/search-ebay", async (req, res) => {
       freeShippingOnly,
     });
 
-    const soldComps = await getSoldComparables({ query }).catch((error) => {
-      console.error("Sold comps provider failed:", error.message);
-      return null;
-    });
+    const scannedItems = items
+      .map((item) => ({
+        ...item,
+        scanner: buildScannerMetrics(item),
+      }))
+      .sort((a, b) => {
+        return (
+          Number(b?.scanner?.estimatedProfit || 0) -
+          Number(a?.scanner?.estimatedProfit || 0)
+        );
+      })
+      .map((item, index) => ({
+        ...item,
+        bestDeal: index === 0 && Number(item?.scanner?.estimatedProfit || 0) > 0,
+      }));
 
-    const scannedItems = items.map((item) => ({
-      ...item,
-      scanner: buildScannerMetrics(item, soldComps),
-      reason: buildScannerMetrics(item, soldComps).reason,
-    }));
-
-    const filteredAndSortedItems = applyScannerFiltersAndSort(scannedItems, {
-      minProfit,
-      minScore,
-      sortBy,
-    });
-
-    return res.json({
-      items: filteredAndSortedItems,
-      meta: {
-        totalFound: scannedItems.length,
-        totalAfterFilters: filteredAndSortedItems.length,
-        minProfit: Number(minProfit || 0),
-        minScore: Number(minScore || 0),
-        sortBy: String(sortBy || "best_profit"),
-        soldComparablesAvailable: Boolean(
-          soldComps && Number(soldComps.soldCount || 0) > 0
-        ),
-      },
-      soldComparables: soldComps,
-    });
+    return res.json({ items: scannedItems });
   } catch (error) {
     console.error(error);
     return res.status(500).json({
