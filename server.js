@@ -230,8 +230,8 @@ function calculateFlipMetrics({
   const profit = roundMoney(estimatedResale - totalCost - ebayFees);
 
   let verdict = "AVOID ❌";
-  if (profit >= 25) verdict = "GOOD DEAL ✅";
-  else if (profit >= 8) verdict = "OK DEAL ⚠️";
+  if (profit >= 20) verdict = "GOOD DEAL ✅";
+  else if (profit >= 5) verdict = "OK DEAL ⚠️";
 
   return {
     estimatedResale: roundMoney(estimatedResale),
@@ -887,11 +887,7 @@ app.post("/api/search-ebay", async (req, res) => {
       freeShippingOnly,
     });
 
-    const exactItems = filterItemsForExactSearch(
-      items,
-      query,
-      condition || ""
-    );
+    const exactItems = filterItemsForExactSearch(items, query, condition || "");
 
     const scannedItems = exactItems
       .map((item) => ({
