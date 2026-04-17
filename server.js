@@ -36,6 +36,14 @@ function roundMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
+function normalizeText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^\w\s%]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function parseManualSoldPrices(input) {
   if (!input) return [];
 
@@ -76,6 +84,75 @@ function getAverage(values) {
   if (!values.length) return 0;
   const total = values.reduce((sum, value) => sum + value, 0);
   return roundMoney(total / values.length);
+}
+
+function extractStorageTokens(text) {
+  const matches = normalizeText(text).match(/\b(16|32|64|128|256|512|1024)\s?gb\b/g);
+  return matches ? matches.map((m) => m.replace(/\s+/g, "")) : [];
+}
+
+function extractBatteryPercent(text) {
+  const value = normalizeText(text);
+  const match = value.match(/\b(\d{2,3})\s?%\s?battery\b/);
+  if (!match) return null;
+  return Number(match[1]);
+}
+
+function titleCountsAsUnlocked(text) {
+  const value = normalizeText(text);
+  return (
+    value.includes("unlocked") ||
+    value.includes("sim free") ||
+    value.includes("sim-free") ||
+    value.includes("network free")
+  );
+}
+
+function detectProductCategory(text) {
+  const value = normalizeText(text);
+
+  if (value.includes("iphone")) return "iphone";
+
+  if (
+    value.includes("ps5") ||
+    value.includes("playstation 5") ||
+    value.includes("play station 5") ||
+    value.includes("xbox series x") ||
+    value.includes("xbox series s") ||
+    value.includes("nintendo switch") ||
+    value.includes("switch oled") ||
+    value.includes("switch lite")
+  ) {
+    return "console";
+  }
+
+  if (
+    value.includes("dyson v8") ||
+    value.includes("dyson v10") ||
+    value.includes("dyson v11") ||
+    value.includes("dyson v12") ||
+    value.includes("dyson v15") ||
+    value.includes("dyson gen5") ||
+    value.includes("dyson")
+  ) {
+    return "dyson";
+  }
+
+  if (
+    value.includes("canon eos") ||
+    value.includes("sony a") ||
+    value.includes("sony alpha") ||
+    value.includes("nikon d") ||
+    value.includes("nikon z") ||
+    value.includes("lumix") ||
+    value.includes("fujifilm x") ||
+    value.includes("camera") ||
+    value.includes("lens")
+  ) {
+    return "camera";
+  }
+
+  return "generic";
 }
 
 function buildManualSoldComps(input) {
@@ -258,19 +335,6 @@ function calculateFlipMetrics({
     soldComps,
     confidenceAdjustment,
   };
-}
-
-function normalizeText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^\w\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractStorageTokens(text) {
-  const matches = normalizeText(text).match(/\b(16|32|64|128|256|512|1024)\s?gb\b/g);
-  return matches ? matches.map((m) => m.replace(/\s+/g, "")) : [];
 }
 
 function extractEssentialTokens(product) {
@@ -483,50 +547,6 @@ function isAccessoryOnlyTitle(text) {
   return accessoryTerms.some((term) => value.includes(term));
 }
 
-function detectProductCategory(text) {
-  const value = normalizeText(text);
-
-  if (value.includes("iphone")) return "iphone";
-
-  if (
-    value.includes("ps5") ||
-    value.includes("playstation 5") ||
-    value.includes("play station 5") ||
-    value.includes("xbox series x") ||
-    value.includes("xbox series s") ||
-    value.includes("nintendo switch") ||
-    value.includes("switch oled") ||
-    value.includes("switch lite")
-  ) {
-    return "console";
-  }
-
-  if (
-    value.includes("dyson v8") ||
-    value.includes("dyson v10") ||
-    value.includes("dyson v11") ||
-    value.includes("dyson v12") ||
-    value.includes("dyson v15") ||
-    value.includes("dyson gen5")
-  ) {
-    return "dyson";
-  }
-
-  if (
-    value.includes("canon eos") ||
-    value.includes("nikon d") ||
-    value.includes("sony a") ||
-    value.includes("lumix") ||
-    value.includes("fujifilm x") ||
-    value.includes("camera") ||
-    value.includes("lens")
-  ) {
-    return "camera";
-  }
-
-  return "generic";
-}
-
 function getIphoneModelFamily(text) {
   const value = normalizeText(text);
 
@@ -572,23 +592,6 @@ function iphoneFamilyMatches(title, product) {
   return true;
 }
 
-function titleCountsAsUnlocked(text) {
-  const value = normalizeText(text);
-  return (
-    value.includes("unlocked") ||
-    value.includes("sim free") ||
-    value.includes("sim-free") ||
-    value.includes("network free")
-  );
-}
-
-function extractBatteryPercent(text) {
-  const value = normalizeText(text);
-  const match = value.match(/\b(\d{2,3})\s?%\s?battery\b/);
-  if (!match) return null;
-  return Number(match[1]);
-}
-
 function isBadIphoneMarketComp(itemTitle, queryText = "") {
   const title = normalizeText(itemTitle);
   const query = normalizeText(queryText);
@@ -623,7 +626,7 @@ function isBadIphoneMarketComp(itemTitle, queryText = "") {
   }
 
   const batteryPercent = extractBatteryPercent(title);
-  if (batteryPercent !== null && batteryPercent < 84) {
+  if (batteryPercent !== null && batteryPercent < 85) {
     return true;
   }
 
@@ -833,6 +836,30 @@ function dysonTypeMatches(title, product) {
   return true;
 }
 
+function isBadDysonListing(title, product) {
+  const t = normalizeText(title);
+  const p = normalizeText(product);
+
+  if (t.includes("battery only")) return true;
+  if (t.includes("filter only")) return true;
+  if (t.includes("wand only")) return true;
+  if (t.includes("head only")) return true;
+  if (t.includes("tools only")) return true;
+  if (t.includes("attachments only")) return true;
+  if (t.includes("spares")) return true;
+  if (t.includes("parts")) return true;
+
+  if (p.includes("body only")) {
+    return false;
+  }
+
+  if (getDysonListingType(t) === "body_only") {
+    return true;
+  }
+
+  return false;
+}
+
 function getCameraFamily(text) {
   const value = normalizeText(text);
 
@@ -840,6 +867,7 @@ function getCameraFamily(text) {
     /\bcanon eos\s+\d{2,4}d\b/,
     /\bcanon eos\s+r\d+\b/,
     /\bsony a\d{3,4}\b/,
+    /\bsony alpha\s+\d{3,4}\b/,
     /\bnikon d\d{3,4}\b/,
     /\bnikon z\d{1,2}\b/,
     /\bfujifilm x[\w-]+\b/,
@@ -887,6 +915,24 @@ function cameraTypeMatches(title, product) {
   return got !== "lens_only";
 }
 
+function isBadCameraListing(title, product) {
+  const t = normalizeText(title);
+  const p = normalizeText(product);
+
+  if (t.includes("lens only")) return true;
+  if (t.includes("for parts")) return true;
+  if (t.includes("faulty")) return true;
+  if (t.includes("spares")) return true;
+  if (t.includes("broken")) return true;
+  if (t.includes("not working")) return true;
+
+  if (!p.includes("body") && t.includes("body only")) {
+    return true;
+  }
+
+  return false;
+}
+
 function productCategorySpecificMatch(itemTitle, product, condition) {
   const category = detectProductCategory(`${product} ${condition}`);
   const title = normalizeText(itemTitle);
@@ -909,12 +955,14 @@ function productCategorySpecificMatch(itemTitle, product, condition) {
   if (category === "dyson") {
     if (!dysonFamilyMatches(title, productText)) return false;
     if (!dysonTypeMatches(title, productText)) return false;
+    if (isBadDysonListing(title, productText)) return false;
     return true;
   }
 
   if (category === "camera") {
     if (!cameraFamilyMatches(title, productText)) return false;
     if (!cameraTypeMatches(title, productText)) return false;
+    if (isBadCameraListing(title, productText)) return false;
     return true;
   }
 
@@ -972,6 +1020,10 @@ function itemMatchesProduct(itemTitle, product, condition) {
       return false;
     }
 
+    return true;
+  }
+
+  if (category === "dyson" || category === "camera") {
     return true;
   }
 
@@ -1083,6 +1135,24 @@ function buildAutoCompsFromItems({ items, product, condition }) {
     );
   }
 
+  if (category === "console") {
+    finalMatched = finalMatched.filter((item) =>
+      !isBadConsoleMarketComp(item?.title || "", product)
+    );
+  }
+
+  if (category === "dyson") {
+    finalMatched = finalMatched.filter((item) =>
+      !isBadDysonListing(item?.title || "", product)
+    );
+  }
+
+  if (category === "camera") {
+    finalMatched = finalMatched.filter((item) =>
+      !isBadCameraListing(item?.title || "", product)
+    );
+  }
+
   const priced = finalMatched
     .map((item) => ({
       title: String(item?.title || ""),
@@ -1142,7 +1212,7 @@ function buildConditionSignal(item) {
   let multiplier = 1;
   let repairCost = 0;
 
-  if (text.includes("unlocked")) multiplier += 0.05;
+  if (titleCountsAsUnlocked(text)) multiplier += 0.05;
   if (text.includes("excellent")) multiplier += 0.04;
   if (text.includes("very good")) multiplier += 0.03;
   if (text.includes("good")) multiplier += 0.015;
@@ -1151,11 +1221,14 @@ function buildConditionSignal(item) {
   if (text.includes("fully working")) multiplier += 0.025;
   if (text.includes("tested")) multiplier += 0.015;
 
-  if (text.includes("91% battery")) multiplier += 0.03;
-  else if (text.includes("90% battery")) multiplier += 0.025;
-  else if (text.includes("89% battery")) multiplier += 0.02;
-  else if (text.includes("88% battery")) multiplier += 0.015;
-  else if (text.includes("87% battery")) multiplier += 0.01;
+  const batteryPercent = extractBatteryPercent(text);
+  if (batteryPercent !== null) {
+    if (batteryPercent >= 95) multiplier += 0.04;
+    else if (batteryPercent >= 90) multiplier += 0.03;
+    else if (batteryPercent >= 87) multiplier += 0.02;
+    else if (batteryPercent >= 85) multiplier += 0.01;
+    else if (batteryPercent < 84) multiplier -= 0.05;
+  }
 
   if (text.includes("cracked")) {
     multiplier -= 0.12;
@@ -1181,8 +1254,21 @@ function buildConditionSignal(item) {
     multiplier -= 0.14;
   }
 
+  if (text.includes("no face id")) {
+    multiplier -= 0.12;
+    repairCost += 20;
+  }
+
+  if (text.includes("grade c")) {
+    multiplier -= 0.08;
+  }
+
+  if (text.includes("grade d")) {
+    multiplier -= 0.12;
+  }
+
   if (multiplier < 0.72) multiplier = 0.72;
-  if (multiplier > 1.12) multiplier = 1.12;
+  if (multiplier > 1.16) multiplier = 1.16;
 
   return {
     resaleMultiplier: roundMoney(multiplier),
@@ -1203,11 +1289,15 @@ function getCategoryResaleUplift(item, query = "") {
   }
 
   if (category === "camera") {
-    return 1.07;
+    return 1.08;
   }
 
   if (category === "dyson") {
-    return 1.09;
+    return 1.1;
+  }
+
+  if (text.includes("xbox")) {
+    return 1.11;
   }
 
   return 1.05;
@@ -1243,6 +1333,18 @@ function buildLiveMarketSnapshot({ items, query, condition }) {
   if (category === "iphone") {
     marketItems = marketItems.filter((item) =>
       !isBadIphoneMarketComp(item?.title || "", query)
+    );
+  }
+
+  if (category === "dyson") {
+    marketItems = marketItems.filter((item) =>
+      !isBadDysonListing(item?.title || "", query)
+    );
+  }
+
+  if (category === "camera") {
+    marketItems = marketItems.filter((item) =>
+      !isBadCameraListing(item?.title || "", query)
     );
   }
 
@@ -1371,6 +1473,40 @@ function buildScannerMetricsFromLiveMarket(item, snapshot, query = "") {
   };
 }
 
+function buildBestOfferGuidance(item, scanner) {
+  const hasBestOffer =
+    Array.isArray(item?.buyingOptions) &&
+    item.buyingOptions.includes("BEST_OFFER");
+
+  if (!hasBestOffer) return null;
+
+  const askPrice = Number(scanner?.totalBuyPrice || 0);
+  const resale = Number(scanner?.estimatedResale || 0);
+  const repairCost = Number(scanner?.repairCost || 0);
+
+  if (!askPrice || !resale) return null;
+
+  const suggestedOffer = roundMoney(askPrice * 0.9);
+  const aggressiveOffer = roundMoney(askPrice * 0.82);
+  const maxSafeOffer = roundMoney(resale * 0.7);
+
+  function calcProfit(offer) {
+    const fees = roundMoney(resale * 0.15);
+    return roundMoney(resale - fees - offer - repairCost);
+  }
+
+  return {
+    hasBestOffer: true,
+    askPrice,
+    suggestedOffer,
+    aggressiveOffer,
+    maxSafeOffer,
+    profitAtSuggested: calcProfit(suggestedOffer),
+    profitAtAggressive: calcProfit(aggressiveOffer),
+    profitAtMaxSafe: calcProfit(maxSafeOffer),
+  };
+}
+
 function scoreDealCandidate(item, scanner) {
   const totalBuyPrice = Number(scanner?.totalBuyPrice || 0);
   const estimatedResale = Number(scanner?.estimatedResale || 0);
@@ -1394,12 +1530,15 @@ function scoreDealCandidate(item, scanner) {
   else if (shipping <= 3.99) shippingBonus = 2;
 
   let titleBonus = 0;
-  if (title.includes("unlocked")) titleBonus += 4;
+  if (titleCountsAsUnlocked(title)) titleBonus += 4;
   if (title.includes("excellent")) titleBonus += 3;
   if (title.includes("very good")) titleBonus += 2;
   if (title.includes("boxed")) titleBonus += 1;
   if (title.includes("bundle")) titleBonus += 2;
   if (title.includes("fully working")) titleBonus += 2;
+  if (Array.isArray(item?.buyingOptions) && item.buyingOptions.includes("BEST_OFFER")) {
+    titleBonus += 3;
+  }
 
   let score =
     estimatedProfit * 2.1 +
@@ -1418,41 +1557,56 @@ function scoreDealCandidate(item, scanner) {
   };
 }
 
-function getDealReason(item, scanner, scored) {
+function getDealReason(item, scanner) {
   const reasons = [];
-  const title = String(item?.title || "").toLowerCase();
-  const shipping = Number(item?.shipping || 0);
-  const profit = Number(scanner?.estimatedProfit || 0);
-  const marginPercent = Number(scanner?.marginPercent || 0);
-  const risk = String(scanner?.risk || "High");
-  const compCount = Number(scanner?.compCount || 0);
 
-  if (profit >= 18 || marginPercent >= 16) {
-    reasons.push("strong estimated margin versus live market");
-  } else if (profit >= 8 || marginPercent >= 8) {
-    reasons.push("decent estimated margin versus live market");
-  } else if (profit >= 2 || marginPercent >= 4) {
-    reasons.push("small but workable live-market gap");
+  if (Number(scanner?.estimatedProfit || 0) >= 20) {
+    reasons.push("strong profit margin");
+  } else if (Number(scanner?.estimatedProfit || 0) >= 8) {
+    reasons.push("workable profit margin");
   }
 
-  if (compCount >= 4) reasons.push("based on multiple close live comps");
-
-  if (Number(scored?.undervaluedPercent || 0) >= 15) {
-    reasons.push("priced well below conservative live market");
-  } else if (Number(scored?.undervaluedPercent || 0) >= 8) {
-    reasons.push("priced below conservative live market");
+  if (Number(scanner?.marginPercent || 0) >= 12) {
+    reasons.push("healthy margin %");
   }
 
-  if (shipping === 0) reasons.push("free shipping helps margin");
-  if (title.includes("unlocked")) reasons.push("unlocked stock usually resells better");
-  if (title.includes("excellent")) reasons.push("strong condition wording may support resale");
-  if (risk === "Low") reasons.push("lower risk profile");
+  if (Number(scanner?.compCount || 0) >= 4) {
+    reasons.push("based on multiple comps");
+  }
+
+  if (Number(item?.shipping || 0) === 0) {
+    reasons.push("free shipping");
+  }
+
+  if (
+    Array.isArray(item?.buyingOptions) &&
+    item.buyingOptions.includes("BEST_OFFER")
+  ) {
+    reasons.push("negotiable price");
+  }
+
+  if (titleCountsAsUnlocked(item?.title || "")) {
+    reasons.push("unlocked stock resells better");
+  }
 
   if (!reasons.length) {
-    reasons.push("reasonable match with possible live-market spread");
+    reasons.push("possible resale spread");
   }
 
-  return reasons.slice(0, 3).join(". ") + ".";
+  return reasons.join(" • ");
+}
+
+function getDealLabel(scanner, item) {
+  const profit = Number(scanner?.estimatedProfit || 0);
+  const margin = Number(scanner?.marginPercent || 0);
+  const hasOffer =
+    Array.isArray(item?.buyingOptions) &&
+    item.buyingOptions.includes("BEST_OFFER");
+
+  if (profit >= 25 && margin >= 12) return "Buy now";
+  if (hasOffer && profit >= 8) return "Offer only";
+  if (profit >= 4) return "Tight margin";
+  return "Skip";
 }
 
 function isTrapListingTitle(title) {
@@ -1491,7 +1645,7 @@ function getListingQualityScore(item) {
   const title = normalizeText(item?.title || "");
   let score = 0;
 
-  if (title.includes("unlocked") || title.includes("sim free")) score += 2;
+  if (titleCountsAsUnlocked(title)) score += 2;
   if (title.includes("excellent")) score += 2;
   if (title.includes("very good")) score += 1;
   if (title.includes("fully working")) score += 2;
@@ -1514,7 +1668,7 @@ function getListingQualityScore(item) {
   if (batteryPercent !== null) {
     if (batteryPercent >= 90) score += 2;
     else if (batteryPercent >= 86) score += 1;
-    else if (batteryPercent < 84) score -= 3;
+    else if (batteryPercent < 85) score -= 3;
   }
 
   return score;
@@ -1582,6 +1736,34 @@ function getSanityDecision(item, scanner) {
     return { passed: true, reason: "passed_iphone_sanity" };
   }
 
+  if (category === "dyson") {
+    if (compCount < 3) return { passed: false, reason: "dyson_low_comp_count" };
+    if (profit < 10 && margin < 6) {
+      return { passed: false, reason: "dyson_low_profit_and_margin" };
+    }
+    if (risk === "High" && profit < 15) {
+      return { passed: false, reason: "dyson_high_risk_low_reward" };
+    }
+    if (qualityScore < -1) {
+      return { passed: false, reason: "dyson_low_listing_quality" };
+    }
+    return { passed: true, reason: "passed_dyson_sanity" };
+  }
+
+  if (category === "camera") {
+    if (compCount < 3) return { passed: false, reason: "camera_low_comp_count" };
+    if (profit < 12 && margin < 7) {
+      return { passed: false, reason: "camera_low_profit_and_margin" };
+    }
+    if (risk === "High" && profit < 18) {
+      return { passed: false, reason: "camera_high_risk_low_reward" };
+    }
+    if (qualityScore < -1) {
+      return { passed: false, reason: "camera_low_listing_quality" };
+    }
+    return { passed: true, reason: "passed_camera_sanity" };
+  }
+
   if (compCount < 3) return { passed: false, reason: "low_comp_count" };
   if (profit < 15 && margin < 10) {
     return { passed: false, reason: "low_profit_and_margin" };
@@ -1625,13 +1807,15 @@ function buildFindDealsResults({ candidateItems, marketPool, query, condition })
   const scoredCandidates = exactCandidates
     .map((item) => {
       const scanner = buildScannerMetricsFromLiveMarket(item, snapshot, query);
+      const bestOffer = buildBestOfferGuidance(item, scanner);
       const scored = scoreDealCandidate(item, scanner);
-      const reason = getDealReason(item, scanner, scored);
+      const reason = getDealReason(item, scanner);
       const sanity = getSanityDecision(item, scanner);
 
       return {
         ...item,
         scanner,
+        bestOffer,
         dealScore: scored.dealScore,
         undervaluedAmount: scored.undervaluedAmount,
         undervaluedPercent: scored.undervaluedPercent,
@@ -1654,32 +1838,10 @@ function buildFindDealsResults({ candidateItems, marketPool, query, condition })
           Number(a?.scanner?.estimatedProfit || 0)
       );
     })
-    .map((item, index) => {
-      let finderLabel = "Worth checking";
-
-      if (index === 0 && Number(item.dealScore || 0) > 24) {
-        finderLabel = "Best deal";
-      } else if (Number(item?.scanner?.estimatedProfit || 0) < 0) {
-        finderLabel = "Skip";
-      } else if (Number(item?.scanner?.estimatedProfit || 0) < 5) {
-        finderLabel = "Tight margin";
-      } else if (Number(item?.scanner?.estimatedProfit || 0) >= 18) {
-        finderLabel = "Strong margin";
-      }
-
-      if (Number(item?.scanner?.estimatedProfit || 0) >= 20) {
-        finderLabel = "Buy now";
-      } else if (Number(item?.scanner?.estimatedProfit || 0) >= 8) {
-        finderLabel = "Strong margin";
-      } else {
-        finderLabel = "Worth checking";
-      }
-
-      return {
-        ...item,
-        finderLabel,
-      };
-    });
+    .map((item) => ({
+      ...item,
+      finderLabel: getDealLabel(item.scanner, item),
+    }));
 
   const rejectedBySanity = scoredCandidates
     .filter((item) => item.sanityPassed !== true)
@@ -1956,6 +2118,10 @@ app.post("/api/search-ebay", async (req, res) => {
       .map((item) => ({
         ...item,
         scanner: buildScannerMetricsFromLiveMarket(item, snapshot, query),
+        bestOffer: buildBestOfferGuidance(
+          item,
+          buildScannerMetricsFromLiveMarket(item, snapshot, query)
+        ),
       }))
       .sort((a, b) => {
         return (
