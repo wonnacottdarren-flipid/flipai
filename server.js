@@ -437,27 +437,73 @@ function buildAutoCompSearchQuery(product, condition) {
   return query.trim();
 }
 
+function detectConditionBucket(text) {
+  const value = normalizeText(text);
+
+  const sparesTerms = [
+    "spares",
+    "repair",
+    "faulty",
+    "broken",
+    "cracked",
+    "parts",
+    "not working",
+    "damaged",
+    "icloud locked",
+    "network locked",
+    "for parts",
+    "for repair",
+    "screen burn",
+    "dead",
+    "water damage",
+  ];
+
+  const refurbTerms = [
+    "refurbished",
+    "seller refurbished",
+    "certified refurbished",
+    "renewed",
+  ];
+
+  const newTerms = [
+    "brand new",
+    "sealed",
+    "unopened",
+    "new",
+  ];
+
+  if (sparesTerms.some((term) => value.includes(term))) {
+    return "spares_repair";
+  }
+
+  if (refurbTerms.some((term) => value.includes(term))) {
+    return "refurbished";
+  }
+
+  if (newTerms.some((term) => value.includes(term))) {
+    return "new";
+  }
+
+  // Grade A/B/C remains USED unless refurb wording is explicitly present
+  return "used";
+}
+
+function getItemBucket(item, fallbackText = "") {
+  const title = String(item?.title || "");
+  const condition = String(item?.condition || "");
+  return detectConditionBucket(`${title} ${condition} ${fallbackText}`);
+}
+
 function isBadCompTitle(title) {
   const text = normalizeText(title);
 
   const banned = [
-    "spares",
-    "parts",
-    "not working",
-    "faulty",
-    "cracked",
-    "broken",
-    "read description",
     "empty box",
     "box only",
     "case only",
     "cover only",
     "screen only",
-    "icloud locked",
-    "network locked",
-    "locked to",
-    "for repair",
-    "repair only",
+    "housing only",
   ];
 
   return banned.some((term) => text.includes(term));
@@ -531,12 +577,50 @@ function selectCompPrices(prices) {
   return (slice.length ? slice : sorted.slice(0, 6)).map(roundMoney);
 }
 
+function getBucketFallbackBuckets(targetBucket) {
+  if (targetBucket === "used") {
+    return ["used", "refurbished"];
+  }
+
+  if (targetBucket === "refurbished") {
+    return ["refurbished", "used"];
+  }
+
+  if (targetBucket === "new") {
+    return ["new"];
+  }
+
+  if (targetBucket === "spares_repair") {
+    return ["spares_repair"];
+  }
+
+  return [targetBucket];
+}
+
 function buildAutoCompsFromItems({ items, product, condition }) {
+  const targetBucket = detectConditionBucket(`${product} ${condition}`);
+
   const matched = items.filter((item) =>
     itemMatchesProduct(item?.title || "", product, condition)
   );
 
-  const priced = matched
+  const sameBucket = matched.filter((item) => {
+    const itemBucket = getItemBucket(item);
+    return itemBucket === targetBucket;
+  });
+
+  let finalMatched = sameBucket;
+
+  if (finalMatched.length < 3) {
+    const allowedBuckets = getBucketFallbackBuckets(targetBucket);
+
+    finalMatched = matched.filter((item) => {
+      const bucket = getItemBucket(item);
+      return allowedBuckets.includes(bucket);
+    });
+  }
+
+  const priced = finalMatched
     .map((item) => ({
       title: String(item?.title || ""),
       price: roundMoney(Number(item?.price || 0)),
@@ -544,6 +628,7 @@ function buildAutoCompsFromItems({ items, product, condition }) {
       total: roundMoney(Number(item?.price || 0) + Number(item?.shipping || 0)),
       condition: String(item?.condition || ""),
       url: item?.itemWebUrl || item?.viewItemURL || item?.url || "",
+      bucket: getItemBucket(item),
     }))
     .filter((item) => item.total > 0);
 
@@ -556,14 +641,22 @@ function buildAutoCompsFromItems({ items, product, condition }) {
   if (selectedPrices.length >= 7) confidence = 82;
   if (selectedPrices.length >= 10) confidence = 92;
 
+  if (sameBucket.length >= 3) {
+    confidence += 8;
+  }
+
+  confidence = Math.min(95, confidence);
+
   let confidenceLabel = "Low";
   if (confidence >= 80) confidenceLabel = "High";
   else if (confidence >= 55) confidenceLabel = "Medium";
 
   return {
     pricingMode: "Auto comps estimate",
+    targetBucket,
     searchCount: items.length,
     matchedCount: matched.length,
+    bucketMatchedCount: sameBucket.length,
     compCount: selectedPrices.length,
     prices: selectedPrices,
     manualSoldPricesText: selectedPrices.join(", "),
