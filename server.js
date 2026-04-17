@@ -521,12 +521,10 @@ function iphoneFamilyMatches(title, product) {
   const wantedVariant = productFamily.variant;
   const gotVariant = titleFamily.variant;
 
-  // If user wants plain iPhone 12, reject Pro / Pro Max / Mini / Plus
   if (!wantedVariant && gotVariant) {
     return false;
   }
 
-  // If user wants a variant, require exact variant
   if (wantedVariant && wantedVariant !== gotVariant) {
     return false;
   }
@@ -542,7 +540,6 @@ function itemMatchesProduct(itemTitle, product, condition) {
   if (!title) return false;
   if (isBadCompTitle(title)) return false;
 
-  // Tight iPhone family matching
   if (productText.includes("iphone")) {
     if (!iphoneFamilyMatches(title, productText)) {
       return false;
@@ -610,23 +607,15 @@ function selectCompPrices(prices) {
 }
 
 function getBucketFallbackBuckets(targetBucket) {
-  if (targetBucket === "used") {
-    return ["used", "refurbished"];
-  }
-
-  if (targetBucket === "refurbished") {
-    return ["refurbished", "used"];
-  }
-
-  if (targetBucket === "new") {
-    return ["new"];
-  }
-
-  if (targetBucket === "spares_repair") {
-    return ["spares_repair"];
-  }
-
+  if (targetBucket === "used") return ["used", "refurbished"];
+  if (targetBucket === "refurbished") return ["refurbished", "used"];
+  if (targetBucket === "new") return ["new"];
+  if (targetBucket === "spares_repair") return ["spares_repair"];
   return [targetBucket];
+}
+
+function filterItemsForExactSearch(items, product, condition) {
+  return items.filter((item) => itemMatchesProduct(item?.title || "", product, condition));
 }
 
 function buildAutoCompsFromItems({ items, product, condition }) {
@@ -898,7 +887,13 @@ app.post("/api/search-ebay", async (req, res) => {
       freeShippingOnly,
     });
 
-    const scannedItems = items
+    const exactItems = filterItemsForExactSearch(
+      items,
+      query,
+      condition || ""
+    );
+
+    const scannedItems = exactItems
       .map((item) => ({
         ...item,
         scanner: buildScannerMetrics(item),
