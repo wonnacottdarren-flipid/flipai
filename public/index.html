@@ -1551,7 +1551,10 @@
         deal.condition || "Used item from eBay search results.";
       document.getElementById("buyPrice").value = Number(totalBuyPrice || deal.price || 0).toFixed(2);
       document.getElementById("repairCost").value = Number(deal.repairCost || 0).toFixed(2);
-      document.getElementById("manualSoldPrices").value = soldPricesFromDeal(deal);
+
+      // FIX: do NOT prefill fake/estimated comps when sending to analyzer
+      document.getElementById("manualSoldPrices").value = "";
+
       document.getElementById("extras").value = deal.url || "";
       document.getElementById("goal").value = "Fast sale";
 
@@ -1562,7 +1565,7 @@
 
       setAutoCompsStatus("", "");
       setAnalyzeStatus(
-        "Deal loaded into analyzer. Click Auto-fill comps for better market-based pricing, or analyze immediately with the prefilled estimate.",
+        "Deal loaded into analyzer. Add comps manually or click Auto-fill comps.",
         "success"
       );
     }
