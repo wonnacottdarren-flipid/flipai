@@ -1344,7 +1344,6 @@ function passesFlipperSanity(item, scanner) {
   if (isAccessoryOnlyTitle(title)) return false;
   if (isConsoleAccessoryOnly(title)) return false;
 
-  // console-specific looser sanity so PS5/Xbox still surface
   if (category === "console") {
     if (compCount < 2) return false;
     if (profit < 8 && margin < 5) return false;
@@ -1373,16 +1372,20 @@ function passesFlipperSanity(item, scanner) {
   return true;
 }
 
-function buildFindDealsResults({ items, query, condition }) {
+function buildFindDealsResults({ candidateItems, marketPool, query, condition }) {
   const snapshot = buildLiveMarketSnapshot({
-    items,
+    items: marketPool,
     query,
     condition,
   });
 
-  const exactItems = filterItemsForExactSearch(items, query, condition || "");
+  const exactCandidates = filterItemsForExactSearch(
+    candidateItems,
+    query,
+    condition || ""
+  );
 
-  const enriched = exactItems
+  const deals = exactCandidates
     .map((item) => {
       const scanner = buildScannerMetricsFromLiveMarket(item, snapshot);
       const scored = scoreDealCandidate(item, scanner);
@@ -1401,10 +1404,12 @@ function buildFindDealsResults({ items, query, condition }) {
       };
     })
     .filter((item) => Number(item?.scanner?.estimatedResale || 0) > 0)
+    .filter((item) => item.sanityPassed === true)
     .sort((a, b) => {
       return (
         Number(b.dealScore || 0) - Number(a.dealScore || 0) ||
-        Number(b?.scanner?.estimatedProfit || 0) - Number(a?.scanner?.estimatedProfit || 0)
+        Number(b?.scanner?.estimatedProfit || 0) -
+          Number(a?.scanner?.estimatedProfit || 0)
       );
     })
     .map((item, index) => {
@@ -1420,14 +1425,12 @@ function buildFindDealsResults({ items, query, condition }) {
         finderLabel = "Strong margin";
       }
 
-      if (item.sanityPassed) {
-        if (Number(item?.scanner?.estimatedProfit || 0) >= 25) {
-          finderLabel = "Buy now";
-        } else if (Number(item?.scanner?.estimatedProfit || 0) >= 14) {
-          finderLabel = "Strong margin";
-        } else {
-          finderLabel = "Worth checking";
-        }
+      if (Number(item?.scanner?.estimatedProfit || 0) >= 25) {
+        finderLabel = "Buy now";
+      } else if (Number(item?.scanner?.estimatedProfit || 0) >= 14) {
+        finderLabel = "Strong margin";
+      } else {
+        finderLabel = "Worth checking";
       }
 
       return {
@@ -1438,7 +1441,7 @@ function buildFindDealsResults({ items, query, condition }) {
 
   return {
     snapshot,
-    deals: enriched,
+    deals,
   };
 }
 
@@ -1738,18 +1741,13 @@ app.post("/api/find-deals", async (req, res) => {
     });
 
     const ranked = buildFindDealsResults({
-      items: marketPool,
+      candidateItems: items,
+      marketPool,
       query,
       condition,
     });
 
-    const eligibleItemIds = new Set(items.map((item) => item.itemId));
-
-    const rankedDeals = ranked.deals
-      .filter((deal) => eligibleItemIds.has(deal.itemId))
-      .filter((deal) => deal.sanityPassed === true);
-
-    const finalDeals = rankedDeals.slice(
+    const finalDeals = ranked.deals.slice(
       0,
       Math.max(1, Math.min(Number(topN || 8), 12))
     );
@@ -1758,7 +1756,7 @@ app.post("/api/find-deals", async (req, res) => {
       ok: true,
       query,
       totalFetched: items.length,
-      totalMatched: rankedDeals.length,
+      totalMatched: ranked.deals.length,
       marketSnapshot: ranked.snapshot,
       deals: finalDeals,
     });
