@@ -1,31 +1,30 @@
 import fetch from "node-fetch";
 
 /**
- * FlipAI eBay module (FULLY FIXED)
- * - Uses SOLD listings (critical for real comps)
- * - Correct itemFilter structure (eBay requirement)
- * - Supports limit properly
- * - Cleaner search queries (no over-stripping)
+ * FlipAI eBay module (DEBUG + FIXED)
+ * - Uses COMPLETED listings (correct for comps)
+ * - Logs raw response so we can debug
+ * - Safe + stable
  */
 
 const EBAY_APP_ID = process.env.EBAY_APP_ID;
 
 // -----------------------------
-// 1. CLEAN SEARCH QUERY
+// CLEAN QUERY
 // -----------------------------
 function cleanQuery(query) {
   if (!query) return "";
 
   return query
     .toLowerCase()
-    .replace(/(ram|boxed)/g, "") // keep important keywords like GB + unlocked
+    .replace(/(ram|boxed)/g, "")
     .replace(/[^a-z0-9\s]/gi, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 // -----------------------------
-// 2. MAIN SEARCH FUNCTION
+// MAIN FUNCTION
 // -----------------------------
 export async function searchEbayListings({
   query,
@@ -45,7 +44,8 @@ export async function searchEbayListings({
       "https://svcs.ebay.com/services/search/FindingService/v1"
     );
 
-    url.searchParams.append("OPERATION-NAME", "findItemsByKeywords");
+    // ✅ IMPORTANT: use COMPLETED items
+    url.searchParams.append("OPERATION-NAME", "findCompletedItems");
     url.searchParams.append("SERVICE-VERSION", "1.0.0");
     url.searchParams.append("SECURITY-APPNAME", EBAY_APP_ID);
     url.searchParams.append("RESPONSE-DATA-FORMAT", "JSON");
@@ -54,63 +54,28 @@ export async function searchEbayListings({
     url.searchParams.append("keywords", cleanedQuery || query);
 
     // -----------------------------
-    // FILTERS (CORRECT FORMAT)
+    // FILTERS (TEMP LIGHT)
     // -----------------------------
-    const itemFilter = [];
+    let filterIndex = 0;
 
     if (maxPrice) {
-      itemFilter.push({
-        name: "MaxPrice",
-        value: maxPrice.toString(),
-        paramName: "Currency",
-        paramValue: "GBP",
-      });
+      url.searchParams.append(`itemFilter(${filterIndex}).name`, "MaxPrice");
+      url.searchParams.append(
+        `itemFilter(${filterIndex}).value`,
+        maxPrice.toString()
+      );
+      url.searchParams.append(
+        `itemFilter(${filterIndex}).paramName`,
+        "Currency"
+      );
+      url.searchParams.append(
+        `itemFilter(${filterIndex}).paramValue`,
+        "GBP"
+      );
+      filterIndex++;
     }
 
-    if (condition) {
-      const conditionMap = {
-        new: "1000",
-        used: "3000",
-        refurbished: "2000",
-      };
-
-      if (conditionMap[condition]) {
-        itemFilter.push({
-          name: "Condition",
-          value: conditionMap[condition],
-        });
-      }
-    }
-
-    if (freeShippingOnly) {
-      itemFilter.push({
-        name: "FreeShippingOnly",
-        value: "true",
-      });
-    }
-
-    // ✅ CRITICAL: SOLD LISTINGS
-    itemFilter.push({
-      name: "SoldItemsOnly",
-      value: "true",
-    });
-
-    // ✅ Proper eBay filter formatting (NOT JSON)
-    itemFilter.forEach((filter, index) => {
-      url.searchParams.append(`itemFilter(${index}).name`, filter.name);
-      url.searchParams.append(`itemFilter(${index}).value`, filter.value);
-
-      if (filter.paramName) {
-        url.searchParams.append(
-          `itemFilter(${index}).paramName`,
-          filter.paramName
-        );
-        url.searchParams.append(
-          `itemFilter(${index}).paramValue`,
-          filter.paramValue
-        );
-      }
-    });
+    // ⚠️ TEMP: DO NOT FILTER CONDITION YET (for debugging)
 
     // Pagination
     url.searchParams.append(
@@ -119,20 +84,29 @@ export async function searchEbayListings({
     );
 
     // -----------------------------
-    // FETCH DATA
+    // FETCH
     // -----------------------------
+    console.log("🔍 EBAY REQUEST URL:");
+    console.log(url.toString());
+
     const res = await fetch(url.toString());
     const data = await res.json();
 
+    // ✅ DEBUG OUTPUT
+    console.log("📦 EBAY RAW RESPONSE:");
+    console.log(JSON.stringify(data, null, 2));
+
     const items =
-      data?.findItemsByKeywordsResponse?.[0]?.searchResult?.[0]?.item || [];
+      data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
+
+    console.log("✅ ITEMS FOUND:", items.length);
 
     if (!items.length) {
       return [];
     }
 
     // -----------------------------
-    // NORMALISE OUTPUT
+    // NORMALISE
     // -----------------------------
     return items.map((item) => ({
       title: item.title?.[0] || "Unknown",
@@ -151,7 +125,7 @@ export async function searchEbayListings({
       image: item.galleryURL?.[0] || "",
     }));
   } catch (error) {
-    console.error("eBay API error:", error.message);
+    console.error("❌ eBay API error:", error.message);
     return [];
   }
 }
