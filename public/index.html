@@ -526,6 +526,11 @@
       box-shadow: 0 16px 28px rgba(79, 140, 255, 0.35);
     }
 
+    .find-deals-btn {
+      background: linear-gradient(135deg, var(--blue), var(--blue-2));
+      box-shadow: 0 16px 28px rgba(79, 140, 255, 0.35);
+    }
+
     .grid {
       display: grid;
       grid-template-columns: 0.95fr 1.05fr;
@@ -536,6 +541,12 @@
     .button-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .three-button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 10px;
     }
 
@@ -682,13 +693,21 @@
     .deal-shipping,
     .deal-source,
     .deal-score,
-    .deal-condition {
+    .deal-condition,
+    .deal-badge,
+    .deal-bucket {
       font-size: 12px;
       color: var(--muted);
       padding: 6px 10px;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: rgba(255,255,255,0.04);
+    }
+
+    .deal-badge {
+      color: #dbeafe;
+      border-color: rgba(79,140,255,0.25);
+      background: rgba(79,140,255,0.12);
     }
 
     .deal-metrics {
@@ -773,7 +792,8 @@
       .hero-points,
       .deal-layout,
       .deal-metrics,
-      .button-row {
+      .button-row,
+      .three-button-row {
         grid-template-columns: 1fr;
       }
 
@@ -807,6 +827,7 @@
         <a class="chip-link" href="#pricing">Pricing</a>
         <a class="chip-link" href="#account">Account</a>
         <a class="chip-link" href="#dealFinder">eBay Search</a>
+        <a class="chip-link" href="#dealHunter">Find Deals</a>
         <a class="chip-link" href="#analyzer">Analyzer</a>
       </div>
     </div>
@@ -817,19 +838,19 @@
         <h1>Analyse flips before you buy.</h1>
         <p>
           Estimate resale value, fees, profit, and time to sell before you spend money.
-          FlipAI now lets you search eBay listings and auto-fill comps from similar live listings.
+          FlipAI now lets you search eBay listings, auto-fill comps, and surface likely opportunities faster.
         </p>
 
         <div class="hero-cta-row">
-          <a class="hero-cta primary" href="#dealFinder">Search eBay</a>
+          <a class="hero-cta primary" href="#dealHunter">Find Deals</a>
           <a class="hero-cta secondary" href="#analyzer">Try the analyzer</a>
         </div>
 
         <div class="hero-points">
           <div class="hero-point">See projected profit and total cost instantly before committing to a deal.</div>
           <div class="hero-point">Search eBay listings quickly and shortlist promising items.</div>
-          <div class="hero-point">Auto-fill comps from similar live listings to speed up pricing.</div>
-          <div class="hero-point">Designed for fast decision-making when browsing marketplaces on the go.</div>
+          <div class="hero-point">Auto-fill comps from similar listings to speed up pricing.</div>
+          <div class="hero-point">Built to help you spot likely opportunities, not just check listings manually.</div>
         </div>
       </div>
 
@@ -1034,8 +1055,14 @@
             </select>
           </div>
 
-          <button id="findDealsBtn">Search eBay</button>
+          <div class="three-button-row">
+            <button id="findDealsBtn">Search eBay</button>
+            <button id="findBestDealsBtn" class="find-deals-btn" type="button">Find Best Deals</button>
+            <button id="clearDealResultsBtn" class="secondary-btn" type="button">Clear</button>
+          </div>
+
           <div id="dealStatus"></div>
+          <div id="finderStatus"></div>
         </div>
 
         <div>
@@ -1043,6 +1070,16 @@
             Search eBay listings and matching results will appear here.
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="card" id="dealHunter">
+      <h2>Deal Finder</h2>
+      <p class="account-subline" style="margin-top:0;">
+        This uses FlipAI’s scoring to surface likely opportunities first, instead of just listing search results.
+      </p>
+      <div id="finderResults" class="deal-empty">
+        Use the “Find Best Deals” button above and your ranked deal results will appear here.
       </div>
     </div>
 
@@ -1164,8 +1201,12 @@
     const accountSublineEl = document.getElementById("accountSubline");
 
     const findDealsBtn = document.getElementById("findDealsBtn");
+    const findBestDealsBtn = document.getElementById("findBestDealsBtn");
+    const clearDealResultsBtn = document.getElementById("clearDealResultsBtn");
     const dealStatusEl = document.getElementById("dealStatus");
+    const finderStatusEl = document.getElementById("finderStatus");
     const dealResultsEl = document.getElementById("dealResults");
+    const finderResultsEl = document.getElementById("finderResults");
 
     function getPayload() {
       return {
@@ -1192,6 +1233,17 @@
         condition: document.getElementById("dealCondition").value.trim(),
         filterPriceMax: Number(document.getElementById("dealMaxPrice").value || 0),
         limit: 8,
+        freeShippingOnly: document.getElementById("freeShippingOnly").value === "true"
+      };
+    }
+
+    function getFindDealsPayload() {
+      return {
+        query: document.getElementById("dealKeyword").value.trim(),
+        condition: document.getElementById("dealCondition").value.trim(),
+        filterPriceMax: Number(document.getElementById("dealMaxPrice").value || 0),
+        limit: 30,
+        topN: 8,
         freeShippingOnly: document.getElementById("freeShippingOnly").value === "true"
       };
     }
@@ -1236,6 +1288,7 @@
       const value = String(text || "").toUpperCase();
       if (value.includes("GOOD")) return "#4ade80";
       if (value.includes("MARGINAL")) return "#f59e0b";
+      if (value.includes("OK")) return "#4ade80";
       return "#f87171";
     }
 
@@ -1273,6 +1326,15 @@
       }
 
       dealStatusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
+    }
+
+    function setFinderStatus(message, type) {
+      if (!message) {
+        finderStatusEl.innerHTML = "";
+        return;
+      }
+
+      finderStatusEl.innerHTML = `<div class="status ${type}">${message}</div>`;
     }
 
     function renderLockedState(message, options = {}) {
@@ -1466,20 +1528,30 @@
       };
     }
 
-    function useDealForAnalysis(index) {
-      const deals = window.__lastDeals || [];
+    function soldPricesFromDeal(deal) {
+      const estimate = Number(deal.estimatedResale || 0);
+      if (!estimate) return "";
+
+      const low = Math.max(0, estimate - 10);
+      const high = estimate + 8;
+      return [low, estimate, high].map((v) => Number(v).toFixed(2)).join(", ");
+    }
+
+    function useDealForAnalysis(index, sourceKey = "__lastDeals") {
+      const deals = window[sourceKey] || [];
       const deal = deals[index];
       if (!deal) return;
+
+      const totalBuyPrice =
+        Number(deal.totalBuyPrice || 0) ||
+        roundCurrencyValue(Number(deal.price || 0) + Number(deal.shipping || 0));
 
       document.getElementById("product").value = deal.title || "";
       document.getElementById("condition").value =
         deal.condition || "Used item from eBay search results.";
-      document.getElementById("buyPrice").value = Number(deal.totalBuyPrice || deal.price || 0).toFixed(2);
+      document.getElementById("buyPrice").value = Number(totalBuyPrice || deal.price || 0).toFixed(2);
       document.getElementById("repairCost").value = Number(deal.repairCost || 0).toFixed(2);
-
-      // IMPORTANT: do not prefill fake estimate-based comps
-      document.getElementById("manualSoldPrices").value = "";
-
+      document.getElementById("manualSoldPrices").value = soldPricesFromDeal(deal);
       document.getElementById("extras").value = deal.url || "";
       document.getElementById("goal").value = "Fast sale";
 
@@ -1488,15 +1560,15 @@
         block: "start"
       });
 
-      setAutoCompsStatus(
-        "Deal loaded into analyzer. Click Auto-fill comps to fetch real market comps before analyzing.",
-        "loading"
-      );
-
+      setAutoCompsStatus("", "");
       setAnalyzeStatus(
-        "Deal loaded into analyzer. No comp prices have been inserted yet.",
+        "Deal loaded into analyzer. Click Auto-fill comps for better market-based pricing, or analyze immediately with the prefilled estimate.",
         "success"
       );
+    }
+
+    function roundCurrencyValue(value) {
+      return Math.round(Number(value || 0) * 100) / 100;
     }
 
     window.useDealForAnalysis = useDealForAnalysis;
@@ -1574,7 +1646,123 @@
               <div class="deal-summary">${escapeHtml(deal.reason)}</div>
 
               <div class="deal-actions">
-                <button onclick="useDealForAnalysis(${index})">Send to Analyzer</button>
+                <button onclick="useDealForAnalysis(${index}, '__lastDeals')">Send to Analyzer</button>
+                ${
+                  deal.url
+                    ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
+                    : ""
+                }
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    function mapFinderDeal(rawDeal = {}) {
+      const scanner = rawDeal.scanner || {};
+
+      return {
+        title: rawDeal.title || "Untitled listing",
+        price: Number(rawDeal.price || 0),
+        shipping: Number(rawDeal.shipping || 0),
+        totalBuyPrice: Number(scanner.totalBuyPrice || Number(rawDeal.price || 0) + Number(rawDeal.shipping || 0)),
+        estimatedResale: Number(scanner.estimatedResale || 0),
+        estimatedProfit: Number(scanner.estimatedProfit || 0),
+        ebayFees: Number(scanner.ebayFees || 0),
+        verdict: scanner.verdict || "SKIP",
+        risk: scanner.risk || "High",
+        dealScore: Number(rawDeal.dealScore || 0),
+        undervaluedAmount: Number(rawDeal.undervaluedAmount || 0),
+        undervaluedPercent: Number(rawDeal.undervaluedPercent || 0),
+        finderLabel: rawDeal.finderLabel || "Worth checking",
+        reason: rawDeal.reason || "Possible opportunity found.",
+        condition: rawDeal.condition || "",
+        marketBucket: rawDeal.marketBucket || "",
+        url: rawDeal.url || rawDeal.itemWebUrl || rawDeal.viewItemURL || "",
+        repairCost: Number(scanner.repairCost || 0)
+      };
+    }
+
+    function renderFinderResults(data) {
+      const rawDeals = data.deals || [];
+      const deals = rawDeals.map(mapFinderDeal);
+      window.__lastFoundDeals = deals;
+
+      if (!deals.length) {
+        finderResultsEl.innerHTML =
+          '<div class="deal-empty">No ranked deals found for that search. Try widening the max price or using a broader search term.</div>';
+        return;
+      }
+
+      finderResultsEl.innerHTML = deals
+        .map((deal, index) => {
+          return `
+            <div class="deal-card" style="${
+              index === 0
+                ? "border:1px solid rgba(79,140,255,0.45); box-shadow: 0 0 0 1px rgba(79,140,255,0.18), 0 20px 60px rgba(0,0,0,0.28);"
+                : ""
+            }">
+              ${
+                index === 0
+                  ? `<div class="panel" style="margin-bottom:12px;font-weight:800;color:#93c5fd;">TOP RANKED DEAL FINDER RESULT 🚀</div>`
+                  : ""
+              }
+
+              <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
+
+              <div class="deal-price-row">
+                <div class="deal-price">${currency(deal.price)}</div>
+                <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
+                <div class="deal-badge">${escapeHtml(deal.finderLabel)}</div>
+                ${
+                  deal.condition
+                    ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
+                    : ""
+                }
+                ${
+                  deal.marketBucket
+                    ? `<div class="deal-bucket">${escapeHtml(deal.marketBucket)}</div>`
+                    : ""
+                }
+                <div class="deal-score">Deal score ${escapeHtml(deal.dealScore)}</div>
+              </div>
+
+              <div class="deal-metrics">
+                <div class="deal-metric">
+                  <div class="label">Estimated resale</div>
+                  <div class="value">${currency(deal.estimatedResale)}</div>
+                </div>
+                <div class="deal-metric">
+                  <div class="label">Estimated profit</div>
+                  <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
+                    ${currency(deal.estimatedProfit)}
+                  </div>
+                </div>
+                <div class="deal-metric">
+                  <div class="label">Undervalued by</div>
+                  <div class="value">${currency(deal.undervaluedAmount)}</div>
+                </div>
+                <div class="deal-metric">
+                  <div class="label">Undervalued %</div>
+                  <div class="value">${Number(deal.undervaluedPercent || 0).toFixed(2)}%</div>
+                </div>
+              </div>
+
+              <div class="panel" style="font-weight:800;color:${scannerVerdictColor(deal.verdict)};">
+                Verdict: ${escapeHtml(deal.verdict)}
+              </div>
+
+              <div class="panel">
+                <strong>Risk:</strong> ${escapeHtml(deal.risk)}<br>
+                <strong>Total buy cost:</strong> ${currency(deal.totalBuyPrice)}<br>
+                <strong>eBay fees:</strong> ${currency(deal.ebayFees)}
+              </div>
+
+              <div class="deal-summary">${escapeHtml(deal.reason)}</div>
+
+              <div class="deal-actions">
+                <button onclick="useDealForAnalysis(${index}, '__lastFoundDeals')">Send to Analyzer</button>
                 ${
                   deal.url
                     ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
@@ -1596,7 +1784,7 @@
       }
 
       autoCompsBtn.disabled = true;
-      setAutoCompsStatus("Finding similar live comps...", "loading");
+      setAutoCompsStatus("Finding similar comps...", "loading");
 
       try {
         const res = await fetch("/api/auto-comps", {
@@ -1746,6 +1934,62 @@
       }
     }
 
+    async function findBestDeals() {
+      setFinderStatus("Finding best deals...", "loading");
+      finderResultsEl.innerHTML = "";
+      findBestDealsBtn.disabled = true;
+
+      try {
+        const payload = getFindDealsPayload();
+
+        const res = await fetch("/api/find-deals", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (res.status === 401) {
+          setFinderStatus("Please sign in to find deals.", "error");
+          finderResultsEl.innerHTML = '<div class="deal-empty">Sign in first, then use Deal Finder.</div>';
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(data.error || "Could not find deals.");
+        }
+
+        setFinderStatus(
+          `Deal finder complete. Fetched ${Number(data.totalFetched || 0)} listings and ranked ${Number(data.totalMatched || 0)} exact matches.`,
+          "success"
+        );
+        renderFinderResults(data);
+
+        document.getElementById("dealHunter").scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      } catch (err) {
+        setFinderStatus(`Error: ${err.message}`, "error");
+        finderResultsEl.innerHTML = '<div class="deal-empty">No ranked deals available right now.</div>';
+      } finally {
+        findBestDealsBtn.disabled = false;
+      }
+    }
+
+    function clearDealResults() {
+      dealResultsEl.innerHTML = 'Search eBay listings and matching results will appear here.';
+      finderResultsEl.innerHTML = 'Use the “Find Best Deals” button above and your ranked deal results will appear here.';
+      setDealStatus("", "");
+      setFinderStatus("", "");
+      window.__lastDeals = [];
+      window.__lastFoundDeals = [];
+    }
+
     async function loadUser() {
       try {
         const res = await fetch("/api/me", {
@@ -1875,10 +2119,14 @@
         setAuthStatus("Logged out.", "success");
         resultArea.innerHTML = '<div class="placeholder">Run an analysis and your profit estimate, verdict, risk, and resale guidance will appear here.</div>';
         dealResultsEl.innerHTML = 'Search eBay listings and matching results will appear here.';
+        finderResultsEl.innerHTML = 'Use the “Find Best Deals” button above and your ranked deal results will appear here.';
         document.getElementById("manualSoldPrices").value = "";
         setAnalyzeStatus("", "");
         setAutoCompsStatus("", "");
         setDealStatus("", "");
+        setFinderStatus("", "");
+        window.__lastDeals = [];
+        window.__lastFoundDeals = [];
         await loadUser();
       } catch (err) {
         setAuthStatus(`Error: ${err.message}`, "error");
@@ -1947,6 +2195,8 @@
     analyzeBtn.addEventListener("click", runAnalysis);
     autoCompsBtn.addEventListener("click", autoFillComps);
     findDealsBtn.addEventListener("click", findDeals);
+    findBestDealsBtn.addEventListener("click", findBestDeals);
+    clearDealResultsBtn.addEventListener("click", clearDealResults);
     loginBtn.addEventListener("click", login);
     signupBtn.addEventListener("click", signup);
     logoutBtn.addEventListener("click", logout);
