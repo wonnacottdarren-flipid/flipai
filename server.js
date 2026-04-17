@@ -36,10 +36,6 @@ function roundMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
 function parseManualSoldPrices(input) {
   if (!input) return [];
 
@@ -65,6 +61,7 @@ function parseManualSoldPrices(input) {
 
 function getMedian(values) {
   if (!values.length) return 0;
+
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
 
@@ -334,20 +331,6 @@ function buildScannerMetrics(item) {
     verdict,
     multiplier: roundMoney(multiplier),
   };
-}
-
-function getUserFromCookie(req) {
-  try {
-    const token = req.cookies?.flipai_token;
-    if (!token) return null;
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = getUserById(decoded.userId);
-
-    return user || null;
-  } catch {
-    return null;
-  }
 }
 
 function normalizeText(value) {
@@ -630,6 +613,79 @@ function filterItemsForExactSearch(items, product, condition) {
   );
 }
 
+function buildAutoCompsFromItems({ items, product, condition }) {
+  const targetBucket = detectConditionBucket(`${product} ${condition}`);
+
+  const matched = items.filter((item) =>
+    itemMatchesProduct(item?.title || "", product, condition)
+  );
+
+  const sameBucket = matched.filter((item) => {
+    const itemBucket = getItemBucket(item);
+    return itemBucket === targetBucket;
+  });
+
+  let finalMatched = sameBucket;
+
+  if (finalMatched.length < 3) {
+    const allowedBuckets = getBucketFallbackBuckets(targetBucket);
+
+    finalMatched = matched.filter((item) => {
+      const bucket = getItemBucket(item);
+      return allowedBuckets.includes(bucket);
+    });
+  }
+
+  const priced = finalMatched
+    .map((item) => ({
+      title: String(item?.title || ""),
+      price: roundMoney(Number(item?.price || 0)),
+      shipping: roundMoney(Number(item?.shipping || 0)),
+      total: roundMoney(Number(item?.price || 0) + Number(item?.shipping || 0)),
+      condition: String(item?.condition || ""),
+      url: item?.itemWebUrl || item?.viewItemURL || item?.url || "",
+      bucket: getItemBucket(item),
+    }))
+    .filter((item) => item.total > 0);
+
+  const totals = priced.map((item) => item.total);
+  const selectedPrices = selectCompPrices(totals);
+
+  let confidence = 25;
+  if (selectedPrices.length >= 3) confidence = 50;
+  if (selectedPrices.length >= 5) confidence = 68;
+  if (selectedPrices.length >= 7) confidence = 82;
+  if (selectedPrices.length >= 10) confidence = 92;
+
+  if (sameBucket.length >= 3) {
+    confidence += 8;
+  }
+
+  confidence = Math.min(95, confidence);
+
+  let confidenceLabel = "Low";
+  if (confidence >= 80) confidenceLabel = "High";
+  else if (confidence >= 55) confidenceLabel = "Medium";
+
+  return {
+    pricingMode: "Auto comps estimate",
+    targetBucket,
+    searchCount: items.length,
+    matchedCount: matched.length,
+    bucketMatchedCount: sameBucket.length,
+    compCount: selectedPrices.length,
+    prices: selectedPrices,
+    manualSoldPricesText: selectedPrices.join(", "),
+    avgPrice: selectedPrices.length ? getAverage(selectedPrices) : 0,
+    medianPrice: selectedPrices.length ? getMedian(selectedPrices) : 0,
+    minPrice: selectedPrices.length ? roundMoney(Math.min(...selectedPrices)) : 0,
+    maxPrice: selectedPrices.length ? roundMoney(Math.max(...selectedPrices)) : 0,
+    confidence,
+    confidenceLabel,
+    matchedItemsPreview: priced.slice(0, 8),
+  };
+}
+
 function scoreDealCandidate(item, scanner) {
   const totalBuyPrice = Number(scanner?.totalBuyPrice || 0);
   const estimatedResale = Number(scanner?.estimatedResale || 0);
@@ -640,7 +696,7 @@ function scoreDealCandidate(item, scanner) {
 
   const undervaluedAmount = roundMoney(estimatedResale - totalBuyPrice);
   const undervaluedPercent = estimatedResale > 0
-    ? (undervaluedAmount / estimatedResale) * 100
+    ? roundMoney((undervaluedAmount / estimatedResale) * 100)
     : 0;
 
   let riskPenalty = 0;
@@ -658,8 +714,8 @@ function scoreDealCandidate(item, scanner) {
   if (title.includes("boxed")) titleBonus += 1;
 
   let score =
-    (estimatedProfit * 1.8) +
-    (undervaluedPercent * 0.8) +
+    estimatedProfit * 1.8 +
+    undervaluedPercent * 0.8 +
     shippingBonus +
     titleBonus -
     riskPenalty;
@@ -668,8 +724,8 @@ function scoreDealCandidate(item, scanner) {
 
   return {
     dealScore: roundMoney(score),
-    undervaluedAmount: roundMoney(undervaluedAmount),
-    undervaluedPercent: roundMoney(undervaluedPercent),
+    undervaluedAmount,
+    undervaluedPercent,
   };
 }
 
@@ -692,7 +748,7 @@ function getDealReason(item, scanner, scored) {
 
   if (shipping === 0) reasons.push("free shipping helps margin");
   if (title.includes("unlocked")) reasons.push("unlocked stock usually resells better");
-  if (title.includes("excellent")) reasons.push("stronger resale signal from condition wording");
+  if (title.includes("excellent")) reasons.push("strong condition wording may support resale");
   if (risk === "Low") reasons.push("lower risk profile");
 
   if (!reasons.length) {
@@ -730,6 +786,7 @@ function buildFindDealsResults({ items, query, condition }) {
     })
     .map((item, index) => {
       let finderLabel = "Worth checking";
+
       if (index === 0 && Number(item.dealScore || 0) > 20) {
         finderLabel = "Best deal";
       } else if (Number(item?.scanner?.estimatedProfit || 0) < 0) {
@@ -745,6 +802,20 @@ function buildFindDealsResults({ items, query, condition }) {
     });
 
   return enriched;
+}
+
+function getUserFromCookie(req) {
+  try {
+    const token = req.cookies?.flipai_token;
+    if (!token) return null;
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = getUserById(decoded.userId);
+
+    return user || null;
+  } catch {
+    return null;
+  }
 }
 
 app.post(
@@ -773,7 +844,9 @@ app.post("/api/create-checkout-session", requireAuth, async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message || "Could not create checkout session." });
+    res
+      .status(500)
+      .json({ error: error.message || "Could not create checkout session." });
   }
 });
 
@@ -783,7 +856,9 @@ app.post("/api/create-portal-session", requireAuth, async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message || "Could not open billing portal." });
+    res
+      .status(500)
+      .json({ error: error.message || "Could not open billing portal." });
   }
 });
 
@@ -927,7 +1002,8 @@ app.post("/api/search-ebay", async (req, res) => {
       });
     }
 
-    const { query, limit, filterPriceMax, condition, freeShippingOnly } = req.body || {};
+    const { query, limit, filterPriceMax, condition, freeShippingOnly } =
+      req.body || {};
 
     if (!query || !String(query).trim()) {
       return res.status(400).json({
@@ -1009,7 +1085,10 @@ app.post("/api/find-deals", async (req, res) => {
       condition,
     });
 
-    const finalDeals = rankedDeals.slice(0, Math.max(1, Math.min(Number(topN || 8), 12)));
+    const finalDeals = rankedDeals.slice(
+      0,
+      Math.max(1, Math.min(Number(topN || 8), 12))
+    );
 
     return res.json({
       ok: true,
