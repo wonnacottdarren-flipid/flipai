@@ -1,31 +1,22 @@
 import fetch from "node-fetch";
 
-/**
- * FlipAI eBay module (FIXED + STABLE)
- * - Safe authentication
- * - Clean search queries
- * - Reliable fallback handling
- */
-
 const EBAY_APP_ID = process.env.EBAY_APP_ID;
 
 // -----------------------------
-// 1. CLEAN SEARCH QUERY
+// CLEAN QUERY (SMART VERSION)
 // -----------------------------
 function cleanQuery(query) {
   if (!query) return "";
 
   return query
     .toLowerCase()
-    .replace(/iphone/g, "iphone")
-    .replace(/gb|ram|unlocked|used|new|cracked|boxed/g, "")
     .replace(/[^a-z0-9\s]/gi, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 // -----------------------------
-// 2. MAIN SEARCH FUNCTION
+// MAIN SEARCH FUNCTION
 // -----------------------------
 export async function searchEbayListings({
   query,
@@ -35,12 +26,11 @@ export async function searchEbayListings({
 }) {
   try {
     if (!EBAY_APP_ID) {
-      throw new Error("Missing EBAY_APP_ID in environment variables");
+      throw new Error("Missing EBAY_APP_ID in .env");
     }
 
     const cleanedQuery = cleanQuery(query);
 
-    // Build eBay Finding API request
     const url = new URL("https://svcs.ebay.com/services/search/FindingService/v1");
 
     url.searchParams.append("OPERATION-NAME", "findItemsByKeywords");
@@ -49,77 +39,94 @@ export async function searchEbayListings({
     url.searchParams.append("RESPONSE-DATA-FORMAT", "JSON");
     url.searchParams.append("REST-PAYLOAD", "true");
 
+    // Use cleaned query but fallback if needed
     url.searchParams.append("keywords", cleanedQuery || query);
 
-    // Filters
-    const itemFilter = [];
+    // -----------------------------
+    // CORRECT FILTER FORMAT
+    // -----------------------------
+    let i = 0;
 
     if (maxPrice) {
-      itemFilter.push({
-        name: "MaxPrice",
-        value: maxPrice.toString(),
-        paramName: "Currency",
-        paramValue: "GBP",
-      });
+      url.searchParams.append(`itemFilter(${i}).name`, "MaxPrice");
+      url.searchParams.append(`itemFilter(${i}).value`, maxPrice.toString());
+      url.searchParams.append(`itemFilter(${i}).paramName`, "Currency");
+      url.searchParams.append(`itemFilter(${i}).paramValue`, "GBP");
+      i++;
     }
 
-    if (condition) {
-      const conditionMap = {
-        new: "1000",
-        used: "3000",
-        refurbished: "2000",
-      };
+    const conditionMap = {
+      new: "1000",
+      used: "3000",
+      refurbished: "2000",
+    };
 
-      if (conditionMap[condition]) {
-        itemFilter.push({
-          name: "Condition",
-          value: conditionMap[condition],
-        });
-      }
+    if (conditionMap[condition]) {
+      url.searchParams.append(`itemFilter(${i}).name`, "Condition");
+      url.searchParams.append(`itemFilter(${i}).value`, conditionMap[condition]);
+      i++;
     }
 
     if (freeShippingOnly) {
-      itemFilter.push({
-        name: "FreeShippingOnly",
-        value: "true",
-      });
-    }
-
-    if (itemFilter.length) {
-      url.searchParams.append("itemFilter", JSON.stringify(itemFilter));
+      url.searchParams.append(`itemFilter(${i}).name`, "FreeShippingOnly");
+      url.searchParams.append(`itemFilter(${i}).value`, "true");
+      i++;
     }
 
     url.searchParams.append("paginationInput.entriesPerPage", "20");
 
+    console.log("🔍 eBay search:", cleanedQuery || query);
+
     // -----------------------------
-    // 3. FETCH DATA
+    // FETCH
     // -----------------------------
     const res = await fetch(url.toString());
     const data = await res.json();
 
-    const items =
+    let items =
       data?.findItemsByKeywordsResponse?.[0]?.searchResult?.[0]?.item || [];
 
+    // -----------------------------
+    // FALLBACK IF NO RESULTS
+    // -----------------------------
+    if (!items.length && cleanedQuery !== query) {
+      console.log("⚠️ No results, retrying with original query...");
+
+      url.searchParams.set("keywords", query);
+
+      const retryRes = await fetch(url.toString());
+      const retryData = await retryRes.json();
+
+      items =
+        retryData?.findItemsByKeywordsResponse?.[0]?.searchResult?.[0]?.item || [];
+    }
+
     if (!items.length) {
+      console.log("❌ No eBay results found");
       return [];
     }
 
     // -----------------------------
-    // 4. NORMALISE OUTPUT
+    // NORMALISE
     // -----------------------------
     return items.map((item) => ({
       title: item.title?.[0] || "Unknown",
-      price: parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || 0),
-      currency: item.sellingStatus?.[0]?.currentPrice?.[0]?.["@currencyId"] || "GBP",
+      price: parseFloat(
+        item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || 0
+      ),
+      currency:
+        item.sellingStatus?.[0]?.currentPrice?.[0]?.["@currencyId"] || "GBP",
       url: item.viewItemURL?.[0] || "",
-      condition: item.condition?.[0]?.conditionDisplayName?.[0] || "Unknown",
-      shipping:
-        item.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__ || "0",
+      condition:
+        item.condition?.[0]?.conditionDisplayName?.[0] || "Unknown",
+      shipping: parseFloat(
+        item.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__ || 0
+      ),
       location: item.location?.[0] || "UK",
       image: item.galleryURL?.[0] || "",
     }));
   } catch (error) {
-    console.error("eBay API error:", error.message);
+    console.error("❌ eBay API error:", error.message);
     return [];
   }
 }
