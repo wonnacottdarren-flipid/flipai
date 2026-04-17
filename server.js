@@ -337,7 +337,12 @@ function buildAutoCompSearchQuery(product, condition) {
     }
   }
 
-  if (conditionText.includes("unlocked") && !query.toLowerCase().includes("unlocked")) {
+  if (
+    (conditionText.includes("unlocked") ||
+      conditionText.includes("sim free") ||
+      conditionText.includes("sim-free")) &&
+    !query.toLowerCase().includes("unlocked")
+  ) {
     query += " unlocked";
   }
 
@@ -565,6 +570,68 @@ function iphoneFamilyMatches(title, product) {
   }
 
   return true;
+}
+
+function titleCountsAsUnlocked(text) {
+  const value = normalizeText(text);
+  return (
+    value.includes("unlocked") ||
+    value.includes("sim free") ||
+    value.includes("sim-free") ||
+    value.includes("network free")
+  );
+}
+
+function extractBatteryPercent(text) {
+  const value = normalizeText(text);
+  const match = value.match(/\b(\d{2,3})\s?%\s?battery\b/);
+  if (!match) return null;
+  return Number(match[1]);
+}
+
+function isBadIphoneMarketComp(itemTitle, queryText = "") {
+  const title = normalizeText(itemTitle);
+  const query = normalizeText(queryText);
+
+  const bannedTerms = [
+    "no face id",
+    "face id not working",
+    "face id faulty",
+    "faceid faulty",
+    "grade c",
+    "grade d",
+    "grade b minus",
+    "cracked",
+    "faulty",
+    "spares",
+    "parts",
+    "for parts",
+    "for repair",
+    "not working",
+    "screen burn",
+    "ic locked",
+    "icloud locked",
+    "mdm locked",
+    "network locked",
+    "battery service",
+    "non genuine",
+    "read description",
+  ];
+
+  if (bannedTerms.some((term) => title.includes(term))) {
+    return true;
+  }
+
+  const batteryPercent = extractBatteryPercent(title);
+  if (batteryPercent !== null && batteryPercent < 84) {
+    return true;
+  }
+
+  if (query.includes("unlocked") && !titleCountsAsUnlocked(title)) {
+    return true;
+  }
+
+  return false;
 }
 
 function getConsoleFamily(text) {
@@ -885,6 +952,29 @@ function itemMatchesProduct(itemTitle, product, condition) {
     return true;
   }
 
+  if (category === "iphone") {
+    const storageTokens = extractStorageTokens(productText);
+    const matchedStorageTokens = storageTokens.filter((token) =>
+      title.includes(token.replace(/\s+/g, ""))
+    );
+
+    const requiresUnlocked =
+      productText.includes("unlocked") ||
+      conditionText.includes("unlocked") ||
+      conditionText.includes("sim free") ||
+      conditionText.includes("sim-free");
+
+    if (storageTokens.length > 0 && matchedStorageTokens.length === 0) {
+      return false;
+    }
+
+    if (requiresUnlocked && !titleCountsAsUnlocked(title)) {
+      return false;
+    }
+
+    return true;
+  }
+
   const productTokens = extractEssentialTokens(productText);
   const storageTokens = extractStorageTokens(productText);
 
@@ -965,6 +1055,7 @@ function filterItemsForExactSearch(items, product, condition) {
 
 function buildAutoCompsFromItems({ items, product, condition }) {
   const targetBucket = detectConditionBucket(`${product} ${condition}`);
+  const category = detectProductCategory(`${product} ${condition}`);
 
   const matched = items.filter((item) =>
     itemMatchesProduct(item?.title || "", product, condition)
@@ -984,6 +1075,12 @@ function buildAutoCompsFromItems({ items, product, condition }) {
       const bucket = getItemBucket(item);
       return allowedBuckets.includes(bucket);
     });
+  }
+
+  if (category === "iphone") {
+    finalMatched = finalMatched.filter((item) =>
+      !isBadIphoneMarketComp(item?.title || "", product)
+    );
   }
 
   const priced = finalMatched
@@ -1058,6 +1155,7 @@ function buildConditionSignal(item) {
   else if (text.includes("90% battery")) multiplier += 0.025;
   else if (text.includes("89% battery")) multiplier += 0.02;
   else if (text.includes("88% battery")) multiplier += 0.015;
+  else if (text.includes("87% battery")) multiplier += 0.01;
 
   if (text.includes("cracked")) {
     multiplier -= 0.12;
@@ -1101,7 +1199,7 @@ function getCategoryResaleUplift(item, query = "") {
   }
 
   if (category === "iphone") {
-    return 1.08;
+    return 1.14;
   }
 
   if (category === "camera") {
@@ -1139,6 +1237,12 @@ function buildLiveMarketSnapshot({ items, query, condition }) {
   if (category === "console") {
     marketItems = marketItems.filter((item) =>
       !isBadConsoleMarketComp(item?.title || "", query)
+    );
+  }
+
+  if (category === "iphone") {
+    marketItems = marketItems.filter((item) =>
+      !isBadIphoneMarketComp(item?.title || "", query)
     );
   }
 
@@ -1387,7 +1491,7 @@ function getListingQualityScore(item) {
   const title = normalizeText(item?.title || "");
   let score = 0;
 
-  if (title.includes("unlocked")) score += 2;
+  if (title.includes("unlocked") || title.includes("sim free")) score += 2;
   if (title.includes("excellent")) score += 2;
   if (title.includes("very good")) score += 1;
   if (title.includes("fully working")) score += 2;
@@ -1402,6 +1506,16 @@ function getListingQualityScore(item) {
   if (title.includes("parts")) score -= 3;
   if (title.includes("cracked")) score -= 2;
   if (title.includes("locked")) score -= 3;
+  if (title.includes("no face id")) score -= 4;
+  if (title.includes("grade c")) score -= 3;
+  if (title.includes("grade d")) score -= 4;
+
+  const batteryPercent = extractBatteryPercent(title);
+  if (batteryPercent !== null) {
+    if (batteryPercent >= 90) score += 2;
+    else if (batteryPercent >= 86) score += 1;
+    else if (batteryPercent < 84) score -= 3;
+  }
 
   return score;
 }
@@ -1449,6 +1563,23 @@ function getSanityDecision(item, scanner) {
       return { passed: false, reason: "console_low_listing_quality" };
     }
     return { passed: true, reason: "passed_console_sanity" };
+  }
+
+  if (category === "iphone") {
+    if (compCount < 3) return { passed: false, reason: "iphone_low_comp_count" };
+    if (profit < 8 && margin < 4) {
+      return { passed: false, reason: "iphone_low_profit_and_margin" };
+    }
+    if (marketMedian > 0 && buyPrice > marketMedian * 1.03) {
+      return { passed: false, reason: "iphone_not_under_market_enough" };
+    }
+    if (risk === "High" && profit < 12 && margin < 6) {
+      return { passed: false, reason: "iphone_high_risk_low_reward" };
+    }
+    if (qualityScore < -1) {
+      return { passed: false, reason: "iphone_low_listing_quality" };
+    }
+    return { passed: true, reason: "passed_iphone_sanity" };
   }
 
   if (compCount < 3) return { passed: false, reason: "low_comp_count" };
@@ -1536,9 +1667,9 @@ function buildFindDealsResults({ candidateItems, marketPool, query, condition })
         finderLabel = "Strong margin";
       }
 
-      if (Number(item?.scanner?.estimatedProfit || 0) >= 25) {
+      if (Number(item?.scanner?.estimatedProfit || 0) >= 20) {
         finderLabel = "Buy now";
-      } else if (Number(item?.scanner?.estimatedProfit || 0) >= 10) {
+      } else if (Number(item?.scanner?.estimatedProfit || 0) >= 8) {
         finderLabel = "Strong margin";
       } else {
         finderLabel = "Worth checking";
