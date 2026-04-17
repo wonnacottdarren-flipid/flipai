@@ -810,6 +810,23 @@ function itemMatchesProduct(itemTitle, product, condition) {
     return false;
   }
 
+  const category = detectProductCategory(`${productText} ${conditionText}`);
+
+  // relaxed console matching so PS5/Xbox results do not get over-filtered
+  if (category === "console") {
+    const looksLikeConsole =
+      title.includes("ps5") ||
+      title.includes("playstation 5") ||
+      title.includes("xbox series x") ||
+      title.includes("xbox series s") ||
+      title.includes("nintendo switch") ||
+      title.includes("switch oled") ||
+      title.includes("switch lite");
+
+    if (!looksLikeConsole) return false;
+    return true;
+  }
+
   const productTokens = extractEssentialTokens(productText);
   const storageTokens = extractStorageTokens(productText);
 
@@ -1314,13 +1331,9 @@ function passesFlipperSanity(item, scanner) {
   if (isConsoleAccessoryOnly(title)) return false;
 
   if (compCount < 3) return false;
-
   if (profit < 15 && margin < 10) return false;
-
   if (marketMedian > 0 && buyPrice > marketMedian * 0.9) return false;
-
   if (risk === "High" && profit < 22 && margin < 14) return false;
-
   if (qualityScore < -1) return false;
 
   if (
@@ -1445,9 +1458,9 @@ app.post("/api/create-checkout-session", requireAuth, async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({ error: error.message || "Could not create checkout session." });
+    res.status(500).json({
+      error: error.message || "Could not create checkout session.",
+    });
   }
 });
 
@@ -1457,9 +1470,9 @@ app.post("/api/create-portal-session", requireAuth, async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({ error: error.message || "Could not open billing portal." });
+    res.status(500).json({
+      error: error.message || "Could not open billing portal.",
+    });
   }
 });
 
