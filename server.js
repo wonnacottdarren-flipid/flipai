@@ -149,23 +149,14 @@ function getCompConfidenceAdjustment(soldComps) {
 
   let multiplier = 1;
 
-  if (compCount <= 2) {
-    multiplier = 0.95;
-  } else if (compCount <= 4) {
-    multiplier = 0.98;
-  } else if (compCount <= 6) {
-    multiplier = 0.99;
-  } else {
-    multiplier = 1.0;
-  }
+  if (compCount <= 2) multiplier = 0.95;
+  else if (compCount <= 4) multiplier = 0.98;
+  else if (compCount <= 6) multiplier = 0.99;
+  else multiplier = 1.0;
 
-  if (confidence >= 85) {
-    multiplier += 0.01;
-  } else if (confidence >= 70) {
-    multiplier += 0.005;
-  } else if (confidence < 45) {
-    multiplier -= 0.01;
-  }
+  if (confidence >= 85) multiplier += 0.01;
+  else if (confidence >= 70) multiplier += 0.005;
+  else if (confidence < 45) multiplier -= 0.01;
 
   if (multiplier > 1.0) multiplier = 1.0;
   if (multiplier < 0.93) multiplier = 0.93;
@@ -239,11 +230,8 @@ function calculateFlipMetrics({
   const profit = roundMoney(estimatedResale - totalCost - ebayFees);
 
   let verdict = "AVOID ❌";
-  if (profit >= 25) {
-    verdict = "GOOD DEAL ✅";
-  } else if (profit >= 8) {
-    verdict = "OK DEAL ⚠️";
-  }
+  if (profit >= 25) verdict = "GOOD DEAL ✅";
+  else if (profit >= 8) verdict = "OK DEAL ⚠️";
 
   return {
     estimatedResale: roundMoney(estimatedResale),
@@ -484,7 +472,6 @@ function detectConditionBucket(text) {
     return "new";
   }
 
-  // Grade A/B/C remains USED unless refurb wording is explicitly present
   return "used";
 }
 
@@ -509,6 +496,44 @@ function isBadCompTitle(title) {
   return banned.some((term) => text.includes(term));
 }
 
+function getIphoneModelFamily(text) {
+  const value = normalizeText(text);
+  const match = value.match(/\biphone\s+(\d{1,2})(?:\s+(pro max|pro|plus|mini))?\b/);
+  if (!match) return null;
+
+  return {
+    number: match[1],
+    variant: match[2] || "",
+  };
+}
+
+function iphoneFamilyMatches(title, product) {
+  const titleFamily = getIphoneModelFamily(title);
+  const productFamily = getIphoneModelFamily(product);
+
+  if (!productFamily) return true;
+  if (!titleFamily) return false;
+
+  if (titleFamily.number !== productFamily.number) {
+    return false;
+  }
+
+  const wantedVariant = productFamily.variant;
+  const gotVariant = titleFamily.variant;
+
+  // If user wants plain iPhone 12, reject Pro / Pro Max / Mini / Plus
+  if (!wantedVariant && gotVariant) {
+    return false;
+  }
+
+  // If user wants a variant, require exact variant
+  if (wantedVariant && wantedVariant !== gotVariant) {
+    return false;
+  }
+
+  return true;
+}
+
 function itemMatchesProduct(itemTitle, product, condition) {
   const title = normalizeText(itemTitle);
   const productText = normalizeText(product);
@@ -516,6 +541,13 @@ function itemMatchesProduct(itemTitle, product, condition) {
 
   if (!title) return false;
   if (isBadCompTitle(title)) return false;
+
+  // Tight iPhone family matching
+  if (productText.includes("iphone")) {
+    if (!iphoneFamilyMatches(title, productText)) {
+      return false;
+    }
+  }
 
   const productTokens = extractEssentialTokens(productText);
   const storageTokens = extractStorageTokens(productText);
@@ -696,9 +728,7 @@ app.post("/api/create-checkout-session", requireAuth, async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({ error: error.message || "Could not create checkout session." });
+    res.status(500).json({ error: error.message || "Could not create checkout session." });
   }
 });
 
@@ -708,9 +738,7 @@ app.post("/api/create-portal-session", requireAuth, async (req, res) => {
     res.json({ url });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({ error: error.message || "Could not open billing portal." });
+    res.status(500).json({ error: error.message || "Could not open billing portal." });
   }
 });
 
@@ -854,8 +882,7 @@ app.post("/api/search-ebay", async (req, res) => {
       });
     }
 
-    const { query, limit, filterPriceMax, condition, freeShippingOnly } =
-      req.body || {};
+    const { query, limit, filterPriceMax, condition, freeShippingOnly } = req.body || {};
 
     if (!query || !String(query).trim()) {
       return res.status(400).json({
