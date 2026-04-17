@@ -662,9 +662,53 @@ function isConsoleAccessoryOnly(title) {
     "no console",
     "dualsense box only",
     "controller box only",
+    "disc drive",
+    "dvd disc drive",
+    "drive only",
+    "replacement drive",
+    "disc-free",
   ];
 
   return badTerms.some((term) => t.includes(term));
+}
+
+function isBadConsoleMarketComp(itemTitle, queryText = "") {
+  const title = normalizeText(itemTitle);
+  const query = normalizeText(queryText);
+
+  if (!title) return true;
+  if (isConsoleAccessoryOnly(title)) return true;
+
+  const banned = [
+    "disc drive",
+    "dvd disc drive",
+    "drive only",
+    "replacement drive",
+    "laser lens",
+    "for ps5 cfi",
+    "faceplate",
+    "cover plate",
+    "shell only",
+    "controller only",
+    "console not included",
+    "box only",
+    "packaging only",
+    "disc-free",
+  ];
+
+  if (banned.some((term) => title.includes(term))) {
+    return true;
+  }
+
+  if (query.includes("disc") && title.includes("digital")) {
+    return true;
+  }
+
+  if (query.includes("digital") && (title.includes("disc") || title.includes("disk"))) {
+    return true;
+  }
+
+  return false;
 }
 
 function getDysonFamily(text) {
@@ -837,6 +881,7 @@ function itemMatchesProduct(itemTitle, product, condition) {
       title.includes("switch lite");
 
     if (!looksLikeConsole) return false;
+    if (isBadConsoleMarketComp(title, productText)) return false;
     return true;
   }
 
@@ -1047,8 +1092,33 @@ function buildConditionSignal(item) {
   };
 }
 
+function getCategoryResaleUplift(item, query = "") {
+  const text = normalizeText(`${item?.title || ""} ${query || ""}`);
+  const category = detectProductCategory(text);
+
+  if (category === "console") {
+    return 1.12;
+  }
+
+  if (category === "iphone") {
+    return 1.08;
+  }
+
+  if (category === "camera") {
+    return 1.07;
+  }
+
+  if (category === "dyson") {
+    return 1.09;
+  }
+
+  return 1.05;
+}
+
 function buildLiveMarketSnapshot({ items, query, condition }) {
   const targetBucket = detectConditionBucket(`${query} ${condition}`);
+  const category = detectProductCategory(`${query} ${condition}`);
+
   const exactItems = filterItemsForExactSearch(items, query, condition || "");
 
   const sameBucket = exactItems.filter((item) => {
@@ -1064,6 +1134,12 @@ function buildLiveMarketSnapshot({ items, query, condition }) {
       const bucket = getItemBucket(item, condition || "");
       return allowedBuckets.includes(bucket);
     });
+  }
+
+  if (category === "console") {
+    marketItems = marketItems.filter((item) =>
+      !isBadConsoleMarketComp(item?.title || "", query)
+    );
   }
 
   const priced = marketItems
@@ -1103,7 +1179,7 @@ function buildItemLiveCompPrices(snapshot, itemIdToExclude) {
   return selectCompPrices(prices);
 }
 
-function buildScannerMetricsFromLiveMarket(item, snapshot) {
+function buildScannerMetricsFromLiveMarket(item, snapshot, query = "") {
   const itemPrice = Number(item?.price || 0);
   const shipping = Number(item?.shipping || 0);
   const totalBuyPrice = roundMoney(itemPrice + shipping);
@@ -1116,11 +1192,14 @@ function buildScannerMetricsFromLiveMarket(item, snapshot) {
   const marketAverage = fallbackPrices.length ? getAverage(fallbackPrices) : 0;
 
   const signal = buildConditionSignal(item);
+  const resaleUplift = getCategoryResaleUplift(item, query);
 
   let conservativeBase = marketMedian || marketAverage || 0;
   if (!conservativeBase && totalBuyPrice > 0) {
     conservativeBase = roundMoney(totalBuyPrice * 1.18);
   }
+
+  conservativeBase = roundMoney(conservativeBase * resaleUplift);
 
   const estimatedResale = roundMoney(
     conservativeBase * Number(signal.resaleMultiplier || 1)
@@ -1184,6 +1263,7 @@ function buildScannerMetricsFromLiveMarket(item, snapshot) {
     compCount: fallbackPrices.length,
     compPrices: fallbackPrices,
     pricingMode: "Conservative live comps",
+    resaleUplift,
   };
 }
 
@@ -1356,13 +1436,13 @@ function getSanityDecision(item, scanner) {
 
   if (category === "console") {
     if (compCount < 2) return { passed: false, reason: "console_low_comp_count" };
-    if (profit < 8 && margin < 5) {
+    if (profit < 5 && margin < 3) {
       return { passed: false, reason: "console_low_profit_and_margin" };
     }
-    if (marketMedian > 0 && buyPrice > marketMedian * 0.98) {
+    if (marketMedian > 0 && buyPrice > marketMedian * 1.02) {
       return { passed: false, reason: "console_not_under_market_enough" };
     }
-    if (risk === "High" && profit < 14 && margin < 8) {
+    if (risk === "High" && profit < 10 && margin < 6) {
       return { passed: false, reason: "console_high_risk_low_reward" };
     }
     if (qualityScore < -2) {
@@ -1413,7 +1493,7 @@ function buildFindDealsResults({ candidateItems, marketPool, query, condition })
 
   const scoredCandidates = exactCandidates
     .map((item) => {
-      const scanner = buildScannerMetricsFromLiveMarket(item, snapshot);
+      const scanner = buildScannerMetricsFromLiveMarket(item, snapshot, query);
       const scored = scoreDealCandidate(item, scanner);
       const reason = getDealReason(item, scanner, scored);
       const sanity = getSanityDecision(item, scanner);
@@ -1458,7 +1538,7 @@ function buildFindDealsResults({ candidateItems, marketPool, query, condition })
 
       if (Number(item?.scanner?.estimatedProfit || 0) >= 25) {
         finderLabel = "Buy now";
-      } else if (Number(item?.scanner?.estimatedProfit || 0) >= 14) {
+      } else if (Number(item?.scanner?.estimatedProfit || 0) >= 10) {
         finderLabel = "Strong margin";
       } else {
         finderLabel = "Worth checking";
@@ -1485,6 +1565,7 @@ function buildFindDealsResults({ candidateItems, marketPool, query, condition })
       compCount: item?.scanner?.compCount ?? 0,
       marketMedian: item?.scanner?.marketMedian ?? 0,
       risk: item?.scanner?.risk ?? "",
+      resaleUplift: item?.scanner?.resaleUplift ?? 1,
       sanityReason: item.sanityReason,
     }));
 
@@ -1743,7 +1824,7 @@ app.post("/api/search-ebay", async (req, res) => {
     const scannedItems = exactItems
       .map((item) => ({
         ...item,
-        scanner: buildScannerMetricsFromLiveMarket(item, snapshot),
+        scanner: buildScannerMetricsFromLiveMarket(item, snapshot, query),
       }))
       .sort((a, b) => {
         return (
