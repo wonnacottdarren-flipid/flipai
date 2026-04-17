@@ -1326,7 +1326,7 @@ function getListingQualityScore(item) {
   return score;
 }
 
-function passesFlipperSanity(item, scanner) {
+function getSanityDecision(item, scanner) {
   const title = String(item?.title || "");
   const titleText = normalizeText(title);
   const profit = Number(scanner?.estimatedProfit || 0);
@@ -1338,26 +1338,52 @@ function passesFlipperSanity(item, scanner) {
   const qualityScore = getListingQualityScore(item);
   const category = detectProductCategory(titleText);
 
-  if (!titleText) return false;
-
-  if (isTrapListingTitle(title)) return false;
-  if (isAccessoryOnlyTitle(title)) return false;
-  if (isConsoleAccessoryOnly(title)) return false;
-
-  if (category === "console") {
-    if (compCount < 2) return false;
-    if (profit < 8 && margin < 5) return false;
-    if (marketMedian > 0 && buyPrice > marketMedian * 0.98) return false;
-    if (risk === "High" && profit < 14 && margin < 8) return false;
-    if (qualityScore < -2) return false;
-    return true;
+  if (!titleText) {
+    return { passed: false, reason: "empty_title" };
   }
 
-  if (compCount < 3) return false;
-  if (profit < 15 && margin < 10) return false;
-  if (marketMedian > 0 && buyPrice > marketMedian * 0.9) return false;
-  if (risk === "High" && profit < 22 && margin < 14) return false;
-  if (qualityScore < -1) return false;
+  if (isTrapListingTitle(title)) {
+    return { passed: false, reason: "trap_listing" };
+  }
+
+  if (isAccessoryOnlyTitle(title)) {
+    return { passed: false, reason: "accessory_only" };
+  }
+
+  if (isConsoleAccessoryOnly(title)) {
+    return { passed: false, reason: "console_accessory_only" };
+  }
+
+  if (category === "console") {
+    if (compCount < 2) return { passed: false, reason: "console_low_comp_count" };
+    if (profit < 8 && margin < 5) {
+      return { passed: false, reason: "console_low_profit_and_margin" };
+    }
+    if (marketMedian > 0 && buyPrice > marketMedian * 0.98) {
+      return { passed: false, reason: "console_not_under_market_enough" };
+    }
+    if (risk === "High" && profit < 14 && margin < 8) {
+      return { passed: false, reason: "console_high_risk_low_reward" };
+    }
+    if (qualityScore < -2) {
+      return { passed: false, reason: "console_low_listing_quality" };
+    }
+    return { passed: true, reason: "passed_console_sanity" };
+  }
+
+  if (compCount < 3) return { passed: false, reason: "low_comp_count" };
+  if (profit < 15 && margin < 10) {
+    return { passed: false, reason: "low_profit_and_margin" };
+  }
+  if (marketMedian > 0 && buyPrice > marketMedian * 0.9) {
+    return { passed: false, reason: "not_under_market_enough" };
+  }
+  if (risk === "High" && profit < 22 && margin < 14) {
+    return { passed: false, reason: "high_risk_low_reward" };
+  }
+  if (qualityScore < -1) {
+    return { passed: false, reason: "low_listing_quality" };
+  }
 
   if (
     (titleText.includes("faulty") ||
@@ -1366,10 +1392,10 @@ function passesFlipperSanity(item, scanner) {
       titleText.includes("parts")) &&
     profit < 25
   ) {
-    return false;
+    return { passed: false, reason: "damaged_item_margin_too_small" };
   }
 
-  return true;
+  return { passed: true, reason: "passed_standard_sanity" };
 }
 
 function buildFindDealsResults({ candidateItems, marketPool, query, condition }) {
@@ -1385,11 +1411,12 @@ function buildFindDealsResults({ candidateItems, marketPool, query, condition })
     condition || ""
   );
 
-  const deals = exactCandidates
+  const scoredCandidates = exactCandidates
     .map((item) => {
       const scanner = buildScannerMetricsFromLiveMarket(item, snapshot);
       const scored = scoreDealCandidate(item, scanner);
       const reason = getDealReason(item, scanner, scored);
+      const sanity = getSanityDecision(item, scanner);
 
       return {
         ...item,
@@ -1399,12 +1426,16 @@ function buildFindDealsResults({ candidateItems, marketPool, query, condition })
         undervaluedPercent: scored.undervaluedPercent,
         reason,
         marketBucket: getItemBucket(item, condition || ""),
-        sanityPassed: passesFlipperSanity(item, scanner),
+        sanityPassed: sanity.passed,
+        sanityReason: sanity.reason,
         listingQualityScore: getListingQualityScore(item),
       };
     })
-    .filter((item) => Number(item?.scanner?.estimatedResale || 0) > 0)
-    .filter((item) => item.sanityPassed === true)
+    .filter((item) => Number(item?.scanner?.estimatedResale || 0) > 0);
+
+  const passedSanity = scoredCandidates.filter((item) => item.sanityPassed === true);
+
+  const deals = passedSanity
     .sort((a, b) => {
       return (
         Number(b.dealScore || 0) - Number(a.dealScore || 0) ||
@@ -1439,9 +1470,45 @@ function buildFindDealsResults({ candidateItems, marketPool, query, condition })
       };
     });
 
+  const rejectedBySanity = scoredCandidates
+    .filter((item) => item.sanityPassed !== true)
+    .slice(0, 12)
+    .map((item) => ({
+      itemId: item.itemId,
+      title: item.title,
+      price: item.price,
+      shipping: item.shipping,
+      totalBuyPrice: item?.scanner?.totalBuyPrice ?? 0,
+      estimatedResale: item?.scanner?.estimatedResale ?? 0,
+      estimatedProfit: item?.scanner?.estimatedProfit ?? 0,
+      marginPercent: item?.scanner?.marginPercent ?? 0,
+      compCount: item?.scanner?.compCount ?? 0,
+      marketMedian: item?.scanner?.marketMedian ?? 0,
+      risk: item?.scanner?.risk ?? "",
+      sanityReason: item.sanityReason,
+    }));
+
   return {
     snapshot,
+    exactCandidates,
+    scoredCandidates,
     deals,
+    debug: {
+      fetchedCandidateItems: candidateItems.length,
+      fetchedMarketPoolItems: marketPool.length,
+      exactMatchCount: exactCandidates.length,
+      scoredCount: scoredCandidates.length,
+      sanityPassedCount: passedSanity.length,
+      sanityRejectedCount: scoredCandidates.length - passedSanity.length,
+      rejectedBySanityPreview: rejectedBySanity,
+      exactMatchPreview: exactCandidates.slice(0, 12).map((item) => ({
+        itemId: item.itemId,
+        title: item.title,
+        price: item.price,
+        shipping: item.shipping,
+        condition: item.condition,
+      })),
+    },
   };
 }
 
@@ -1758,6 +1825,7 @@ app.post("/api/find-deals", async (req, res) => {
       totalFetched: items.length,
       totalMatched: ranked.deals.length,
       marketSnapshot: ranked.snapshot,
+      debug: ranked.debug,
       deals: finalDeals,
     });
   } catch (error) {
