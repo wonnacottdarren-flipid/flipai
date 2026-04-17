@@ -268,6 +268,10 @@ function normalizeText(value) {
     .trim();
 }
 
+function containsPhrase(text, phrase) {
+  return normalizeText(text).includes(normalizeText(phrase));
+}
+
 function extractStorageTokens(text) {
   const matches = normalizeText(text).match(/\b(16|32|64|128|256|512|1024)\s?gb\b/g);
   return matches ? matches.map((m) => m.replace(/\s+/g, "")) : [];
@@ -305,11 +309,17 @@ function extractEssentialTokens(product) {
     "boxed",
     "unboxed",
     "gb",
+    "console",
+    "camera",
+    "vacuum",
+    "hoover",
+    "body",
+    "kit",
   ]);
 
   return words
     .filter((word) => word.length >= 2 && !stopWords.has(word))
-    .slice(0, 8);
+    .slice(0, 10);
 }
 
 function buildAutoCompSearchQuery(product, condition) {
@@ -411,13 +421,105 @@ function isBadCompTitle(title) {
     "cover only",
     "screen only",
     "housing only",
+    "replacement box",
+    "manual only",
+    "charger only",
+    "remote only",
+    "dock only",
+    "stand only",
+    "filter only",
+    "battery only",
+    "head only",
+    "attachment only",
+    "wand only",
   ];
 
   return banned.some((term) => text.includes(term));
 }
 
+function isAccessoryOnlyTitle(text) {
+  const value = normalizeText(text);
+
+  const accessoryTerms = [
+    "case only",
+    "cover only",
+    "screen protector",
+    "tempered glass",
+    "controller only",
+    "remote only",
+    "charger only",
+    "cable only",
+    "dock only",
+    "stand only",
+    "box only",
+    "manual only",
+    "battery only",
+    "attachment only",
+    "tool only",
+    "filter only",
+    "wand only",
+    "head only",
+    "accessories only",
+    "for parts only",
+  ];
+
+  return accessoryTerms.some((term) => value.includes(term));
+}
+
+function detectProductCategory(text) {
+  const value = normalizeText(text);
+
+  if (value.includes("iphone")) return "iphone";
+
+  if (
+    value.includes("ps5") ||
+    value.includes("playstation 5") ||
+    value.includes("xbox series x") ||
+    value.includes("xbox series s") ||
+    value.includes("nintendo switch") ||
+    value.includes("switch oled") ||
+    value.includes("switch lite")
+  ) {
+    return "console";
+  }
+
+  if (
+    value.includes("dyson v8") ||
+    value.includes("dyson v10") ||
+    value.includes("dyson v11") ||
+    value.includes("dyson v12") ||
+    value.includes("dyson v15") ||
+    value.includes("dyson gen5")
+  ) {
+    return "dyson";
+  }
+
+  if (
+    value.includes("canon eos") ||
+    value.includes("nikon d") ||
+    value.includes("sony a") ||
+    value.includes("lumix") ||
+    value.includes("fujifilm x") ||
+    value.includes("camera") ||
+    value.includes("lens")
+  ) {
+    return "camera";
+  }
+
+  return "generic";
+}
+
 function getIphoneModelFamily(text) {
   const value = normalizeText(text);
+
+  if (value.includes("iphone se 2022") || value.includes("iphone se 3")) {
+    return { number: "se", variant: "2022" };
+  }
+
+  if (value.includes("iphone se 2020") || value.includes("iphone se 2")) {
+    return { number: "se", variant: "2020" };
+  }
+
   const match = value.match(/\biphone\s+(\d{1,2})(?:\s+(pro max|pro|plus|mini))?\b/);
   if (!match) return null;
 
@@ -452,6 +554,229 @@ function iphoneFamilyMatches(title, product) {
   return true;
 }
 
+function getConsoleFamily(text) {
+  const value = normalizeText(text);
+
+  if (value.includes("playstation 5") || value.includes("ps5")) {
+    let edition = "unknown";
+    if (value.includes("digital")) edition = "digital";
+    else if (value.includes("disc") || value.includes("disk")) edition = "disc";
+    return { family: "ps5", edition };
+  }
+
+  if (value.includes("xbox series x")) {
+    return { family: "xbox_series_x", edition: "" };
+  }
+
+  if (value.includes("xbox series s")) {
+    return { family: "xbox_series_s", edition: "" };
+  }
+
+  if (value.includes("switch oled")) {
+    return { family: "switch_oled", edition: "" };
+  }
+
+  if (value.includes("switch lite")) {
+    return { family: "switch_lite", edition: "" };
+  }
+
+  if (value.includes("nintendo switch") || value.includes(" switch ")) {
+    return { family: "switch_standard", edition: "" };
+  }
+
+  return null;
+}
+
+function consoleFamilyMatches(title, product) {
+  const wanted = getConsoleFamily(product);
+  const got = getConsoleFamily(title);
+
+  if (!wanted) return true;
+  if (!got) return false;
+  if (wanted.family !== got.family) return false;
+
+  if (wanted.family === "ps5") {
+    if (wanted.edition === "digital" && got.edition !== "digital") return false;
+    if (wanted.edition === "disc" && got.edition !== "disc") return false;
+  }
+
+  return true;
+}
+
+function isConsoleBundleMismatch(title, product) {
+  const t = normalizeText(title);
+  const p = normalizeText(product);
+
+  const titleHasBundle = t.includes("bundle");
+  const productHasBundle = p.includes("bundle");
+
+  if (productHasBundle !== titleHasBundle) return true;
+
+  return false;
+}
+
+function isConsoleAccessoryOnly(title) {
+  const t = normalizeText(title);
+
+  const badTerms = [
+    "controller only",
+    "console not included",
+    "for controller",
+    "faceplate",
+    "cover only",
+    "dock only",
+    "stand only",
+    "remote only",
+    "charger only",
+    "cable only",
+  ];
+
+  return badTerms.some((term) => t.includes(term));
+}
+
+function getDysonFamily(text) {
+  const value = normalizeText(text);
+
+  const models = ["gen5", "v15", "v12", "v11", "v10", "v8", "v7", "dc62", "dc59"];
+  for (const model of models) {
+    if (value.includes(`dyson ${model}`) || value.includes(` ${model} `)) {
+      return model;
+    }
+  }
+
+  return null;
+}
+
+function getDysonListingType(text) {
+  const value = normalizeText(text);
+
+  if (
+    value.includes("body only") ||
+    value.includes("main body only") ||
+    value.includes("motor unit only")
+  ) {
+    return "body_only";
+  }
+
+  if (
+    value.includes("attachments only") ||
+    value.includes("tools only") ||
+    value.includes("wand only") ||
+    value.includes("head only")
+  ) {
+    return "accessories_only";
+  }
+
+  return "full_kit";
+}
+
+function dysonFamilyMatches(title, product) {
+  const wanted = getDysonFamily(product);
+  const got = getDysonFamily(title);
+
+  if (!wanted) return true;
+  if (!got) return false;
+  return wanted === got;
+}
+
+function dysonTypeMatches(title, product) {
+  const wanted = getDysonListingType(product);
+  const got = getDysonListingType(title);
+
+  if (got === "accessories_only") return false;
+  if (wanted === "body_only") return got === "body_only";
+  if (wanted === "full_kit") return got === "full_kit";
+  return true;
+}
+
+function getCameraFamily(text) {
+  const value = normalizeText(text);
+
+  const patterns = [
+    /\bcanon eos\s+\d{2,4}d\b/,
+    /\bcanon eos\s+r\d+\b/,
+    /\bsony a\d{3,4}\b/,
+    /\bnikon d\d{3,4}\b/,
+    /\bnikon z\d{1,2}\b/,
+    /\bfujifilm x[\w-]+\b/,
+    /\blumix [\w-]+\b/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    if (match) return match[0];
+  }
+
+  return null;
+}
+
+function getCameraItemType(text) {
+  const value = normalizeText(text);
+
+  const hasLens = value.includes(" lens");
+  const hasBody = value.includes(" body") || value.includes("body only");
+  const hasKit = value.includes("kit") || value.includes("with lens");
+
+  if (hasLens && !value.includes("camera")) return "lens_only";
+  if (hasBody) return "body_only";
+  if (hasKit) return "kit";
+  return "camera_or_body";
+}
+
+function cameraFamilyMatches(title, product) {
+  const wanted = getCameraFamily(product);
+  const got = getCameraFamily(title);
+
+  if (!wanted) return true;
+  if (!got) return false;
+
+  return got === wanted;
+}
+
+function cameraTypeMatches(title, product) {
+  const wanted = getCameraItemType(product);
+  const got = getCameraItemType(title);
+
+  if (got === "lens_only") return false;
+  if (wanted === "body_only") return got === "body_only" || got === "camera_or_body";
+  if (wanted === "kit") return got === "kit";
+  return got !== "lens_only";
+}
+
+function productCategorySpecificMatch(itemTitle, product, condition) {
+  const category = detectProductCategory(`${product} ${condition}`);
+  const title = normalizeText(itemTitle);
+  const productText = normalizeText(product);
+
+  if (isAccessoryOnlyTitle(title)) return false;
+
+  if (category === "iphone") {
+    if (!iphoneFamilyMatches(title, productText)) return false;
+    return true;
+  }
+
+  if (category === "console") {
+    if (!consoleFamilyMatches(title, productText)) return false;
+    if (isConsoleAccessoryOnly(title)) return false;
+    if (isConsoleBundleMismatch(title, productText)) return false;
+    return true;
+  }
+
+  if (category === "dyson") {
+    if (!dysonFamilyMatches(title, productText)) return false;
+    if (!dysonTypeMatches(title, productText)) return false;
+    return true;
+  }
+
+  if (category === "camera") {
+    if (!cameraFamilyMatches(title, productText)) return false;
+    if (!cameraTypeMatches(title, productText)) return false;
+    return true;
+  }
+
+  return true;
+}
+
 function itemMatchesProduct(itemTitle, product, condition) {
   const title = normalizeText(itemTitle);
   const productText = normalizeText(product);
@@ -460,10 +785,8 @@ function itemMatchesProduct(itemTitle, product, condition) {
   if (!title) return false;
   if (isBadCompTitle(title)) return false;
 
-  if (productText.includes("iphone")) {
-    if (!iphoneFamilyMatches(title, productText)) {
-      return false;
-    }
+  if (!productCategorySpecificMatch(title, productText, conditionText)) {
+    return false;
   }
 
   const productTokens = extractEssentialTokens(productText);
@@ -485,7 +808,11 @@ function itemMatchesProduct(itemTitle, product, condition) {
     return false;
   }
 
-  if (productTokens.length >= 3 && matchedCoreTokens.length < 1) {
+  if (productTokens.length >= 4 && matchedCoreTokens.length < 2) {
+    return false;
+  }
+
+  if (productTokens.length >= 2 && matchedCoreTokens.length < 1) {
     return false;
   }
 
