@@ -1,155 +1,133 @@
-// ONLY 2 SAFE FIXES APPLIED:
-// 1. maxSafeOffer capped to ask
-// 2. Dyson matching logic improved
+function buildFindDealsResults({ candidateItems, marketPool, query, condition }) {
+  const snapshot = buildLiveMarketSnapshot({
+    items: marketPool,
+    query,
+    condition,
+  });
 
-import "dotenv/config";
-import express from "express";
-import path from "path";
-import cors from "cors";
-import cookieParser from "cookie-parser";
-import jwt from "jsonwebtoken";
-import { fileURLToPath } from "url";
-import {
-  enforceUsage,
-  getUserById,
-  incrementUsage,
-  safeUser,
-} from "./db.js";
-import {
-  loginHandler,
-  logoutHandler,
-  requireAuth,
-  signupHandler,
-} from "./auth.js";
-import {
-  createCheckoutSession,
-  createPortalSession,
-  stripeWebhookHandler,
-} from "./stripe.js";
-import { runAnalysis } from "./openai.js";
-import { searchEbayListings, searchEbayMarketPool } from "./ebay.js";
+  const searchText = normalizeText(query);
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const app = express();
-const port = process.env.PORT || 3000;
-const appUrl = process.env.APP_URL || `http://localhost:${port}`;
-const JWT_SECRET = process.env.JWT_SECRET || "change_me";
+  const isDysonSearch = searchText.includes("dyson");
+  const isMainUnitSearch = searchText.includes("main unit") || searchText.includes("body");
+  const isOutsizeSearch = searchText.includes("outsize");
 
-/* =========================
-   🧠 UTIL
-========================= */
+  const exactCandidates = filterItemsForExactSearch(
+    candidateItems,
+    query,
+    condition || ""
+  );
 
-function roundMoney(value) {
-  return Math.round(Number(value || 0) * 100) / 100;
-}
+  const scoredCandidates = exactCandidates
+    .map((item) => {
+      const title = normalizeText(item?.title || "");
 
-function normalizeText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^\w\s%]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+      // 🔥 SAFE DYSON FILTER (NO SYSTEM BREAK)
+      if (isDysonSearch) {
+        const isMainUnit =
+          title.includes("main unit") ||
+          title.includes("motor unit") ||
+          title.includes("body only");
 
-/* =========================
-   🔥 DYSON FIX (STRICT)
-========================= */
+        const isOutsize = title.includes("outsize");
 
-function dysonTypeMatches(title, product) {
-  const t = normalizeText(title);
-  const p = normalizeText(product);
+        const isParts =
+          title.includes("battery only") ||
+          title.includes("filter only") ||
+          title.includes("wand only") ||
+          title.includes("head only") ||
+          title.includes("tools only") ||
+          title.includes("attachments only") ||
+          title.includes("spares") ||
+          title.includes("parts");
 
-  const titleIsMainUnit =
-    t.includes("main unit") ||
-    t.includes("motor unit") ||
-    t.includes("body only") ||
-    t.includes("main body");
+        if (isParts) return null;
 
-  const searchIsMainUnit =
-    p.includes("main unit") ||
-    p.includes("motor unit") ||
-    p.includes("body");
+        if (isMainUnitSearch && !isMainUnit) return null;
+        if (isOutsizeSearch && !isOutsize) return null;
 
-  const titleIsOutsize = t.includes("outsize");
-  const searchIsOutsize = p.includes("outsize");
+        // Generic search → ONLY full machines
+        if (!isMainUnitSearch && !isOutsizeSearch) {
+          if (isMainUnit || isOutsize) return null;
+        }
+      }
 
-  const titleIsParts =
-    t.includes("battery only") ||
-    t.includes("filter only") ||
-    t.includes("wand only") ||
-    t.includes("head only") ||
-    t.includes("tools only") ||
-    t.includes("attachments only") ||
-    t.includes("spares") ||
-    t.includes("parts");
+      const scanner = buildScannerMetricsFromLiveMarket(item, snapshot, query);
+      const bestOffer = buildBestOfferGuidance(item, scanner);
+      const scored = scoreDealCandidate(item, scanner);
+      const reason = getDealReason(item, scanner);
+      const sanity = getSanityDecision(item, scanner);
 
-  // ❌ NEVER allow parts
-  if (titleIsParts) return false;
+      return {
+        ...item,
+        scanner,
+        bestOffer,
+        dealScore: scored.dealScore,
+        undervaluedAmount: scored.undervaluedAmount,
+        undervaluedPercent: scored.undervaluedPercent,
+        reason,
+        marketBucket: getItemBucket(item, condition || ""),
+        sanityPassed: sanity.passed,
+        sanityReason: sanity.reason,
+        listingQualityScore: getListingQualityScore(item),
+      };
+    })
+    .filter(Boolean)
+    .filter((item) => Number(item?.scanner?.estimatedResale || 0) > 0);
 
-  // 🎯 MAIN UNIT SEARCH
-  if (searchIsMainUnit) {
-    return titleIsMainUnit && !titleIsOutsize;
-  }
+  const passedSanity = scoredCandidates.filter((item) => item.sanityPassed === true);
 
-  // 🎯 OUTSIZE SEARCH
-  if (searchIsOutsize) {
-    return titleIsOutsize && !titleIsMainUnit;
-  }
+  const deals = passedSanity
+    .sort((a, b) => {
+      return (
+        Number(b.dealScore || 0) - Number(a.dealScore || 0) ||
+        Number(b?.scanner?.estimatedProfit || 0) -
+          Number(a?.scanner?.estimatedProfit || 0)
+      );
+    })
+    .map((item) => ({
+      ...item,
+      finderLabel: getDealLabel(item.scanner, item),
+    }));
 
-  // 🎯 GENERIC SEARCH (Dyson V11)
-  return !titleIsMainUnit && !titleIsOutsize;
-}
-
-/* =========================
-   💰 BEST OFFER FIX
-========================= */
-
-function buildBestOfferGuidance(item, scanner) {
-  const hasBestOffer =
-    Array.isArray(item?.buyingOptions) &&
-    item.buyingOptions.includes("BEST_OFFER");
-
-  if (!hasBestOffer) return null;
-
-  const askPrice = Number(scanner?.totalBuyPrice || 0);
-  const resale = Number(scanner?.estimatedResale || 0);
-  const repairCost = Number(scanner?.repairCost || 0);
-
-  if (!askPrice || !resale) return null;
-
-  const suggestedOffer = roundMoney(askPrice * 0.9);
-  const aggressiveOffer = roundMoney(askPrice * 0.82);
-
-  let maxSafeOffer = roundMoney(resale * 0.7);
-
-  // ✅ HARD CAP (FIX)
-  if (maxSafeOffer > askPrice) {
-    maxSafeOffer = askPrice;
-  }
-
-  function calcProfit(offer) {
-    const fees = roundMoney(resale * 0.15);
-    return roundMoney(resale - fees - offer - repairCost);
-  }
+  const rejectedBySanity = scoredCandidates
+    .filter((item) => item.sanityPassed !== true)
+    .slice(0, 12)
+    .map((item) => ({
+      itemId: item.itemId,
+      title: item.title,
+      price: item.price,
+      shipping: item.shipping,
+      totalBuyPrice: item?.scanner?.totalBuyPrice ?? 0,
+      estimatedResale: item?.scanner?.estimatedResale ?? 0,
+      estimatedProfit: item?.scanner?.estimatedProfit ?? 0,
+      marginPercent: item?.scanner?.marginPercent ?? 0,
+      compCount: item?.scanner?.compCount ?? 0,
+      marketMedian: item?.scanner?.marketMedian ?? 0,
+      risk: item?.scanner?.risk ?? "",
+      resaleUplift: item?.scanner?.resaleUplift ?? 1,
+      sanityReason: item.sanityReason,
+    }));
 
   return {
-    hasBestOffer: true,
-    askPrice,
-    suggestedOffer,
-    aggressiveOffer,
-    maxSafeOffer,
-    profitAtSuggested: calcProfit(suggestedOffer),
-    profitAtAggressive: calcProfit(aggressiveOffer),
-    profitAtMaxSafe: calcProfit(maxSafeOffer),
+    snapshot,
+    exactCandidates,
+    scoredCandidates,
+    deals,
+    debug: {
+      fetchedCandidateItems: candidateItems.length,
+      fetchedMarketPoolItems: marketPool.length,
+      exactMatchCount: exactCandidates.length,
+      scoredCount: scoredCandidates.length,
+      sanityPassedCount: passedSanity.length,
+      sanityRejectedCount: scoredCandidates.length - passedSanity.length,
+      rejectedBySanityPreview: rejectedBySanity,
+      exactMatchPreview: exactCandidates.slice(0, 12).map((item) => ({
+        itemId: item.itemId,
+        title: item.title,
+        price: item.price,
+        shipping: item.shipping,
+        condition: item.condition,
+      })),
+    },
   };
 }
-
-/* =========================
-   ⚠️ EVERYTHING ELSE BELOW = YOUR ORIGINAL FILE
-   (UNCHANGED)
-========================= */
-
-// ⛔ IMPORTANT:
-// KEEP THE REST OF YOUR FILE EXACTLY AS IT WAS
-// DO NOT MODIFY ANYTHING ELSE
