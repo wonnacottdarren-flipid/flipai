@@ -21,6 +21,14 @@ function roundMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
+function normalizeText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function getEbayAccessToken() {
   const now = Date.now();
 
@@ -193,6 +201,115 @@ async function browseSearch({
   return items;
 }
 
+function uniqueByItemId(items) {
+  const seen = new Set();
+  const output = [];
+
+  for (const item of items) {
+    const key = item?.itemId || `${item?.title || ""}-${item?.price || 0}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(item);
+  }
+
+  return output;
+}
+
+function buildSearchVariants(query) {
+  const q = normalizeText(query);
+  const variants = [String(query).trim()];
+
+  if (q.includes("ps5 disc") || q.includes("playstation 5 disc")) {
+    variants.push("playstation 5 disc");
+    variants.push("playstation 5");
+    variants.push("ps5");
+  } else if (q.includes("ps5 digital") || q.includes("playstation 5 digital")) {
+    variants.push("playstation 5 digital");
+    variants.push("ps5 digital");
+    variants.push("playstation 5");
+  } else if (q.includes("ps5")) {
+    variants.push("playstation 5");
+    variants.push("ps5");
+  }
+
+  if (q.includes("xbox series x")) {
+    variants.push("xbox series x");
+    variants.push("series x");
+  }
+
+  if (q.includes("xbox series s")) {
+    variants.push("xbox series s");
+    variants.push("series s");
+  }
+
+  if (q.includes("canon eos")) {
+    variants.push(String(query).trim());
+  }
+
+  return [...new Set(variants.filter(Boolean))];
+}
+
+async function searchWithFallbacks({
+  query,
+  maxPrice,
+  condition,
+  freeShippingOnly = false,
+  limit = 20,
+  fixedPriceOnly = true,
+  allowConditionFallback = true,
+}) {
+  const variants = buildSearchVariants(query);
+  let combined = [];
+
+  for (const variant of variants) {
+    const results = await browseSearch({
+      query: variant,
+      maxPrice,
+      condition,
+      freeShippingOnly,
+      limit,
+      fixedPriceOnly,
+    });
+
+    combined = uniqueByItemId([...combined, ...results]);
+
+    if (combined.length >= limit) {
+      return combined.slice(0, limit);
+    }
+  }
+
+  if (combined.length > 0) {
+    return combined.slice(0, limit);
+  }
+
+  if (allowConditionFallback && condition) {
+    let fallbackCombined = [];
+
+    for (const variant of variants) {
+      const results = await browseSearch({
+        query: variant,
+        maxPrice,
+        condition: "",
+        freeShippingOnly,
+        limit,
+        fixedPriceOnly,
+      });
+
+      fallbackCombined = uniqueByItemId([...fallbackCombined, ...results]);
+
+      if (fallbackCombined.length >= limit) {
+        return fallbackCombined.slice(0, limit);
+      }
+    }
+
+    if (fallbackCombined.length > 0) {
+      return fallbackCombined.slice(0, limit);
+    }
+  }
+
+  return [];
+}
+
 export async function searchEbayListings({
   query,
   maxPrice,
@@ -200,13 +317,14 @@ export async function searchEbayListings({
   freeShippingOnly = false,
   limit = 20,
 }) {
-  return browseSearch({
+  return searchWithFallbacks({
     query,
     maxPrice,
     condition,
     freeShippingOnly,
     limit,
     fixedPriceOnly: true,
+    allowConditionFallback: true,
   });
 }
 
@@ -215,11 +333,12 @@ export async function searchEbayMarketPool({
   condition = "",
   limit = 50,
 }) {
-  return browseSearch({
+  return searchWithFallbacks({
     query,
     condition,
     limit: Math.min(Math.max(Number(limit) || 30, 1), 50),
     freeShippingOnly: false,
     fixedPriceOnly: true,
+    allowConditionFallback: true,
   });
 }
