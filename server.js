@@ -136,6 +136,49 @@ function buildManualSoldComps(input) {
   };
 }
 
+function getCompConfidenceAdjustment(soldComps) {
+  if (!soldComps?.connected || !Number(soldComps.compCount || 0)) {
+    return {
+      multiplier: 1,
+      reason: "no comps",
+    };
+  }
+
+  const compCount = Number(soldComps.compCount || 0);
+  const confidence = Number(soldComps.confidence || 0);
+
+  let multiplier = 1;
+
+  // First anchor to comp count
+  if (compCount <= 2) {
+    multiplier = 0.95;
+  } else if (compCount <= 4) {
+    multiplier = 0.98;
+  } else if (compCount <= 6) {
+    multiplier = 0.99;
+  } else {
+    multiplier = 1.0;
+  }
+
+  // Then refine by confidence
+  if (confidence >= 85) {
+    multiplier += 0.01;
+  } else if (confidence >= 70) {
+    multiplier += 0.005;
+  } else if (confidence < 45) {
+    multiplier -= 0.01;
+  }
+
+  // Keep safe bounds
+  if (multiplier > 1.0) multiplier = 1.0;
+  if (multiplier < 0.93) multiplier = 0.93;
+
+  return {
+    multiplier: roundMoney(multiplier),
+    reason: `compCount=${compCount}, confidence=${confidence}`,
+  };
+}
+
 function calculateFlipMetrics({
   buyPrice,
   repairCost,
@@ -152,9 +195,16 @@ function calculateFlipMetrics({
 
   let estimatedResale = 0;
   let pricingMode = "Estimated fallback model";
+  let confidenceAdjustment = null;
 
   if (soldComps.connected && soldComps.medianSoldPrice > 0) {
-    estimatedResale = soldComps.medianSoldPrice;
+    const adjustment = getCompConfidenceAdjustment(soldComps);
+    confidenceAdjustment = adjustment;
+
+    estimatedResale = roundMoney(
+      soldComps.medianSoldPrice * Number(adjustment.multiplier || 1)
+    );
+
     pricingMode = "Manual sold comps";
 
     if (goalText.includes("fast")) {
@@ -164,6 +214,8 @@ function calculateFlipMetrics({
       estimatedResale = roundMoney(estimatedResale * 1.03);
       pricingMode = "Manual sold comps (profit adjusted)";
     }
+
+    estimatedResale = Math.max(0, estimatedResale);
   } else {
     let multiplier = 2.0;
 
@@ -201,6 +253,7 @@ function calculateFlipMetrics({
     verdict,
     pricingMode,
     soldComps,
+    confidenceAdjustment,
   };
 }
 
