@@ -23,7 +23,7 @@ import {
   stripeWebhookHandler,
 } from "./stripe.js";
 import { runAnalysis } from "./openai.js";
-import { searchEbayListings } from "./ebay.js";
+import { searchEbayListings, searchEbayMarketPool } from "./ebay.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -257,147 +257,6 @@ function calculateFlipMetrics({
     pricingMode,
     soldComps,
     confidenceAdjustment,
-  };
-}
-
-function getScannerMultiplier(item) {
-  const title = String(item?.title || "").toLowerCase();
-  const condition = String(item?.condition || "").toLowerCase();
-  const buyingOptions = Array.isArray(item?.buyingOptions)
-    ? item.buyingOptions.join(" ").toLowerCase()
-    : "";
-
-  let multiplier = 1.48;
-
-  if (condition.includes("new")) multiplier = 1.85;
-  else if (condition.includes("refurb")) multiplier = 1.68;
-  else if (condition.includes("used")) multiplier = 1.56;
-
-  if (title.includes("unlocked")) multiplier += 0.1;
-  if (title.includes("excellent")) multiplier += 0.08;
-  if (title.includes("very good")) multiplier += 0.06;
-  if (title.includes("good condition")) multiplier += 0.04;
-  if (title.includes("boxed")) multiplier += 0.03;
-  if (title.includes("bundle")) multiplier += 0.05;
-  if (title.includes("fully working")) multiplier += 0.05;
-  if (title.includes("tested")) multiplier += 0.03;
-
-  if (title.includes("91% battery")) multiplier += 0.06;
-  else if (title.includes("90% battery")) multiplier += 0.05;
-  else if (title.includes("89% battery")) multiplier += 0.04;
-  else if (title.includes("88% battery")) multiplier += 0.03;
-  else if (title.includes("87% battery")) multiplier += 0.02;
-
-  if (title.includes("cracked")) multiplier -= 0.18;
-  if (title.includes("faulty")) multiplier -= 0.32;
-  if (title.includes("spares")) multiplier -= 0.42;
-  if (title.includes("parts")) multiplier -= 0.42;
-  if (title.includes("locked")) multiplier -= 0.22;
-  if (title.includes("for repair")) multiplier -= 0.3;
-  if (title.includes("not working")) multiplier -= 0.35;
-  if (buyingOptions.includes("auction")) multiplier -= 0.01;
-
-  if (multiplier < 1.05) multiplier = 1.05;
-  return roundMoney(multiplier);
-}
-
-function estimateRepairCostFromItem(item) {
-  const title = String(item?.title || "").toLowerCase();
-  const condition = String(item?.condition || "").toLowerCase();
-  const text = `${title} ${condition}`;
-
-  let repairCost = 0;
-
-  if (
-    text.includes("cracked") ||
-    text.includes("screen crack") ||
-    text.includes("cracked screen")
-  ) {
-    repairCost += 18;
-  }
-
-  if (
-    text.includes("faulty") ||
-    text.includes("for repair") ||
-    text.includes("not working")
-  ) {
-    repairCost += 25;
-  }
-
-  if (text.includes("battery issue") || text.includes("poor battery")) {
-    repairCost += 10;
-  }
-
-  if (text.includes("spares") || text.includes("parts")) {
-    repairCost += 15;
-  }
-
-  return roundMoney(repairCost);
-}
-
-function buildScannerMetrics(item) {
-  const itemPrice = Number(item?.price || 0);
-  const shipping = Number(item?.shipping || 0);
-  const totalBuyPrice = roundMoney(itemPrice + shipping);
-  const multiplier = getScannerMultiplier(item);
-  const repairCost = estimateRepairCostFromItem(item);
-
-  const estimatedResale = roundMoney(totalBuyPrice * multiplier);
-  const ebayFees = roundMoney(estimatedResale * 0.15);
-  const estimatedProfit = roundMoney(
-    estimatedResale - ebayFees - totalBuyPrice - repairCost
-  );
-  const marginPercent =
-    estimatedResale > 0 ? roundMoney((estimatedProfit / estimatedResale) * 100) : 0;
-
-  let verdict = "SKIP";
-  if (estimatedProfit >= 18 || marginPercent >= 16) {
-    verdict = "GOOD DEAL";
-  } else if (estimatedProfit >= 5 || marginPercent >= 6) {
-    verdict = "MARGINAL";
-  }
-
-  let risk = "High";
-  if (verdict === "GOOD DEAL") risk = "Low";
-  else if (verdict === "MARGINAL") risk = "Medium";
-
-  const titleText = String(item?.title || "").toLowerCase();
-  if (
-    titleText.includes("faulty") ||
-    titleText.includes("spares") ||
-    titleText.includes("parts") ||
-    titleText.includes("not working")
-  ) {
-    risk = "High";
-  }
-
-  let score = 0;
-  if (estimatedProfit > -5) {
-    score = Math.min(
-      99,
-      Math.max(
-        1,
-        Math.round(
-          estimatedProfit * 1.7 +
-            marginPercent * 0.9 +
-            (verdict === "GOOD DEAL" ? 14 : verdict === "MARGINAL" ? 6 : 0) +
-            (String(item?.condition || "").toLowerCase().includes("used") ? 2 : 0)
-        )
-      )
-    );
-  }
-
-  return {
-    estimatedResale,
-    estimatedProfit,
-    totalBuyPrice,
-    ebayFees,
-    repairCost,
-    score,
-    marginPercent,
-    risk,
-    verdict,
-    multiplier: roundMoney(multiplier),
   };
 }
 
@@ -660,8 +519,8 @@ function selectCompPrices(prices) {
     return sorted.map(roundMoney);
   }
 
-  const start = Math.floor(sorted.length * 0.15);
-  const end = Math.ceil(sorted.length * 0.65);
+  const start = Math.floor(sorted.length * 0.1);
+  const end = Math.ceil(sorted.length * 0.55);
   const slice = sorted.slice(start, end);
 
   return (slice.length ? slice : sorted.slice(0, 6)).map(roundMoney);
@@ -711,8 +570,9 @@ function buildAutoCompsFromItems({ items, product, condition }) {
       shipping: roundMoney(Number(item?.shipping || 0)),
       total: roundMoney(Number(item?.price || 0) + Number(item?.shipping || 0)),
       condition: String(item?.condition || ""),
-      url: item?.itemWebUrl || item?.viewItemURL || item?.url || "",
+      url: item?.itemWebUrl || "",
       bucket: getItemBucket(item),
+      itemId: item?.itemId || "",
     }))
     .filter((item) => item.total > 0);
 
@@ -751,6 +611,201 @@ function buildAutoCompsFromItems({ items, product, condition }) {
     confidence,
     confidenceLabel,
     matchedItemsPreview: priced.slice(0, 8),
+  };
+}
+
+function buildConditionSignal(item) {
+  const title = normalizeText(item?.title || "");
+  const condition = normalizeText(item?.condition || "");
+  const text = `${title} ${condition}`;
+
+  let multiplier = 1;
+  let repairCost = 0;
+
+  if (text.includes("unlocked")) multiplier += 0.05;
+  if (text.includes("excellent")) multiplier += 0.04;
+  if (text.includes("very good")) multiplier += 0.03;
+  if (text.includes("good")) multiplier += 0.015;
+  if (text.includes("boxed")) multiplier += 0.01;
+  if (text.includes("bundle")) multiplier += 0.02;
+  if (text.includes("fully working")) multiplier += 0.025;
+  if (text.includes("tested")) multiplier += 0.015;
+
+  if (text.includes("91% battery")) multiplier += 0.03;
+  else if (text.includes("90% battery")) multiplier += 0.025;
+  else if (text.includes("89% battery")) multiplier += 0.02;
+  else if (text.includes("88% battery")) multiplier += 0.015;
+
+  if (text.includes("cracked")) {
+    multiplier -= 0.12;
+    repairCost += 18;
+  }
+
+  if (text.includes("faulty")) {
+    multiplier -= 0.2;
+    repairCost += 22;
+  }
+
+  if (text.includes("for repair") || text.includes("not working")) {
+    multiplier -= 0.22;
+    repairCost += 25;
+  }
+
+  if (text.includes("spares") || text.includes("parts")) {
+    multiplier -= 0.25;
+    repairCost += 15;
+  }
+
+  if (text.includes("locked")) {
+    multiplier -= 0.14;
+  }
+
+  if (multiplier < 0.72) multiplier = 0.72;
+  if (multiplier > 1.12) multiplier = 1.12;
+
+  return {
+    resaleMultiplier: roundMoney(multiplier),
+    repairCost: roundMoney(repairCost),
+  };
+}
+
+function buildLiveMarketSnapshot({ items, query, condition }) {
+  const targetBucket = detectConditionBucket(`${query} ${condition}`);
+  const exactItems = filterItemsForExactSearch(items, query, condition || "");
+
+  const sameBucket = exactItems.filter((item) => {
+    const bucket = getItemBucket(item, condition || "");
+    return bucket === targetBucket;
+  });
+
+  let marketItems = sameBucket;
+
+  if (marketItems.length < 4) {
+    const allowedBuckets = getBucketFallbackBuckets(targetBucket);
+    marketItems = exactItems.filter((item) => {
+      const bucket = getItemBucket(item, condition || "");
+      return allowedBuckets.includes(bucket);
+    });
+  }
+
+  const priced = marketItems
+    .map((item) => ({
+      itemId: item?.itemId || "",
+      title: item?.title || "",
+      total: roundMoney(Number(item?.price || 0) + Number(item?.shipping || 0)),
+      condition: item?.condition || "",
+      itemWebUrl: item?.itemWebUrl || "",
+      bucket: getItemBucket(item, condition || ""),
+    }))
+    .filter((item) => item.total > 0);
+
+  const totals = priced.map((item) => item.total);
+  const selectedPrices = selectCompPrices(totals);
+
+  return {
+    targetBucket,
+    matchedCount: exactItems.length,
+    bucketMatchedCount: sameBucket.length,
+    marketItemCount: priced.length,
+    selectedPrices,
+    marketMedian: selectedPrices.length ? getMedian(selectedPrices) : 0,
+    marketAverage: selectedPrices.length ? getAverage(selectedPrices) : 0,
+    marketMin: selectedPrices.length ? roundMoney(Math.min(...selectedPrices)) : 0,
+    marketMax: selectedPrices.length ? roundMoney(Math.max(...selectedPrices)) : 0,
+    marketItemsPreview: priced.slice(0, 12),
+  };
+}
+
+function buildItemLiveCompPrices(snapshot, itemIdToExclude) {
+  const prices = snapshot.marketItemsPreview
+    .filter((item) => item.itemId !== itemIdToExclude)
+    .map((item) => item.total)
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  return selectCompPrices(prices);
+}
+
+function buildScannerMetricsFromLiveMarket(item, snapshot) {
+  const itemPrice = Number(item?.price || 0);
+  const shipping = Number(item?.shipping || 0);
+  const totalBuyPrice = roundMoney(itemPrice + shipping);
+
+  const compPrices = buildItemLiveCompPrices(snapshot, item?.itemId || "");
+  const fallbackPrices =
+    compPrices.length > 0 ? compPrices : snapshot.selectedPrices;
+
+  const marketMedian = fallbackPrices.length ? getMedian(fallbackPrices) : 0;
+  const marketAverage = fallbackPrices.length ? getAverage(fallbackPrices) : 0;
+
+  const signal = buildConditionSignal(item);
+
+  let conservativeBase = marketMedian || marketAverage || 0;
+  if (!conservativeBase && totalBuyPrice > 0) {
+    conservativeBase = roundMoney(totalBuyPrice * 1.18);
+  }
+
+  const estimatedResale = roundMoney(
+    conservativeBase * Number(signal.resaleMultiplier || 1)
+  );
+  const ebayFees = roundMoney(estimatedResale * 0.15);
+  const repairCost = roundMoney(signal.repairCost || 0);
+  const estimatedProfit = roundMoney(
+    estimatedResale - ebayFees - totalBuyPrice - repairCost
+  );
+  const marginPercent =
+    estimatedResale > 0 ? roundMoney((estimatedProfit / estimatedResale) * 100) : 0;
+
+  let verdict = "SKIP";
+  if (estimatedProfit >= 18 || marginPercent >= 16) {
+    verdict = "GOOD DEAL";
+  } else if (estimatedProfit >= 4 || marginPercent >= 5) {
+    verdict = "MARGINAL";
+  }
+
+  let risk = "High";
+  if (verdict === "GOOD DEAL") risk = "Low";
+  else if (verdict === "MARGINAL") risk = "Medium";
+
+  const titleText = normalizeText(item?.title || "");
+  if (
+    titleText.includes("faulty") ||
+    titleText.includes("spares") ||
+    titleText.includes("parts") ||
+    titleText.includes("not working")
+  ) {
+    risk = "High";
+  }
+
+  let score = 0;
+  if (estimatedProfit > -5) {
+    score = Math.min(
+      99,
+      Math.max(
+        1,
+        Math.round(
+          estimatedProfit * 2.0 +
+            marginPercent * 1.1 +
+            (verdict === "GOOD DEAL" ? 12 : verdict === "MARGINAL" ? 5 : 0)
+        )
+      )
+    );
+  }
+
+  return {
+    estimatedResale,
+    estimatedProfit,
+    totalBuyPrice,
+    ebayFees,
+    repairCost,
+    score,
+    marginPercent,
+    risk,
+    verdict,
+    marketMedian,
+    marketAverage,
+    compCount: fallbackPrices.length,
+    compPrices: fallbackPrices,
+    pricingMode: "Conservative live comps",
   };
 }
 
@@ -808,19 +863,22 @@ function getDealReason(item, scanner, scored) {
   const profit = Number(scanner?.estimatedProfit || 0);
   const marginPercent = Number(scanner?.marginPercent || 0);
   const risk = String(scanner?.risk || "High");
+  const compCount = Number(scanner?.compCount || 0);
 
-  if (profit >= 20 || marginPercent >= 16) {
-    reasons.push("strong estimated margin");
+  if (profit >= 18 || marginPercent >= 16) {
+    reasons.push("strong estimated margin versus live market");
   } else if (profit >= 8 || marginPercent >= 8) {
-    reasons.push("decent estimated margin");
+    reasons.push("decent estimated margin versus live market");
   } else if (profit >= 2 || marginPercent >= 4) {
-    reasons.push("small but workable margin");
+    reasons.push("small but workable live-market gap");
   }
 
+  if (compCount >= 4) reasons.push("based on multiple close live comps");
+
   if (Number(scored?.undervaluedPercent || 0) >= 15) {
-    reasons.push("priced well below estimated resale");
+    reasons.push("priced well below conservative live market");
   } else if (Number(scored?.undervaluedPercent || 0) >= 8) {
-    reasons.push("priced below estimated resale");
+    reasons.push("priced below conservative live market");
   }
 
   if (shipping === 0) reasons.push("free shipping helps margin");
@@ -829,18 +887,24 @@ function getDealReason(item, scanner, scored) {
   if (risk === "Low") reasons.push("lower risk profile");
 
   if (!reasons.length) {
-    reasons.push("reasonable match with possible resale spread");
+    reasons.push("reasonable match with possible live-market spread");
   }
 
   return reasons.slice(0, 3).join(". ") + ".";
 }
 
 function buildFindDealsResults({ items, query, condition }) {
+  const snapshot = buildLiveMarketSnapshot({
+    items,
+    query,
+    condition,
+  });
+
   const exactItems = filterItemsForExactSearch(items, query, condition || "");
 
   const enriched = exactItems
     .map((item) => {
-      const scanner = buildScannerMetrics(item);
+      const scanner = buildScannerMetricsFromLiveMarket(item, snapshot);
       const scored = scoreDealCandidate(item, scanner);
       const reason = getDealReason(item, scanner, scored);
 
@@ -880,7 +944,10 @@ function buildFindDealsResults({ items, query, condition }) {
       };
     });
 
-  return enriched;
+  return {
+    snapshot,
+    deals: enriched,
+  };
 }
 
 function getUserFromCookie(req) {
@@ -1037,11 +1104,10 @@ app.post("/api/auto-comps", async (req, res) => {
 
     const searchQuery = buildAutoCompSearchQuery(product, condition);
 
-    const items = await searchEbayListings({
+    const items = await searchEbayMarketPool({
       query: searchQuery,
-      limit: 30,
       condition: "",
-      freeShippingOnly: false,
+      limit: 50,
     });
 
     const autoComps = buildAutoCompsFromItems({
@@ -1098,12 +1164,24 @@ app.post("/api/search-ebay", async (req, res) => {
       freeShippingOnly,
     });
 
+    const marketPool = await searchEbayMarketPool({
+      query: buildAutoCompSearchQuery(query, condition || ""),
+      condition: "",
+      limit: 50,
+    });
+
+    const snapshot = buildLiveMarketSnapshot({
+      items: marketPool,
+      query,
+      condition,
+    });
+
     const exactItems = filterItemsForExactSearch(items, query, condition || "");
 
     const scannedItems = exactItems
       .map((item) => ({
         ...item,
-        scanner: buildScannerMetrics(item),
+        scanner: buildScannerMetricsFromLiveMarket(item, snapshot),
       }))
       .sort((a, b) => {
         return (
@@ -1116,7 +1194,10 @@ app.post("/api/search-ebay", async (req, res) => {
         bestDeal: index === 0 && Number(item?.scanner?.estimatedProfit || 0) > 0,
       }));
 
-    return res.json({ items: scannedItems });
+    return res.json({
+      items: scannedItems,
+      marketSnapshot: snapshot,
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({
@@ -1158,11 +1239,20 @@ app.post("/api/find-deals", async (req, res) => {
       freeShippingOnly,
     });
 
-    const rankedDeals = buildFindDealsResults({
-      items,
+    const marketPool = await searchEbayMarketPool({
+      query: buildAutoCompSearchQuery(query, condition || ""),
+      condition: "",
+      limit: 50,
+    });
+
+    const ranked = buildFindDealsResults({
+      items: marketPool,
       query,
       condition,
     });
+
+    const eligibleItemIds = new Set(items.map((item) => item.itemId));
+    const rankedDeals = ranked.deals.filter((deal) => eligibleItemIds.has(deal.itemId));
 
     const finalDeals = rankedDeals.slice(
       0,
@@ -1174,6 +1264,7 @@ app.post("/api/find-deals", async (req, res) => {
       query,
       totalFetched: items.length,
       totalMatched: rankedDeals.length,
+      marketSnapshot: ranked.snapshot,
       deals: finalDeals,
     });
   } catch (error) {
