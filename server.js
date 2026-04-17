@@ -150,9 +150,9 @@ function getCompConfidenceAdjustment(soldComps) {
 
   let multiplier = 1;
 
-  if (compCount <= 2) multiplier = 0.98;
-  else if (compCount <= 4) multiplier = 0.99;
-  else if (compCount <= 6) multiplier = 0.995;
+  if (compCount <= 2) multiplier = 0.985;
+  else if (compCount <= 4) multiplier = 0.9925;
+  else if (compCount <= 6) multiplier = 0.9975;
   else multiplier = 1.0;
 
   if (confidence < 45) {
@@ -160,7 +160,7 @@ function getCompConfidenceAdjustment(soldComps) {
   }
 
   if (multiplier > 1.0) multiplier = 1.0;
-  if (multiplier < 0.97) multiplier = 0.97;
+  if (multiplier < 0.975) multiplier = 0.975;
 
   return {
     multiplier: roundMoney(multiplier),
@@ -197,7 +197,7 @@ function calculateFlipMetrics({
     pricingMode = "Manual sold comps";
 
     if (goalText.includes("fast")) {
-      estimatedResale = roundMoney(estimatedResale * 0.99);
+      estimatedResale = roundMoney(estimatedResale * 0.985);
       pricingMode = "Manual sold comps (fast-sale adjusted)";
     } else if (goalText.includes("maximum")) {
       estimatedResale = roundMoney(estimatedResale * 1.02);
@@ -206,19 +206,24 @@ function calculateFlipMetrics({
 
     estimatedResale = Math.max(0, estimatedResale);
   } else {
-    let multiplier = 2.0;
+    let multiplier = 2.1;
 
-    if (text.includes("excellent")) multiplier = 2.5;
+    if (text.includes("excellent")) multiplier = 2.55;
+    else if (text.includes("very good")) multiplier = 2.4;
     else if (text.includes("good")) multiplier = 2.3;
-    else if (text.includes("light")) multiplier = 2.2;
+    else if (text.includes("light wear")) multiplier = 2.25;
     else if (text.includes("cracked")) multiplier = 2.0;
     else if (text.includes("fault")) multiplier = 1.7;
-    else if (text.includes("parts")) multiplier = 1.45;
+    else if (text.includes("parts")) multiplier = 1.4;
+
+    if (text.includes("unlocked")) multiplier += 0.08;
+    if (text.includes("boxed")) multiplier += 0.04;
+    if (text.includes("fully working")) multiplier += 0.05;
 
     estimatedResale = roundMoney(buy * multiplier);
 
     if (goalText.includes("fast")) {
-      estimatedResale = roundMoney(estimatedResale * 0.99);
+      estimatedResale = roundMoney(estimatedResale * 0.985);
       pricingMode = "Estimated fallback model (fast-sale adjusted)";
     } else if (goalText.includes("maximum")) {
       estimatedResale = roundMoney(estimatedResale * 1.02);
@@ -229,13 +234,16 @@ function calculateFlipMetrics({
   const totalCost = roundMoney(buy + repair);
   const ebayFees = roundMoney(estimatedResale * 0.15);
   const profit = roundMoney(estimatedResale - totalCost - ebayFees);
+  const marginPercent =
+    estimatedResale > 0 ? roundMoney((profit / estimatedResale) * 100) : 0;
 
   let verdict = "AVOID ❌";
-  if (profit >= 20) {
+
+  if (profit >= 20 || marginPercent >= 18) {
     verdict = "GOOD DEAL ✅";
-  } else if (profit >= 8) {
+  } else if (profit >= 8 || marginPercent >= 9) {
     verdict = "OK DEAL ⚠️";
-  } else if (profit >= 0) {
+  } else if (profit >= 2 || marginPercent >= 4) {
     verdict = "MARGINAL 🤏";
   }
 
@@ -244,6 +252,7 @@ function calculateFlipMetrics({
     totalCost,
     ebayFees,
     profit,
+    marginPercent,
     verdict,
     pricingMode,
     soldComps,
@@ -258,63 +267,121 @@ function getScannerMultiplier(item) {
     ? item.buyingOptions.join(" ").toLowerCase()
     : "";
 
-  let multiplier = 1.33;
+  let multiplier = 1.48;
 
-  if (condition.includes("new")) multiplier = 1.7;
-  else if (condition.includes("refurb")) multiplier = 1.52;
-  else if (condition.includes("used")) multiplier = 1.4;
+  if (condition.includes("new")) multiplier = 1.85;
+  else if (condition.includes("refurb")) multiplier = 1.68;
+  else if (condition.includes("used")) multiplier = 1.56;
 
-  if (title.includes("unlocked")) multiplier += 0.08;
+  if (title.includes("unlocked")) multiplier += 0.1;
   if (title.includes("excellent")) multiplier += 0.08;
-  if (title.includes("very good")) multiplier += 0.05;
+  if (title.includes("very good")) multiplier += 0.06;
+  if (title.includes("good condition")) multiplier += 0.04;
+  if (title.includes("boxed")) multiplier += 0.03;
+  if (title.includes("bundle")) multiplier += 0.05;
+  if (title.includes("fully working")) multiplier += 0.05;
+  if (title.includes("tested")) multiplier += 0.03;
+
   if (title.includes("91% battery")) multiplier += 0.06;
   else if (title.includes("90% battery")) multiplier += 0.05;
   else if (title.includes("89% battery")) multiplier += 0.04;
   else if (title.includes("88% battery")) multiplier += 0.03;
   else if (title.includes("87% battery")) multiplier += 0.02;
 
-  if (title.includes("cracked")) multiplier -= 0.35;
-  if (title.includes("faulty")) multiplier -= 0.45;
-  if (title.includes("spares")) multiplier -= 0.5;
-  if (title.includes("parts")) multiplier -= 0.5;
-  if (title.includes("locked")) multiplier -= 0.3;
-  if (buyingOptions.includes("auction")) multiplier -= 0.02;
+  if (title.includes("cracked")) multiplier -= 0.18;
+  if (title.includes("faulty")) multiplier -= 0.32;
+  if (title.includes("spares")) multiplier -= 0.42;
+  if (title.includes("parts")) multiplier -= 0.42;
+  if (title.includes("locked")) multiplier -= 0.22;
+  if (title.includes("for repair")) multiplier -= 0.3;
+  if (title.includes("not working")) multiplier -= 0.35;
+  if (buyingOptions.includes("auction")) multiplier -= 0.01;
 
-  if (multiplier < 1.02) multiplier = 1.02;
-  return multiplier;
+  if (multiplier < 1.05) multiplier = 1.05;
+  return roundMoney(multiplier);
+}
+
+function estimateRepairCostFromItem(item) {
+  const title = String(item?.title || "").toLowerCase();
+  const condition = String(item?.condition || "").toLowerCase();
+  const text = `${title} ${condition}`;
+
+  let repairCost = 0;
+
+  if (
+    text.includes("cracked") ||
+    text.includes("screen crack") ||
+    text.includes("cracked screen")
+  ) {
+    repairCost += 18;
+  }
+
+  if (
+    text.includes("faulty") ||
+    text.includes("for repair") ||
+    text.includes("not working")
+  ) {
+    repairCost += 25;
+  }
+
+  if (text.includes("battery issue") || text.includes("poor battery")) {
+    repairCost += 10;
+  }
+
+  if (text.includes("spares") || text.includes("parts")) {
+    repairCost += 15;
+  }
+
+  return roundMoney(repairCost);
 }
 
 function buildScannerMetrics(item) {
   const itemPrice = Number(item?.price || 0);
   const shipping = Number(item?.shipping || 0);
-  const repairCost = 0;
   const totalBuyPrice = roundMoney(itemPrice + shipping);
   const multiplier = getScannerMultiplier(item);
+  const repairCost = estimateRepairCostFromItem(item);
 
   const estimatedResale = roundMoney(totalBuyPrice * multiplier);
   const ebayFees = roundMoney(estimatedResale * 0.15);
   const estimatedProfit = roundMoney(
     estimatedResale - ebayFees - totalBuyPrice - repairCost
   );
+  const marginPercent =
+    estimatedResale > 0 ? roundMoney((estimatedProfit / estimatedResale) * 100) : 0;
 
   let verdict = "SKIP";
-  if (estimatedProfit >= 30) verdict = "GOOD DEAL";
-  else if (estimatedProfit >= 10) verdict = "MARGINAL";
+  if (estimatedProfit >= 18 || marginPercent >= 16) {
+    verdict = "GOOD DEAL";
+  } else if (estimatedProfit >= 5 || marginPercent >= 6) {
+    verdict = "MARGINAL";
+  }
 
   let risk = "High";
   if (verdict === "GOOD DEAL") risk = "Low";
   else if (verdict === "MARGINAL") risk = "Medium";
 
+  const titleText = String(item?.title || "").toLowerCase();
+  if (
+    titleText.includes("faulty") ||
+    titleText.includes("spares") ||
+    titleText.includes("parts") ||
+    titleText.includes("not working")
+  ) {
+    risk = "High";
+  }
+
   let score = 0;
-  if (estimatedProfit > 0) {
+  if (estimatedProfit > -5) {
     score = Math.min(
       99,
       Math.max(
         1,
         Math.round(
-          estimatedProfit * 1.8 +
-            (verdict === "GOOD DEAL" ? 18 : verdict === "MARGINAL" ? 8 : 0) +
-            (String(item?.condition || "").toLowerCase().includes("used") ? 3 : 0)
+          estimatedProfit * 1.7 +
+            marginPercent * 0.9 +
+            (verdict === "GOOD DEAL" ? 14 : verdict === "MARGINAL" ? 6 : 0) +
+            (String(item?.condition || "").toLowerCase().includes("used") ? 2 : 0)
         )
       )
     );
@@ -327,6 +394,7 @@ function buildScannerMetrics(item) {
     ebayFees,
     repairCost,
     score,
+    marginPercent,
     risk,
     verdict,
     multiplier: roundMoney(multiplier),
@@ -690,6 +758,7 @@ function scoreDealCandidate(item, scanner) {
   const totalBuyPrice = Number(scanner?.totalBuyPrice || 0);
   const estimatedResale = Number(scanner?.estimatedResale || 0);
   const estimatedProfit = Number(scanner?.estimatedProfit || 0);
+  const marginPercent = Number(scanner?.marginPercent || 0);
   const risk = String(scanner?.risk || "High");
   const title = String(item?.title || "").toLowerCase();
   const shipping = Number(item?.shipping || 0);
@@ -700,8 +769,8 @@ function scoreDealCandidate(item, scanner) {
     : 0;
 
   let riskPenalty = 0;
-  if (risk === "High") riskPenalty = 10;
-  else if (risk === "Medium") riskPenalty = 4;
+  if (risk === "High") riskPenalty = 6;
+  else if (risk === "Medium") riskPenalty = 2;
 
   let shippingBonus = 0;
   if (shipping === 0) shippingBonus = 4;
@@ -712,10 +781,13 @@ function scoreDealCandidate(item, scanner) {
   if (title.includes("excellent")) titleBonus += 3;
   if (title.includes("very good")) titleBonus += 2;
   if (title.includes("boxed")) titleBonus += 1;
+  if (title.includes("bundle")) titleBonus += 2;
+  if (title.includes("fully working")) titleBonus += 2;
 
   let score =
-    estimatedProfit * 1.8 +
-    undervaluedPercent * 0.8 +
+    estimatedProfit * 2.1 +
+    marginPercent * 1.1 +
+    undervaluedPercent * 0.7 +
     shippingBonus +
     titleBonus -
     riskPenalty;
@@ -734,11 +806,16 @@ function getDealReason(item, scanner, scored) {
   const title = String(item?.title || "").toLowerCase();
   const shipping = Number(item?.shipping || 0);
   const profit = Number(scanner?.estimatedProfit || 0);
+  const marginPercent = Number(scanner?.marginPercent || 0);
   const risk = String(scanner?.risk || "High");
 
-  if (profit >= 20) reasons.push("strong estimated margin");
-  else if (profit >= 8) reasons.push("decent estimated margin");
-  else if (profit >= 0) reasons.push("small margin but potentially workable");
+  if (profit >= 20 || marginPercent >= 16) {
+    reasons.push("strong estimated margin");
+  } else if (profit >= 8 || marginPercent >= 8) {
+    reasons.push("decent estimated margin");
+  } else if (profit >= 2 || marginPercent >= 4) {
+    reasons.push("small but workable margin");
+  }
 
   if (Number(scored?.undervaluedPercent || 0) >= 15) {
     reasons.push("priced well below estimated resale");
@@ -787,12 +864,14 @@ function buildFindDealsResults({ items, query, condition }) {
     .map((item, index) => {
       let finderLabel = "Worth checking";
 
-      if (index === 0 && Number(item.dealScore || 0) > 20) {
+      if (index === 0 && Number(item.dealScore || 0) > 24) {
         finderLabel = "Best deal";
       } else if (Number(item?.scanner?.estimatedProfit || 0) < 0) {
         finderLabel = "Skip";
-      } else if (Number(item?.scanner?.estimatedProfit || 0) < 8) {
+      } else if (Number(item?.scanner?.estimatedProfit || 0) < 5) {
         finderLabel = "Tight margin";
+      } else if (Number(item?.scanner?.estimatedProfit || 0) >= 18) {
+        finderLabel = "Strong margin";
       }
 
       return {
