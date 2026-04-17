@@ -413,6 +413,9 @@ function isBadCompTitle(title) {
   const banned = [
     "empty box",
     "box only",
+    "box and insert only",
+    "box insert only",
+    "insert only",
     "case only",
     "cover only",
     "screen only",
@@ -428,6 +431,11 @@ function isBadCompTitle(title) {
     "head only",
     "attachment only",
     "wand only",
+    "no console",
+    "no controller",
+    "packaging only",
+    "outer box only",
+    "inner tray only",
   ];
 
   return banned.some((term) => text.includes(term));
@@ -448,6 +456,9 @@ function isAccessoryOnlyTitle(text) {
     "dock only",
     "stand only",
     "box only",
+    "box and insert only",
+    "box insert only",
+    "insert only",
     "manual only",
     "battery only",
     "attachment only",
@@ -457,6 +468,11 @@ function isAccessoryOnlyTitle(text) {
     "head only",
     "accessories only",
     "for parts only",
+    "packaging only",
+    "no controller",
+    "no console",
+    "outer box only",
+    "inner tray only",
   ];
 
   return accessoryTerms.some((term) => value.includes(term));
@@ -625,6 +641,15 @@ function isConsoleAccessoryOnly(title) {
     "remote only",
     "charger only",
     "cable only",
+    "box only",
+    "box and insert only",
+    "box insert only",
+    "insert only",
+    "packaging only",
+    "no controller",
+    "no console",
+    "dualsense box only",
+    "controller box only",
   ];
 
   return badTerms.some((term) => t.includes(term));
@@ -1216,16 +1241,16 @@ function getDealReason(item, scanner, scored) {
   return reasons.slice(0, 3).join(". ") + ".";
 }
 
-/* =========================
-   REAL FLIPPER SANITY LAYER
-   ========================= */
-
 function isTrapListingTitle(title) {
   const text = normalizeText(title);
 
   const trapTerms = [
     "box only",
     "empty box",
+    "box and insert only",
+    "box insert only",
+    "insert only",
+    "packaging only",
     "for parts",
     "for repair",
     "untested",
@@ -1239,6 +1264,10 @@ function isTrapListingTitle(title) {
     "bad esn",
     "blocked imei",
     "not working",
+    "no controller",
+    "no console",
+    "outer box only",
+    "inner tray only",
   ];
 
   return trapTerms.some((term) => text.includes(term));
@@ -1280,26 +1309,20 @@ function passesFlipperSanity(item, scanner) {
 
   if (!titleText) return false;
 
-  /* 1. Hard reject trap listings */
   if (isTrapListingTitle(title)) return false;
   if (isAccessoryOnlyTitle(title)) return false;
+  if (isConsoleAccessoryOnly(title)) return false;
 
-  /* 2. Weak comps = no confidence */
   if (compCount < 3) return false;
 
-  /* 3. Real profit threshold */
   if (profit < 15 && margin < 10) return false;
 
-  /* 4. Must be clearly under market */
   if (marketMedian > 0 && buyPrice > marketMedian * 0.9) return false;
 
-  /* 5. Risk sanity */
   if (risk === "High" && profit < 22 && margin < 14) return false;
 
-  /* 6. Listing quality sanity */
   if (qualityScore < -1) return false;
 
-  /* 7. Extra caution for damaged/problem stock */
   if (
     (titleText.includes("faulty") ||
       titleText.includes("cracked") ||
