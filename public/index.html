@@ -695,7 +695,8 @@
     .deal-score,
     .deal-condition,
     .deal-badge,
-    .deal-bucket {
+    .deal-bucket,
+    .deal-offer-chip {
       font-size: 12px;
       color: var(--muted);
       padding: 6px 10px;
@@ -708,6 +709,24 @@
       color: #dbeafe;
       border-color: rgba(79,140,255,0.25);
       background: rgba(79,140,255,0.12);
+    }
+
+    .label-buy {
+      color: #bbf7d0;
+      background: rgba(34,197,94,0.14);
+      border-color: rgba(34,197,94,0.3);
+    }
+
+    .label-offer {
+      color: #fde68a;
+      background: rgba(245,158,11,0.14);
+      border-color: rgba(245,158,11,0.3);
+    }
+
+    .label-tight {
+      color: #dbeafe;
+      background: rgba(79,140,255,0.14);
+      border-color: rgba(79,140,255,0.3);
     }
 
     .deal-metrics {
@@ -772,6 +791,66 @@
       padding: 4px 0;
     }
 
+    .offer-box {
+      margin-bottom: 12px;
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(79,140,255,0.09);
+      border: 1px solid rgba(79,140,255,0.2);
+    }
+
+    .offer-box h4 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      color: #dbeafe;
+    }
+
+    .offer-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .offer-stat {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .offer-stat .label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .offer-stat .value {
+      font-size: 17px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .offer-subline {
+      font-size: 13px;
+      color: #cbd5e1;
+      line-height: 1.6;
+    }
+
+    .deal-image-wrap {
+      margin-bottom: 12px;
+    }
+
+    .deal-image {
+      width: 100%;
+      max-width: 180px;
+      height: auto;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      display: block;
+      background: rgba(255,255,255,0.03);
+    }
+
     .footer {
       margin-top: 30px;
       padding: 18px 0 10px;
@@ -793,7 +872,8 @@
       .deal-layout,
       .deal-metrics,
       .button-row,
-      .three-button-row {
+      .three-button-row,
+      .offer-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1280,6 +1360,7 @@
       if (value.includes("BAD")) return "#f87171";
       if (value.includes("SKIP")) return "#f87171";
       if (value.includes("AVOID")) return "#f87171";
+      if (value.includes("BUY")) return "#4ade80";
 
       return "#e2e8f0";
     }
@@ -1289,7 +1370,16 @@
       if (value.includes("GOOD")) return "#4ade80";
       if (value.includes("MARGINAL")) return "#f59e0b";
       if (value.includes("OK")) return "#4ade80";
+      if (value.includes("BUY")) return "#4ade80";
       return "#f87171";
+    }
+
+    function labelClass(label) {
+      const value = String(label || "").toLowerCase();
+      if (value.includes("buy")) return "label-buy";
+      if (value.includes("offer")) return "label-offer";
+      if (value.includes("tight")) return "label-tight";
+      return "";
     }
 
     function setAuthStatus(message, type) {
@@ -1524,17 +1614,12 @@
         url,
         source: "eBay",
         image,
-        bestDeal: Boolean(rawDeal.bestDeal)
+        bestDeal: Boolean(rawDeal.bestDeal),
+        bestOffer: rawDeal.bestOffer || null,
+        buyingOptions: Array.isArray(rawDeal.buyingOptions) ? rawDeal.buyingOptions : [],
+        finderLabel: rawDeal.finderLabel || "",
+        marginPercent: Number(scanner.marginPercent || 0)
       };
-    }
-
-    function soldPricesFromDeal(deal) {
-      const estimate = Number(deal.estimatedResale || 0);
-      if (!estimate) return "";
-
-      const low = Math.max(0, estimate - 10);
-      const high = estimate + 8;
-      return [low, estimate, high].map((v) => Number(v).toFixed(2)).join(", ");
     }
 
     function useDealForAnalysis(index, sourceKey = "__lastDeals") {
@@ -1551,10 +1636,7 @@
         deal.condition || "Used item from eBay search results.";
       document.getElementById("buyPrice").value = Number(totalBuyPrice || deal.price || 0).toFixed(2);
       document.getElementById("repairCost").value = Number(deal.repairCost || 0).toFixed(2);
-
-      // FIX: do NOT prefill fake/estimated comps when sending to analyzer
       document.getElementById("manualSoldPrices").value = "";
-
       document.getElementById("extras").value = deal.url || "";
       document.getElementById("goal").value = "Fast sale";
 
@@ -1565,13 +1647,56 @@
 
       setAutoCompsStatus("", "");
       setAnalyzeStatus(
-        "Deal loaded into analyzer. Add comps manually or click Auto-fill comps.",
+        "Deal loaded into analyzer. Comp box left empty. Click Auto-fill comps to fetch pricing comps, or enter your own manually.",
         "success"
       );
     }
 
     function roundCurrencyValue(value) {
       return Math.round(Number(value || 0) * 100) / 100;
+    }
+
+    function renderBestOfferBox(bestOffer) {
+      if (!bestOffer || bestOffer.hasBestOffer !== true) {
+        return "";
+      }
+
+      return `
+        <div class="offer-box">
+          <h4>Best offer guidance</h4>
+          <div class="offer-grid">
+            <div class="offer-stat">
+              <div class="label">Suggested offer</div>
+              <div class="value">${currency(bestOffer.suggestedOffer)}</div>
+            </div>
+            <div class="offer-stat">
+              <div class="label">Aggressive offer</div>
+              <div class="value">${currency(bestOffer.aggressiveOffer)}</div>
+            </div>
+            <div class="offer-stat">
+              <div class="label">Max safe offer</div>
+              <div class="value">${currency(bestOffer.maxSafeOffer)}</div>
+            </div>
+          </div>
+          <div class="offer-grid">
+            <div class="offer-stat">
+              <div class="label">Profit @ suggested</div>
+              <div class="value">${currency(bestOffer.profitAtSuggested)}</div>
+            </div>
+            <div class="offer-stat">
+              <div class="label">Profit @ aggressive</div>
+              <div class="value">${currency(bestOffer.profitAtAggressive)}</div>
+            </div>
+            <div class="offer-stat">
+              <div class="label">Profit @ max safe</div>
+              <div class="value">${currency(bestOffer.profitAtMaxSafe)}</div>
+            </div>
+          </div>
+          <div class="offer-subline">
+            Ask price: <strong>${currency(bestOffer.askPrice)}</strong>
+          </div>
+        </div>
+      `;
     }
 
     window.useDealForAnalysis = useDealForAnalysis;
@@ -1601,6 +1726,8 @@
                   : ""
               }
 
+              ${deal.image ? `<div class="deal-image-wrap"><img class="deal-image" src="${escapeHtml(deal.image)}" alt="${escapeHtml(deal.title)}" /></div>` : ""}
+
               <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
 
               <div class="deal-price-row">
@@ -1610,6 +1737,11 @@
                 ${
                   deal.condition
                     ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
+                    : ""
+                }
+                ${
+                  deal.bestOffer && deal.bestOffer.hasBestOffer
+                    ? `<div class="deal-offer-chip">Best offer</div>`
                     : ""
                 }
                 <div class="deal-score">Score ${escapeHtml(deal.score)}</div>
@@ -1642,11 +1774,14 @@
 
               <div class="panel">
                 <strong>Risk:</strong> ${escapeHtml(deal.risk)}<br>
+                <strong>Margin %:</strong> ${Number(deal.marginPercent || 0).toFixed(2)}%<br>
                 <strong>Item price:</strong> ${currency(deal.price)}<br>
                 <strong>Shipping:</strong> ${currency(deal.shipping)}
               </div>
 
               <div class="deal-summary">${escapeHtml(deal.reason)}</div>
+
+              ${renderBestOfferBox(deal.bestOffer)}
 
               <div class="deal-actions">
                 <button onclick="useDealForAnalysis(${index}, '__lastDeals')">Send to Analyzer</button>
@@ -1682,8 +1817,13 @@
         reason: rawDeal.reason || "Possible opportunity found.",
         condition: rawDeal.condition || "",
         marketBucket: rawDeal.marketBucket || "",
-        url: rawDeal.url || rawDeal.itemWebUrl || rawDeal.viewItemURL || "",
-        repairCost: Number(scanner.repairCost || 0)
+        url: rawDeal.url || rawDeal.itemWebUrl || rawDeal.viewItemURL || rawDeal.itemWebUrl || "",
+        repairCost: Number(scanner.repairCost || 0),
+        bestOffer: rawDeal.bestOffer || null,
+        buyingOptions: Array.isArray(rawDeal.buyingOptions) ? rawDeal.buyingOptions : [],
+        image: rawDeal.imageUrl || rawDeal.image?.imageUrl || "",
+        marginPercent: Number(scanner.marginPercent || 0),
+        compCount: Number(scanner.compCount || 0)
       };
     }
 
@@ -1712,12 +1852,14 @@
                   : ""
               }
 
+              ${deal.image ? `<div class="deal-image-wrap"><img class="deal-image" src="${escapeHtml(deal.image)}" alt="${escapeHtml(deal.title)}" /></div>` : ""}
+
               <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
 
               <div class="deal-price-row">
                 <div class="deal-price">${currency(deal.price)}</div>
                 <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
-                <div class="deal-badge">${escapeHtml(deal.finderLabel)}</div>
+                <div class="deal-badge ${labelClass(deal.finderLabel)}">${escapeHtml(deal.finderLabel)}</div>
                 ${
                   deal.condition
                     ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
@@ -1726,6 +1868,11 @@
                 ${
                   deal.marketBucket
                     ? `<div class="deal-bucket">${escapeHtml(deal.marketBucket)}</div>`
+                    : ""
+                }
+                ${
+                  deal.bestOffer && deal.bestOffer.hasBestOffer
+                    ? `<div class="deal-offer-chip">Best offer</div>`
                     : ""
                 }
                 <div class="deal-score">Deal score ${escapeHtml(deal.dealScore)}</div>
@@ -1759,10 +1906,14 @@
               <div class="panel">
                 <strong>Risk:</strong> ${escapeHtml(deal.risk)}<br>
                 <strong>Total buy cost:</strong> ${currency(deal.totalBuyPrice)}<br>
-                <strong>eBay fees:</strong> ${currency(deal.ebayFees)}
+                <strong>eBay fees:</strong> ${currency(deal.ebayFees)}<br>
+                <strong>Margin %:</strong> ${Number(deal.marginPercent || 0).toFixed(2)}%<br>
+                <strong>Comps used:</strong> ${Number(deal.compCount || 0)}
               </div>
 
               <div class="deal-summary">${escapeHtml(deal.reason)}</div>
+
+              ${renderBestOfferBox(deal.bestOffer)}
 
               <div class="deal-actions">
                 <button onclick="useDealForAnalysis(${index}, '__lastFoundDeals')">Send to Analyzer</button>
