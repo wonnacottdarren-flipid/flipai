@@ -486,6 +486,7 @@ function detectProductCategory(text) {
   if (
     value.includes("ps5") ||
     value.includes("playstation 5") ||
+    value.includes("play station 5") ||
     value.includes("xbox series x") ||
     value.includes("xbox series s") ||
     value.includes("nintendo switch") ||
@@ -569,7 +570,12 @@ function iphoneFamilyMatches(title, product) {
 function getConsoleFamily(text) {
   const value = normalizeText(text);
 
-  if (value.includes("playstation 5") || value.includes("ps5")) {
+  if (
+    value.includes("playstation 5") ||
+    value.includes("play station 5") ||
+    value.includes("ps5") ||
+    value.includes("ps 5")
+  ) {
     let edition = "unknown";
     if (value.includes("digital")) edition = "digital";
     else if (value.includes("disc") || value.includes("disk")) edition = "disc";
@@ -608,8 +614,16 @@ function consoleFamilyMatches(title, product) {
   if (wanted.family !== got.family) return false;
 
   if (wanted.family === "ps5") {
-    if (wanted.edition === "digital" && got.edition !== "digital") return false;
-    if (wanted.edition === "disc" && got.edition !== "disc") return false;
+    if (wanted.edition === "digital") {
+      return got.edition === "digital";
+    }
+
+    if (wanted.edition === "disc") {
+      // allow unknown PS5 console titles because many disc listings
+      // do not explicitly say disc/disk
+      if (got.edition === "digital") return false;
+      return true;
+    }
   }
 
   return true;
@@ -812,11 +826,12 @@ function itemMatchesProduct(itemTitle, product, condition) {
 
   const category = detectProductCategory(`${productText} ${conditionText}`);
 
-  // relaxed console matching so PS5/Xbox results do not get over-filtered
   if (category === "console") {
     const looksLikeConsole =
       title.includes("ps5") ||
+      title.includes("ps 5") ||
       title.includes("playstation 5") ||
+      title.includes("play station 5") ||
       title.includes("xbox series x") ||
       title.includes("xbox series s") ||
       title.includes("nintendo switch") ||
