@@ -437,7 +437,7 @@ function itemMatchesProduct(itemTitle, product, condition) {
     return false;
   }
 
-  if (productTokens.length >= 3 && matchedCoreTokens.length < 2) {
+  if (productTokens.length >= 3 && matchedCoreTokens.length < 1) {
     return false;
   }
 
@@ -720,7 +720,7 @@ app.post("/api/search-ebay", async (req, res) => {
     const items = await searchEbayListings({
       query,
       limit,
-      filterPriceMax,
+      maxPrice: filterPriceMax,
       condition,
       freeShippingOnly,
     });
