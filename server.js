@@ -619,8 +619,6 @@ function consoleFamilyMatches(title, product) {
     }
 
     if (wanted.edition === "disc") {
-      // allow unknown PS5 console titles because many disc listings
-      // do not explicitly say disc/disk
       if (got.edition === "digital") return false;
       return true;
     }
@@ -1338,12 +1336,23 @@ function passesFlipperSanity(item, scanner) {
   const marketMedian = Number(scanner?.marketMedian || 0);
   const risk = String(scanner?.risk || "High");
   const qualityScore = getListingQualityScore(item);
+  const category = detectProductCategory(titleText);
 
   if (!titleText) return false;
 
   if (isTrapListingTitle(title)) return false;
   if (isAccessoryOnlyTitle(title)) return false;
   if (isConsoleAccessoryOnly(title)) return false;
+
+  // console-specific looser sanity so PS5/Xbox still surface
+  if (category === "console") {
+    if (compCount < 2) return false;
+    if (profit < 8 && margin < 5) return false;
+    if (marketMedian > 0 && buyPrice > marketMedian * 0.98) return false;
+    if (risk === "High" && profit < 14 && margin < 8) return false;
+    if (qualityScore < -2) return false;
+    return true;
+  }
 
   if (compCount < 3) return false;
   if (profit < 15 && margin < 10) return false;
@@ -1414,7 +1423,7 @@ function buildFindDealsResults({ items, query, condition }) {
       if (item.sanityPassed) {
         if (Number(item?.scanner?.estimatedProfit || 0) >= 25) {
           finderLabel = "Buy now";
-        } else if (Number(item?.scanner?.estimatedProfit || 0) >= 18) {
+        } else if (Number(item?.scanner?.estimatedProfit || 0) >= 14) {
           finderLabel = "Strong margin";
         } else {
           finderLabel = "Worth checking";
