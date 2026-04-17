@@ -1466,15 +1466,6 @@
       };
     }
 
-    function soldPricesFromDeal(deal) {
-      const estimate = Number(deal.estimatedResale || 0);
-      if (!estimate) return "";
-
-      const low = Math.max(0, estimate - 10);
-      const high = estimate + 8;
-      return [low, estimate, high].map((v) => Number(v).toFixed(2)).join(", ");
-    }
-
     function useDealForAnalysis(index) {
       const deals = window.__lastDeals || [];
       const deal = deals[index];
@@ -1485,7 +1476,10 @@
         deal.condition || "Used item from eBay search results.";
       document.getElementById("buyPrice").value = Number(deal.totalBuyPrice || deal.price || 0).toFixed(2);
       document.getElementById("repairCost").value = Number(deal.repairCost || 0).toFixed(2);
-      document.getElementById("manualSoldPrices").value = soldPricesFromDeal(deal);
+
+      // IMPORTANT: do not prefill fake estimate-based comps
+      document.getElementById("manualSoldPrices").value = "";
+
       document.getElementById("extras").value = deal.url || "";
       document.getElementById("goal").value = "Fast sale";
 
@@ -1494,9 +1488,13 @@
         block: "start"
       });
 
-      setAutoCompsStatus("", "");
+      setAutoCompsStatus(
+        "Deal loaded into analyzer. Click Auto-fill comps to fetch real market comps before analyzing.",
+        "loading"
+      );
+
       setAnalyzeStatus(
-        "Deal loaded into analyzer. Click Auto-fill comps for better market-based pricing, or analyze immediately with the prefilled estimate.",
+        "Deal loaded into analyzer. No comp prices have been inserted yet.",
         "success"
       );
     }
