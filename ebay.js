@@ -92,29 +92,22 @@ function mapEbayItem(item) {
     condition: normaliseCondition(item?.condition),
     location: item?.itemLocation?.country || "GB",
     buyingOptions: Array.isArray(item?.buyingOptions) ? item.buyingOptions : [],
+    itemOriginDate: item?.itemOriginDate || "",
+    categories: Array.isArray(item?.categories) ? item.categories : [],
   };
 }
 
-export async function searchEbayListings({
-  query,
+function buildFilterString({
   maxPrice,
   condition,
-  freeShippingOnly = false,
-  limit = 20,
+  freeShippingOnly,
+  fixedPriceOnly = true,
 }) {
-  if (!query || !String(query).trim()) {
-    throw new Error("Search query is required.");
-  }
-
-  const token = await getEbayAccessToken();
-  const marketplaceId = process.env.EBAY_MARKETPLACE_ID || "EBAY_GB";
-
-  const params = new URLSearchParams({
-    q: String(query).trim(),
-    limit: String(Math.min(Math.max(Number(limit) || 10, 1), 50)),
-  });
-
   const filters = [];
+
+  if (fixedPriceOnly) {
+    filters.push("buyingOptions:{FIXED_PRICE}");
+  }
 
   if (maxPrice && Number(maxPrice) > 0) {
     filters.push(`price:[..${Number(maxPrice)}]`);
@@ -138,8 +131,42 @@ export async function searchEbayListings({
     }
   }
 
-  if (filters.length) {
-    params.set("filter", filters.join(","));
+  if (freeShippingOnly) {
+    filters.push("deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP|SHIP_TO_HOME}");
+  }
+
+  return filters.join(",");
+}
+
+async function browseSearch({
+  query,
+  maxPrice,
+  condition,
+  freeShippingOnly = false,
+  limit = 20,
+  fixedPriceOnly = true,
+}) {
+  if (!query || !String(query).trim()) {
+    throw new Error("Search query is required.");
+  }
+
+  const token = await getEbayAccessToken();
+  const marketplaceId = process.env.EBAY_MARKETPLACE_ID || "EBAY_GB";
+
+  const params = new URLSearchParams({
+    q: String(query).trim(),
+    limit: String(Math.min(Math.max(Number(limit) || 10, 1), 50)),
+  });
+
+  const filter = buildFilterString({
+    maxPrice,
+    condition,
+    freeShippingOnly,
+    fixedPriceOnly,
+  });
+
+  if (filter) {
+    params.set("filter", filter);
   }
 
   const res = await fetch(`${EBAY_BROWSE_URL}?${params.toString()}`, {
@@ -164,4 +191,35 @@ export async function searchEbayListings({
   }
 
   return items;
+}
+
+export async function searchEbayListings({
+  query,
+  maxPrice,
+  condition,
+  freeShippingOnly = false,
+  limit = 20,
+}) {
+  return browseSearch({
+    query,
+    maxPrice,
+    condition,
+    freeShippingOnly,
+    limit,
+    fixedPriceOnly: true,
+  });
+}
+
+export async function searchEbayMarketPool({
+  query,
+  condition = "",
+  limit = 50,
+}) {
+  return browseSearch({
+    query,
+    condition,
+    limit: Math.min(Math.max(Number(limit) || 30, 1), 50),
+    freeShippingOnly: false,
+    fixedPriceOnly: true,
+  });
 }
