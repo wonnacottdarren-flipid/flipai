@@ -149,7 +149,6 @@ function getCompConfidenceAdjustment(soldComps) {
 
   let multiplier = 1;
 
-  // First anchor to comp count
   if (compCount <= 2) {
     multiplier = 0.95;
   } else if (compCount <= 4) {
@@ -160,7 +159,6 @@ function getCompConfidenceAdjustment(soldComps) {
     multiplier = 1.0;
   }
 
-  // Then refine by confidence
   if (confidence >= 85) {
     multiplier += 0.01;
   } else if (confidence >= 70) {
@@ -169,7 +167,6 @@ function getCompConfidenceAdjustment(soldComps) {
     multiplier -= 0.01;
   }
 
-  // Keep safe bounds
   if (multiplier > 1.0) multiplier = 1.0;
   if (multiplier < 0.93) multiplier = 0.93;
 
@@ -242,8 +239,11 @@ function calculateFlipMetrics({
   const profit = roundMoney(estimatedResale - totalCost - ebayFees);
 
   let verdict = "AVOID ❌";
-  if (profit > 40) verdict = "GOOD DEAL ✅";
-  else if (profit > 15) verdict = "OK DEAL ⚠️";
+  if (profit >= 25) {
+    verdict = "GOOD DEAL ✅";
+  } else if (profit >= 8) {
+    verdict = "OK DEAL ⚠️";
+  }
 
   return {
     estimatedResale: roundMoney(estimatedResale),
