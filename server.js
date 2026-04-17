@@ -149,17 +149,19 @@ function getCompConfidenceAdjustment(soldComps) {
 
   let multiplier = 1;
 
-  if (compCount <= 2) multiplier = 0.95;
-  else if (compCount <= 4) multiplier = 0.98;
-  else if (compCount <= 6) multiplier = 0.99;
+  // Softer real-world discounts:
+  // still conservative, but no longer crushes every phone flip
+  if (compCount <= 2) multiplier = 0.98;
+  else if (compCount <= 4) multiplier = 0.99;
+  else if (compCount <= 6) multiplier = 0.995;
   else multiplier = 1.0;
 
-  if (confidence >= 85) multiplier += 0.01;
-  else if (confidence >= 70) multiplier += 0.005;
-  else if (confidence < 45) multiplier -= 0.01;
+  if (confidence < 45) {
+    multiplier -= 0.005;
+  }
 
   if (multiplier > 1.0) multiplier = 1.0;
-  if (multiplier < 0.93) multiplier = 0.93;
+  if (multiplier < 0.97) multiplier = 0.97;
 
   return {
     multiplier: roundMoney(multiplier),
@@ -195,11 +197,12 @@ function calculateFlipMetrics({
 
     pricingMode = "Manual sold comps";
 
+    // Softer fast-sale discount
     if (goalText.includes("fast")) {
-      estimatedResale = roundMoney(estimatedResale * 0.95);
+      estimatedResale = roundMoney(estimatedResale * 0.99);
       pricingMode = "Manual sold comps (fast-sale adjusted)";
     } else if (goalText.includes("maximum")) {
-      estimatedResale = roundMoney(estimatedResale * 1.03);
+      estimatedResale = roundMoney(estimatedResale * 1.02);
       pricingMode = "Manual sold comps (profit adjusted)";
     }
 
@@ -217,10 +220,10 @@ function calculateFlipMetrics({
     estimatedResale = roundMoney(buy * multiplier);
 
     if (goalText.includes("fast")) {
-      estimatedResale = roundMoney(estimatedResale * 0.95);
+      estimatedResale = roundMoney(estimatedResale * 0.99);
       pricingMode = "Estimated fallback model (fast-sale adjusted)";
     } else if (goalText.includes("maximum")) {
-      estimatedResale = roundMoney(estimatedResale * 1.03);
+      estimatedResale = roundMoney(estimatedResale * 1.02);
       pricingMode = "Estimated fallback model (profit adjusted)";
     }
   }
@@ -229,9 +232,15 @@ function calculateFlipMetrics({
   const ebayFees = roundMoney(estimatedResale * 0.15);
   const profit = roundMoney(estimatedResale - totalCost - ebayFees);
 
+  // Real flipper verdicts
   let verdict = "AVOID ❌";
-  if (profit >= 20) verdict = "GOOD DEAL ✅";
-  else if (profit >= 5) verdict = "OK DEAL ⚠️";
+  if (profit >= 20) {
+    verdict = "GOOD DEAL ✅";
+  } else if (profit >= 8) {
+    verdict = "OK DEAL ⚠️";
+  } else if (profit >= 0) {
+    verdict = "MARGINAL 🤏";
+  }
 
   return {
     estimatedResale: roundMoney(estimatedResale),
