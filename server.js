@@ -36,6 +36,10 @@ function roundMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function parseManualSoldPrices(input) {
   if (!input) return [];
 
@@ -149,8 +153,6 @@ function getCompConfidenceAdjustment(soldComps) {
 
   let multiplier = 1;
 
-  // Softer real-world discounts:
-  // still conservative, but no longer crushes every phone flip
   if (compCount <= 2) multiplier = 0.98;
   else if (compCount <= 4) multiplier = 0.99;
   else if (compCount <= 6) multiplier = 0.995;
@@ -197,7 +199,6 @@ function calculateFlipMetrics({
 
     pricingMode = "Manual sold comps";
 
-    // Softer fast-sale discount
     if (goalText.includes("fast")) {
       estimatedResale = roundMoney(estimatedResale * 0.99);
       pricingMode = "Manual sold comps (fast-sale adjusted)";
@@ -232,7 +233,6 @@ function calculateFlipMetrics({
   const ebayFees = roundMoney(estimatedResale * 0.15);
   const profit = roundMoney(estimatedResale - totalCost - ebayFees);
 
-  // Real flipper verdicts
   let verdict = "AVOID ❌";
   if (profit >= 20) {
     verdict = "GOOD DEAL ✅";
@@ -394,11 +394,12 @@ function extractEssentialTokens(product) {
     "gold",
     "boxed",
     "unboxed",
+    "gb",
   ]);
 
-  const tokens = words.filter((word) => word.length >= 2 && !stopWords.has(word));
-
-  return [...new Set(tokens)].slice(0, 8);
+  return words
+    .filter((word) => word.length >= 2 && !stopWords.has(word))
+    .slice(0, 8);
 }
 
 function buildAutoCompSearchQuery(product, condition) {
@@ -624,80 +625,126 @@ function getBucketFallbackBuckets(targetBucket) {
 }
 
 function filterItemsForExactSearch(items, product, condition) {
-  return items.filter((item) => itemMatchesProduct(item?.title || "", product, condition));
-}
-
-function buildAutoCompsFromItems({ items, product, condition }) {
-  const targetBucket = detectConditionBucket(`${product} ${condition}`);
-
-  const matched = items.filter((item) =>
+  return items.filter((item) =>
     itemMatchesProduct(item?.title || "", product, condition)
   );
+}
 
-  const sameBucket = matched.filter((item) => {
-    const itemBucket = getItemBucket(item);
-    return itemBucket === targetBucket;
-  });
+function scoreDealCandidate(item, scanner) {
+  const totalBuyPrice = Number(scanner?.totalBuyPrice || 0);
+  const estimatedResale = Number(scanner?.estimatedResale || 0);
+  const estimatedProfit = Number(scanner?.estimatedProfit || 0);
+  const risk = String(scanner?.risk || "High");
+  const title = String(item?.title || "").toLowerCase();
+  const shipping = Number(item?.shipping || 0);
 
-  let finalMatched = sameBucket;
+  const undervaluedAmount = roundMoney(estimatedResale - totalBuyPrice);
+  const undervaluedPercent = estimatedResale > 0
+    ? (undervaluedAmount / estimatedResale) * 100
+    : 0;
 
-  if (finalMatched.length < 3) {
-    const allowedBuckets = getBucketFallbackBuckets(targetBucket);
+  let riskPenalty = 0;
+  if (risk === "High") riskPenalty = 10;
+  else if (risk === "Medium") riskPenalty = 4;
 
-    finalMatched = matched.filter((item) => {
-      const bucket = getItemBucket(item);
-      return allowedBuckets.includes(bucket);
-    });
-  }
+  let shippingBonus = 0;
+  if (shipping === 0) shippingBonus = 4;
+  else if (shipping <= 3.99) shippingBonus = 2;
 
-  const priced = finalMatched
-    .map((item) => ({
-      title: String(item?.title || ""),
-      price: roundMoney(Number(item?.price || 0)),
-      shipping: roundMoney(Number(item?.shipping || 0)),
-      total: roundMoney(Number(item?.price || 0) + Number(item?.shipping || 0)),
-      condition: String(item?.condition || ""),
-      url: item?.itemWebUrl || item?.viewItemURL || item?.url || "",
-      bucket: getItemBucket(item),
-    }))
-    .filter((item) => item.total > 0);
+  let titleBonus = 0;
+  if (title.includes("unlocked")) titleBonus += 4;
+  if (title.includes("excellent")) titleBonus += 3;
+  if (title.includes("very good")) titleBonus += 2;
+  if (title.includes("boxed")) titleBonus += 1;
 
-  const totals = priced.map((item) => item.total);
-  const selectedPrices = selectCompPrices(totals);
+  let score =
+    (estimatedProfit * 1.8) +
+    (undervaluedPercent * 0.8) +
+    shippingBonus +
+    titleBonus -
+    riskPenalty;
 
-  let confidence = 25;
-  if (selectedPrices.length >= 3) confidence = 50;
-  if (selectedPrices.length >= 5) confidence = 68;
-  if (selectedPrices.length >= 7) confidence = 82;
-  if (selectedPrices.length >= 10) confidence = 92;
-
-  if (sameBucket.length >= 3) {
-    confidence += 8;
-  }
-
-  confidence = Math.min(95, confidence);
-
-  let confidenceLabel = "Low";
-  if (confidence >= 80) confidenceLabel = "High";
-  else if (confidence >= 55) confidenceLabel = "Medium";
+  if (!Number.isFinite(score)) score = 0;
 
   return {
-    pricingMode: "Auto comps estimate",
-    targetBucket,
-    searchCount: items.length,
-    matchedCount: matched.length,
-    bucketMatchedCount: sameBucket.length,
-    compCount: selectedPrices.length,
-    prices: selectedPrices,
-    manualSoldPricesText: selectedPrices.join(", "),
-    avgPrice: selectedPrices.length ? getAverage(selectedPrices) : 0,
-    medianPrice: selectedPrices.length ? getMedian(selectedPrices) : 0,
-    minPrice: selectedPrices.length ? roundMoney(Math.min(...selectedPrices)) : 0,
-    maxPrice: selectedPrices.length ? roundMoney(Math.max(...selectedPrices)) : 0,
-    confidence,
-    confidenceLabel,
-    matchedItemsPreview: priced.slice(0, 8),
+    dealScore: roundMoney(score),
+    undervaluedAmount: roundMoney(undervaluedAmount),
+    undervaluedPercent: roundMoney(undervaluedPercent),
   };
+}
+
+function getDealReason(item, scanner, scored) {
+  const reasons = [];
+  const title = String(item?.title || "").toLowerCase();
+  const shipping = Number(item?.shipping || 0);
+  const profit = Number(scanner?.estimatedProfit || 0);
+  const risk = String(scanner?.risk || "High");
+
+  if (profit >= 20) reasons.push("strong estimated margin");
+  else if (profit >= 8) reasons.push("decent estimated margin");
+  else if (profit >= 0) reasons.push("small margin but potentially workable");
+
+  if (Number(scored?.undervaluedPercent || 0) >= 15) {
+    reasons.push("priced well below estimated resale");
+  } else if (Number(scored?.undervaluedPercent || 0) >= 8) {
+    reasons.push("priced below estimated resale");
+  }
+
+  if (shipping === 0) reasons.push("free shipping helps margin");
+  if (title.includes("unlocked")) reasons.push("unlocked stock usually resells better");
+  if (title.includes("excellent")) reasons.push("stronger resale signal from condition wording");
+  if (risk === "Low") reasons.push("lower risk profile");
+
+  if (!reasons.length) {
+    reasons.push("reasonable match with possible resale spread");
+  }
+
+  return reasons.slice(0, 3).join(". ") + ".";
+}
+
+function buildFindDealsResults({ items, query, condition }) {
+  const exactItems = filterItemsForExactSearch(items, query, condition || "");
+
+  const enriched = exactItems
+    .map((item) => {
+      const scanner = buildScannerMetrics(item);
+      const scored = scoreDealCandidate(item, scanner);
+      const reason = getDealReason(item, scanner, scored);
+
+      return {
+        ...item,
+        scanner,
+        dealScore: scored.dealScore,
+        undervaluedAmount: scored.undervaluedAmount,
+        undervaluedPercent: scored.undervaluedPercent,
+        reason,
+        marketBucket: getItemBucket(item, condition || ""),
+      };
+    })
+    .filter((item) => Number(item?.scanner?.estimatedResale || 0) > 0)
+    .sort((a, b) => {
+      return (
+        Number(b.dealScore || 0) - Number(a.dealScore || 0) ||
+        Number(b?.scanner?.estimatedProfit || 0) - Number(a?.scanner?.estimatedProfit || 0)
+      );
+    })
+    .map((item, index) => {
+      let finderLabel = "Worth checking";
+      if (index === 0 && Number(item.dealScore || 0) > 20) {
+        finderLabel = "Best deal";
+      } else if (Number(item?.scanner?.estimatedProfit || 0) < 0) {
+        finderLabel = "Skip";
+      } else if (Number(item?.scanner?.estimatedProfit || 0) < 8) {
+        finderLabel = "Tight margin";
+      }
+
+      return {
+        ...item,
+        finderLabel,
+      };
+    });
+
+  return enriched;
 }
 
 app.post(
@@ -919,6 +966,62 @@ app.post("/api/search-ebay", async (req, res) => {
     console.error(error);
     return res.status(500).json({
       error: error.message || "Could not search eBay.",
+    });
+  }
+});
+
+app.post("/api/find-deals", async (req, res) => {
+  try {
+    const user = getUserFromCookie(req);
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Please sign in to find deals.",
+      });
+    }
+
+    const {
+      query,
+      condition = "",
+      filterPriceMax,
+      freeShippingOnly = false,
+      limit = 30,
+      topN = 8,
+    } = req.body || {};
+
+    if (!query || !String(query).trim()) {
+      return res.status(400).json({
+        error: "Search query is required.",
+      });
+    }
+
+    const items = await searchEbayListings({
+      query,
+      limit: Math.min(Number(limit || 30), 50),
+      maxPrice: filterPriceMax,
+      condition,
+      freeShippingOnly,
+    });
+
+    const rankedDeals = buildFindDealsResults({
+      items,
+      query,
+      condition,
+    });
+
+    const finalDeals = rankedDeals.slice(0, Math.max(1, Math.min(Number(topN || 8), 12)));
+
+    return res.json({
+      ok: true,
+      query,
+      totalFetched: items.length,
+      totalMatched: rankedDeals.length,
+      deals: finalDeals,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: error.message || "Could not find deals.",
     });
   }
 });
