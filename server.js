@@ -268,10 +268,6 @@ function normalizeText(value) {
     .trim();
 }
 
-function containsPhrase(text, phrase) {
-  return normalizeText(text).includes(normalizeText(phrase));
-}
-
 function extractStorageTokens(text) {
   const matches = normalizeText(text).match(/\b(16|32|64|128|256|512|1024)\s?gb\b/g);
   return matches ? matches.map((m) => m.replace(/\s+/g, "")) : [];
@@ -1220,6 +1216,103 @@ function getDealReason(item, scanner, scored) {
   return reasons.slice(0, 3).join(". ") + ".";
 }
 
+/* =========================
+   REAL FLIPPER SANITY LAYER
+   ========================= */
+
+function isTrapListingTitle(title) {
+  const text = normalizeText(title);
+
+  const trapTerms = [
+    "box only",
+    "empty box",
+    "for parts",
+    "for repair",
+    "untested",
+    "icloud locked",
+    "account locked",
+    "network locked",
+    "spares repair",
+    "spares or repair",
+    "activation locked",
+    "mdm locked",
+    "bad esn",
+    "blocked imei",
+    "not working",
+  ];
+
+  return trapTerms.some((term) => text.includes(term));
+}
+
+function getListingQualityScore(item) {
+  const title = normalizeText(item?.title || "");
+  let score = 0;
+
+  if (title.includes("unlocked")) score += 2;
+  if (title.includes("excellent")) score += 2;
+  if (title.includes("very good")) score += 1;
+  if (title.includes("fully working")) score += 2;
+  if (title.includes("boxed")) score += 1;
+  if (title.includes("tested")) score += 1;
+
+  if (title.includes("read")) score -= 1;
+  if (title.includes("see description")) score -= 1;
+  if (title.includes("untested")) score -= 3;
+  if (title.includes("faulty")) score -= 3;
+  if (title.includes("spares")) score -= 3;
+  if (title.includes("parts")) score -= 3;
+  if (title.includes("cracked")) score -= 2;
+  if (title.includes("locked")) score -= 3;
+
+  return score;
+}
+
+function passesFlipperSanity(item, scanner) {
+  const title = String(item?.title || "");
+  const titleText = normalizeText(title);
+  const profit = Number(scanner?.estimatedProfit || 0);
+  const margin = Number(scanner?.marginPercent || 0);
+  const compCount = Number(scanner?.compCount || 0);
+  const buyPrice = Number(scanner?.totalBuyPrice || 0);
+  const marketMedian = Number(scanner?.marketMedian || 0);
+  const risk = String(scanner?.risk || "High");
+  const qualityScore = getListingQualityScore(item);
+
+  if (!titleText) return false;
+
+  /* 1. Hard reject trap listings */
+  if (isTrapListingTitle(title)) return false;
+  if (isAccessoryOnlyTitle(title)) return false;
+
+  /* 2. Weak comps = no confidence */
+  if (compCount < 3) return false;
+
+  /* 3. Real profit threshold */
+  if (profit < 15 && margin < 10) return false;
+
+  /* 4. Must be clearly under market */
+  if (marketMedian > 0 && buyPrice > marketMedian * 0.9) return false;
+
+  /* 5. Risk sanity */
+  if (risk === "High" && profit < 22 && margin < 14) return false;
+
+  /* 6. Listing quality sanity */
+  if (qualityScore < -1) return false;
+
+  /* 7. Extra caution for damaged/problem stock */
+  if (
+    (titleText.includes("faulty") ||
+      titleText.includes("cracked") ||
+      titleText.includes("spares") ||
+      titleText.includes("parts")) &&
+    profit < 25
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function buildFindDealsResults({ items, query, condition }) {
   const snapshot = buildLiveMarketSnapshot({
     items,
@@ -1243,6 +1336,8 @@ function buildFindDealsResults({ items, query, condition }) {
         undervaluedPercent: scored.undervaluedPercent,
         reason,
         marketBucket: getItemBucket(item, condition || ""),
+        sanityPassed: passesFlipperSanity(item, scanner),
+        listingQualityScore: getListingQualityScore(item),
       };
     })
     .filter((item) => Number(item?.scanner?.estimatedResale || 0) > 0)
@@ -1263,6 +1358,16 @@ function buildFindDealsResults({ items, query, condition }) {
         finderLabel = "Tight margin";
       } else if (Number(item?.scanner?.estimatedProfit || 0) >= 18) {
         finderLabel = "Strong margin";
+      }
+
+      if (item.sanityPassed) {
+        if (Number(item?.scanner?.estimatedProfit || 0) >= 25) {
+          finderLabel = "Buy now";
+        } else if (Number(item?.scanner?.estimatedProfit || 0) >= 18) {
+          finderLabel = "Strong margin";
+        } else {
+          finderLabel = "Worth checking";
+        }
       }
 
       return {
@@ -1579,7 +1684,10 @@ app.post("/api/find-deals", async (req, res) => {
     });
 
     const eligibleItemIds = new Set(items.map((item) => item.itemId));
-    const rankedDeals = ranked.deals.filter((deal) => eligibleItemIds.has(deal.itemId));
+
+    const rankedDeals = ranked.deals
+      .filter((deal) => eligibleItemIds.has(deal.itemId))
+      .filter((deal) => deal.sanityPassed === true);
 
     const finalDeals = rankedDeals.slice(
       0,
