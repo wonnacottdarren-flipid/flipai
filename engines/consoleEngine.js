@@ -92,7 +92,6 @@ function isBareAccessoryTitle(text) {
 
   const hasControllerAccessoryWords = hasAny(t, [
     "dualsense",
-    "dualsense",
     "dualshock",
     "dual shock",
     "joy con",
@@ -141,10 +140,7 @@ function isBareAccessoryTitle(text) {
 
   if (explicitAccessoryOnly) return true;
 
-  if (
-    hasControllerAccessoryWords &&
-    !hasConsoleWords
-  ) {
+  if (hasControllerAccessoryWords && !hasConsoleWords) {
     return true;
   }
 
@@ -665,7 +661,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     pricingMode,
     marketMedian: roundMoney(marketMedian),
     marketLow: roundMoney(marketLow),
-    listingMedian: roundMoney(listingMedian),
+    listingMedian: roundMoney(listingTotals.length ? listingMedian : 0),
   };
 }
 
@@ -708,12 +704,23 @@ export const consoleEngine = {
     const family = parseConsoleFamily(normalizedQuery);
     const allowDamaged = shouldAllowDamagedConsoles({ normalizedQuery });
 
+    const wantsBundle =
+      normalizedQuery.includes("bundle") ||
+      normalizedQuery.includes("with games") ||
+      normalizedQuery.includes("with controller") ||
+      normalizedQuery.includes("controllers") ||
+      normalizedQuery.includes("games") ||
+      normalizedQuery.includes("job lot") ||
+      normalizedQuery.includes("comes with") ||
+      normalizedQuery.includes("includes");
+
     return {
       rawQuery,
       normalizedQuery,
       brand,
       family,
       allowDamaged,
+      wantsBundle,
     };
   },
 
@@ -811,6 +818,20 @@ export const consoleEngine = {
 
     if (!matchesConsoleFamily(text, queryContext)) {
       return false;
+    }
+
+    const bundleSignals = detectBundleSignals(text, queryContext.family || "");
+
+    if (queryContext.wantsBundle) {
+      const isRealBundle =
+        bundleSignals.bundleType === "bundle" ||
+        bundleSignals.extraControllerCount > 0 ||
+        bundleSignals.includedGamesCount > 0 ||
+        bundleSignals.explicitBundleWords;
+
+      if (!isRealBundle) {
+        return false;
+      }
     }
 
     return true;
