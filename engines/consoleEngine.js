@@ -261,6 +261,9 @@ function classifyConsoleConditionState(text) {
       "console only",
       "unit only",
       "tablet only",
+      "unboxed",
+      "read caption",
+      "read description",
     ])
   ) {
     return "minor_fault";
@@ -389,10 +392,6 @@ function detectBundleSignals(text, family) {
   };
 }
 
-function classifyConsoleBundleType(text, family) {
-  return detectBundleSignals(text, family).bundleType;
-}
-
 function estimateConsoleRepairCost(queryContext, conditionState, text) {
   const t = normalizeConsoleText(text);
   const family = String(queryContext?.family || "");
@@ -406,16 +405,16 @@ function estimateConsoleRepairCost(queryContext, conditionState, text) {
 
   if (conditionState === "minor_fault") {
     if (hasAny(t, ["no controller", "missing controller"])) {
-      if (family.startsWith("ps5")) return 35;
-      if (family.startsWith("xbox_series")) return 30;
-      if (family.startsWith("switch")) return 40;
+      if (family.startsWith("ps5")) return 30;
+      if (family.startsWith("xbox_series")) return 28;
+      if (family.startsWith("switch")) return 35;
     }
 
     if (hasAny(t, ["poor condition", "heavy wear", "bad condition"])) {
       return 15;
     }
 
-    return 20;
+    return 12;
   }
 
   return 0;
@@ -469,8 +468,9 @@ function matchesConsoleFamily(text, queryContext) {
   return true;
 }
 
-function estimateBundleValueBonus(queryContext, bundleSignals) {
+function estimateBundleValueBonus(queryContext, bundleSignals, text) {
   const family = String(queryContext?.family || "");
+  const t = normalizeConsoleText(text);
   const extraControllerCount = Number(bundleSignals?.extraControllerCount || 0);
   const includedGamesCount = Number(bundleSignals?.includedGamesCount || 0);
   const hasBox = Boolean(bundleSignals?.hasBox);
@@ -480,27 +480,85 @@ function estimateBundleValueBonus(queryContext, bundleSignals) {
 
   if (family.startsWith("ps5")) {
     bonus += extraControllerCount * 35;
-    bonus += Math.min(includedGamesCount, 5) * 10;
+    bonus += Math.min(includedGamesCount, 6) * 12;
     if (hasBox) bonus += 8;
     if (hasAccessories) bonus += 10;
+
+    if (hasAny(t, ["fifa", "fc 24", "cod", "call of duty", "spiderman", "spider man", "gow", "god of war", "gran turismo"])) {
+      bonus += 10;
+    }
   } else if (family.startsWith("xbox_series")) {
     bonus += extraControllerCount * 30;
-    bonus += Math.min(includedGamesCount, 5) * 9;
+    bonus += Math.min(includedGamesCount, 6) * 10;
     if (hasBox) bonus += 8;
     if (hasAccessories) bonus += 8;
   } else if (family.startsWith("switch")) {
     bonus += extraControllerCount * 28;
-    bonus += Math.min(includedGamesCount, 5) * 8;
+    bonus += Math.min(includedGamesCount, 6) * 9;
     if (hasBox) bonus += 10;
     if (hasAccessories) bonus += 10;
   } else {
     bonus += extraControllerCount * 25;
-    bonus += Math.min(includedGamesCount, 5) * 8;
+    bonus += Math.min(includedGamesCount, 6) * 8;
     if (hasBox) bonus += 8;
     if (hasAccessories) bonus += 8;
   }
 
   return roundMoney(bonus);
+}
+
+function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
+  const t = normalizeConsoleText(text);
+  const flags = [];
+
+  if (hasAny(t, ["read description", "read desc", "read caption", "see description"])) {
+    flags.push("Read description carefully");
+  }
+
+  if (hasAny(t, ["no controller", "missing controller", "without controller"])) {
+    flags.push("No controller included");
+  }
+
+  if (hasAny(t, ["console only", "unit only", "tablet only"])) {
+    flags.push("Console-only listing");
+  }
+
+  if (hasAny(t, ["unboxed", "no box"])) {
+    flags.push("No box included");
+  }
+
+  if (hasAny(t, ["poor condition", "heavy wear", "bad condition", "fair condition"])) {
+    flags.push("Condition may reduce resale appeal");
+  }
+
+  if (hasAny(t, ["read caption"])) {
+    flags.push("Seller may have important notes in caption");
+  }
+
+  if (
+    queryContext?.wantsBundle &&
+    (!bundleSignals || bundleSignals.bundleType !== "bundle")
+  ) {
+    flags.push("Bundle intent was searched, but extras look weak");
+  }
+
+  return flags;
+}
+
+function calculateWarningPenalty(flags = []) {
+  let penalty = 0;
+
+  for (const flag of flags) {
+    if (flag === "Read description carefully") penalty += 8;
+    else if (flag === "No controller included") penalty += 10;
+    else if (flag === "Console-only listing") penalty += 6;
+    else if (flag === "No box included") penalty += 2;
+    else if (flag === "Condition may reduce resale appeal") penalty += 5;
+    else if (flag === "Seller may have important notes in caption") penalty += 4;
+    else if (flag === "Bundle intent was searched, but extras look weak") penalty += 6;
+  }
+
+  return penalty;
 }
 
 function scoreConsoleCandidate(item, queryContext) {
@@ -547,7 +605,10 @@ function scoreConsoleCandidate(item, queryContext) {
   if (bundleSignals.hasAccessories) score += 0.25;
   if (bundleSignals.explicitBundleWords) score += 0.35;
 
-  return score;
+  const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
+  const warningPenalty = calculateWarningPenalty(warningFlags);
+
+  return score - warningPenalty * 0.08;
 }
 
 function enrichConsoleCompPool(queryContext, items = []) {
@@ -555,17 +616,21 @@ function enrichConsoleCompPool(queryContext, items = []) {
     .map((item) => {
       const text = getCombinedItemText(item);
       const bundleSignals = detectBundleSignals(text, queryContext.family || "");
-      const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals);
+      const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals, text);
+      const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
+      const warningPenalty = calculateWarningPenalty(warningFlags);
 
       return {
         item,
         total: extractTotalPrice(item),
-        adjustedTotal: roundMoney(extractTotalPrice(item) - bundleValueBonus),
+        adjustedTotal: roundMoney(extractTotalPrice(item) - bundleValueBonus + Math.min(warningPenalty, 12)),
         score: scoreConsoleCandidate(item, queryContext),
         conditionState: classifyConsoleConditionState(text),
         bundleType: bundleSignals.bundleType,
         bundleSignals,
         bundleValueBonus,
+        warningFlags,
+        warningPenalty,
       };
     })
     .filter((entry) => entry.total > 0 && entry.score > -5)
@@ -668,12 +733,16 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
 function applyBundleValueToListing(queryContext, item, baseResale) {
   const text = getCombinedItemText(item);
   const bundleSignals = detectBundleSignals(text, queryContext.family || "");
-  const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals);
+  const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals, text);
+  const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
+  const warningPenalty = calculateWarningPenalty(warningFlags);
 
   return {
     bundleSignals,
     bundleType: bundleSignals.bundleType,
     bundleValueBonus,
+    warningFlags,
+    warningScorePenalty: warningPenalty,
     estimatedResale: roundMoney(Number(baseResale || 0) + bundleValueBonus),
   };
 }
@@ -846,7 +915,9 @@ export const consoleEngine = {
     const conditionState = classifyConsoleConditionState(text);
     const repairCost = estimateConsoleRepairCost(queryContext, conditionState, text);
     const bundleSignals = detectBundleSignals(text, queryContext.family || "");
-    const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals);
+    const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals, text);
+    const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
+    const warningScorePenalty = calculateWarningPenalty(warningFlags);
 
     return {
       conditionState,
@@ -854,6 +925,8 @@ export const consoleEngine = {
       bundleType: bundleSignals.bundleType,
       bundleSignals,
       bundleValueBonus,
+      warningFlags,
+      warningScorePenalty,
     };
   },
 
