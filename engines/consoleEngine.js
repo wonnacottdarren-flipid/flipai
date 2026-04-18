@@ -9,8 +9,8 @@ import {
 } from "./baseEngine.js";
 
 const CONSOLE_FAMILIES = [
-  ["ps5_disc", ["ps5 disc", "playstation 5 disc", "ps5 standard", "playstation 5 standard"]],
-  ["ps5_digital", ["ps5 digital", "playstation 5 digital"]],
+  ["ps5_disc", ["ps5 disc", "playstation 5 disc", "ps5 standard", "playstation 5 standard", "standard edition"]],
+  ["ps5_digital", ["ps5 digital", "playstation 5 digital", "digital edition"]],
   ["xbox_series_x", ["xbox series x", "series x"]],
   ["xbox_series_s", ["xbox series s", "series s"]],
   ["switch_oled", ["switch oled", "nintendo switch oled", "oled model"]],
@@ -71,6 +71,8 @@ function isConsoleAccessoryOnly(text) {
     "skin only",
     "case only",
     "console stand",
+    "disc drive only",
+    "disc reader only",
   ]);
 }
 
@@ -234,6 +236,54 @@ function estimateConsoleRepairCost(queryContext, conditionState, text) {
   return 0;
 }
 
+function matchesConsoleFamily(text, queryContext) {
+  const t = normalizeText(text);
+  const family = String(queryContext?.family || "");
+
+  if (!family) return true;
+
+  if (family === "ps5_disc") {
+    const hasPs5 = t.includes("ps5") || t.includes("playstation 5");
+    const saysDigital = t.includes("digital");
+    return hasPs5 && !saysDigital;
+  }
+
+  if (family === "ps5_digital") {
+    const hasPs5 = t.includes("ps5") || t.includes("playstation 5");
+    const saysDigital = t.includes("digital");
+    return hasPs5 && saysDigital;
+  }
+
+  if (family === "xbox_series_x") {
+    const hasSeriesX = t.includes("xbox series x") || t.includes("series x");
+    const saysSeriesS = t.includes("xbox series s") || t.includes("series s");
+    return hasSeriesX && !saysSeriesS;
+  }
+
+  if (family === "xbox_series_s") {
+    const hasSeriesS = t.includes("xbox series s") || t.includes("series s");
+    const saysSeriesX = t.includes("xbox series x") || t.includes("series x");
+    return hasSeriesS && !saysSeriesX;
+  }
+
+  if (family === "switch_oled") {
+    return t.includes("switch") && t.includes("oled");
+  }
+
+  if (family === "switch_lite") {
+    return t.includes("switch") && t.includes("lite");
+  }
+
+  if (family === "switch_v2") {
+    const hasSwitch = t.includes("switch") || t.includes("nintendo switch");
+    const saysOled = t.includes("oled");
+    const saysLite = t.includes("lite");
+    return hasSwitch && !saysOled && !saysLite;
+  }
+
+  return true;
+}
+
 function scoreConsoleCandidate(item, queryContext) {
   const text = normalizeText(
     [
@@ -260,26 +310,18 @@ function scoreConsoleCandidate(item, queryContext) {
   let score = 0;
 
   const itemBrand = detectConsoleBrand(text);
-  const itemFamily = parseConsoleFamily(text);
-  const bundleType = classifyConsoleBundleType(text, itemFamily || queryContext.family);
+  const bundleType = classifyConsoleBundleType(text, queryContext.family || "");
 
   if (queryContext.brand) {
     if (itemBrand === queryContext.brand) score += 1.2;
     else return -10;
   }
 
-  if (queryContext.family) {
-    if (itemFamily === queryContext.family) score += 5;
-    else if (itemFamily && itemFamily !== queryContext.family) score -= 6;
-    else score -= 1.5;
+  if (matchesConsoleFamily(text, queryContext)) {
+    score += 5;
+  } else {
+    return -10;
   }
-
-  if (queryContext.family === "ps5_disc" && text.includes("digital")) score -= 8;
-  if (queryContext.family === "ps5_digital" && text.includes("disc")) score -= 8;
-  if (queryContext.family === "xbox_series_x" && text.includes("series s")) score -= 8;
-  if (queryContext.family === "xbox_series_s" && text.includes("series x")) score -= 8;
-  if (queryContext.family === "switch_oled" && !text.includes("oled")) score -= 4;
-  if (queryContext.family === "switch_lite" && !text.includes("lite")) score -= 4;
 
   if (conditionState === "clean_working") score += 1.5;
   if (conditionState === "minor_fault") score -= 2;
@@ -450,24 +492,30 @@ export const consoleEngine = {
     const variants = [rawQuery];
 
     if (ctx.family === "ps5_disc") {
-      variants.push("ps5 disc");
-      variants.push("playstation 5 disc");
+      variants.push("ps5");
+      variants.push("ps5 console");
+      variants.push("playstation 5");
+      variants.push("playstation 5 console");
       variants.push("playstation 5 standard");
+      variants.push("ps5 standard");
     }
 
     if (ctx.family === "ps5_digital") {
       variants.push("ps5 digital");
       variants.push("playstation 5 digital");
+      variants.push("digital edition");
     }
 
     if (ctx.family === "xbox_series_x") {
       variants.push("xbox series x");
       variants.push("series x");
+      variants.push("xbox x console");
     }
 
     if (ctx.family === "xbox_series_s") {
       variants.push("xbox series s");
       variants.push("series s");
+      variants.push("xbox s console");
     }
 
     if (ctx.family === "switch_oled") {
@@ -484,6 +532,7 @@ export const consoleEngine = {
     if (ctx.family === "switch_v2") {
       variants.push("nintendo switch");
       variants.push("switch console");
+      variants.push("switch v2");
     }
 
     return [...new Set(variants.filter(Boolean))];
@@ -514,17 +563,9 @@ export const consoleEngine = {
     const itemBrand = detectConsoleBrand(text);
     if (queryContext.brand && itemBrand !== queryContext.brand) return false;
 
-    const itemFamily = parseConsoleFamily(text);
-    if (queryContext.family && itemFamily && itemFamily !== queryContext.family) {
+    if (!matchesConsoleFamily(text, queryContext)) {
       return false;
     }
-
-    if (queryContext.family === "ps5_disc" && text.includes("digital")) return false;
-    if (queryContext.family === "ps5_digital" && text.includes("disc")) return false;
-    if (queryContext.family === "xbox_series_x" && text.includes("series s")) return false;
-    if (queryContext.family === "xbox_series_s" && text.includes("series x")) return false;
-    if (queryContext.family === "switch_oled" && !text.includes("oled")) return false;
-    if (queryContext.family === "switch_lite" && !text.includes("lite")) return false;
 
     return true;
   },
@@ -547,7 +588,7 @@ export const consoleEngine = {
 
     const conditionState = classifyConsoleConditionState(text);
     const repairCost = estimateConsoleRepairCost(queryContext, conditionState, text);
-    const bundleType = classifyConsoleBundleType(text, queryContext.family);
+    const bundleType = classifyConsoleBundleType(text, queryContext.family || "");
 
     return {
       conditionState,
