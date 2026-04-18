@@ -9,7 +9,7 @@ import {
 } from "./baseEngine.js";
 
 const CONSOLE_FAMILIES = [
-  ["ps5_disc", ["ps5 disc", "playstation 5 disc", "ps5 standard", "playstation 5 standard", "standard edition", "disc edition"]],
+  ["ps5_disc", ["ps5 disc", "playstation 5 disc", "ps5 standard", "playstation 5 standard", "standard edition", "disc edition", "disk edition"]],
   ["ps5_digital", ["ps5 digital", "playstation 5 digital", "digital edition"]],
   ["xbox_series_x", ["xbox series x", "series x"]],
   ["xbox_series_s", ["xbox series s", "series s"]],
@@ -29,7 +29,8 @@ function normalizeConsoleText(value) {
     .replace(/\bplaystation 5\b/g, "playstation5")
     .replace(/\bsony ps5\b/g, "ps5")
     .replace(/\bps5 slim\b/g, "ps5")
-    .replace(/\bplaystation5 slim\b/g, "playstation5");
+    .replace(/\bplaystation5 slim\b/g, "playstation5")
+    .replace(/\bdisk edition\b/g, "disc edition");
 }
 
 function getCombinedItemText(item) {
@@ -78,25 +79,30 @@ function parseConsoleFamily(text) {
   return "";
 }
 
-function isAccessoryTitle(text) {
+function isBareAccessoryTitle(text) {
   const t = normalizeConsoleText(text);
 
-  return hasAny(t, [
-    "controller only",
-    "dualsense only",
-    "dualshock only",
-    "joy con only",
-    "joy-con only",
-    "headset only",
+  const hasConsoleWords =
+    t.includes("ps5") ||
+    t.includes("playstation5") ||
+    t.includes("xbox series x") ||
+    t.includes("xbox series s") ||
+    t.includes("switch") ||
+    t.includes("console");
+
+  const hasControllerAccessoryWords = hasAny(t, [
+    "dualsense",
+    "dualsense",
+    "dualshock",
+    "dual shock",
+    "joy con",
+    "joy-con",
+    "media remote",
+    "headset",
+    "charger",
     "charging dock",
-    "dock only",
-    "charger only",
-    "power cable only",
-    "cable only",
+    "dock station",
     "hdmi cable",
-    "stand only",
-    "vertical stand",
-    "base stand",
     "faceplate",
     "face plate",
     "shell only",
@@ -107,15 +113,53 @@ function isAccessoryTitle(text) {
     "case only",
     "thumb grips",
     "remote only",
-    "media remote",
     "disc drive only",
     "disc reader only",
     "mount only",
     "fan only",
-    "controller for ps5",
-    "controller for xbox",
-    "controller for switch",
   ]);
+
+  const explicitAccessoryOnly = hasAny(t, [
+    "controller only",
+    "dualsense only",
+    "dualshock only",
+    "joy con only",
+    "joy-con only",
+    "headset only",
+    "dock only",
+    "charger only",
+    "power cable only",
+    "cable only",
+    "stand only",
+    "vertical stand",
+    "base stand",
+    "empty box",
+    "box only",
+    "manual only",
+    "console stand",
+  ]);
+
+  if (explicitAccessoryOnly) return true;
+
+  if (
+    hasControllerAccessoryWords &&
+    !hasConsoleWords
+  ) {
+    return true;
+  }
+
+  if (
+    t.includes("controller") &&
+    !t.includes("console") &&
+    !t.includes("ps5") &&
+    !t.includes("playstation5") &&
+    !t.includes("xbox") &&
+    !t.includes("switch")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function isAccessoryCategory(item) {
@@ -138,21 +182,16 @@ function isAccessoryCategory(item) {
 
 function isConsoleAccessoryOnly(itemOrText) {
   if (typeof itemOrText === "string") {
-    return isAccessoryTitle(itemOrText);
+    return isBareAccessoryTitle(itemOrText);
   }
 
   const item = itemOrText || {};
   const text = getCombinedItemText(item);
 
-  if (isAccessoryTitle(text)) return true;
+  if (isBareAccessoryTitle(text)) return true;
   if (isAccessoryCategory(item)) return true;
 
-  return hasAny(text, [
-    "empty box",
-    "box only",
-    "manual only",
-    "console stand",
-  ]);
+  return false;
 }
 
 function isSeverelyBadConsole(text) {
@@ -273,7 +312,7 @@ function detectExtraControllerCount(text) {
   const t = normalizeConsoleText(text);
 
   if (hasAny(t, ["3 controllers", "three controllers"])) return 2;
-  if (hasAny(t, ["2 controllers", "two controllers", "extra controller", "second controller"])) return 1;
+  if (hasAny(t, ["2 controllers", "two controllers", "extra controller", "second controller", "spare controller"])) return 1;
   return 0;
 }
 
@@ -281,10 +320,12 @@ function detectIncludedGamesCount(text) {
   const t = normalizeConsoleText(text);
 
   if (hasAny(t, ["10 games", "10x games", "ten games"])) return 10;
+  if (hasAny(t, ["8 games", "eight games"])) return 8;
   if (hasAny(t, ["5 games", "five games"])) return 5;
+  if (hasAny(t, ["4 games", "four games"])) return 4;
   if (hasAny(t, ["3 games", "three games"])) return 3;
   if (hasAny(t, ["2 games", "two games"])) return 2;
-  if (hasAny(t, ["with game", "with games", "game included", "games included", "bundle"])) return 1;
+  if (hasAny(t, ["with game", "with games", "game included", "games included"])) return 1;
   return 0;
 }
 
@@ -308,6 +349,21 @@ function detectBundleSignals(text, family) {
       "with extra accessories",
     ]) ? 1 : 0;
 
+  const explicitBundleWords =
+    hasAny(t, [
+      "bundle",
+      "job lot",
+      "comes with",
+      "includes",
+      "included",
+      "plus games",
+      "plus controller",
+      "with games",
+      "with controller",
+      "with 2 controllers",
+      "with two controllers",
+    ]) ? 1 : 0;
+
   let bundleType = "standard";
 
   if (!hasControllerIncluded(t, family)) {
@@ -318,7 +374,12 @@ function detectBundleSignals(text, family) {
     bundleType = "boxed";
   }
 
-  if (extraControllerCount > 0 || includedGamesCount > 0 || hasAccessories) {
+  if (
+    explicitBundleWords ||
+    extraControllerCount > 0 ||
+    includedGamesCount > 0 ||
+    hasAccessories
+  ) {
     bundleType = "bundle";
   }
 
@@ -328,6 +389,7 @@ function detectBundleSignals(text, family) {
     includedGamesCount,
     hasBox: Boolean(hasBox),
     hasAccessories: Boolean(hasAccessories),
+    explicitBundleWords: Boolean(explicitBundleWords),
   };
 }
 
@@ -487,6 +549,7 @@ function scoreConsoleCandidate(item, queryContext) {
   score += Math.min(bundleSignals.extraControllerCount, 2) * 0.6;
   score += Math.min(bundleSignals.includedGamesCount, 4) * 0.2;
   if (bundleSignals.hasAccessories) score += 0.25;
+  if (bundleSignals.explicitBundleWords) score += 0.35;
 
   return score;
 }
@@ -543,13 +606,13 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
 
   let marketTotals = removePriceOutliers(
     (usableMarket.length ? usableMarket : marketConditionPool)
-      .slice(0, 20)
+      .slice(0, 24)
       .map((entry) => entry.adjustedTotal)
   );
 
   let listingTotals = removePriceOutliers(
     (usableListings.length ? usableListings : listingConditionPool)
-      .slice(0, 14)
+      .slice(0, 16)
       .map((entry) => entry.adjustedTotal)
   );
 
@@ -671,8 +734,12 @@ export const consoleEngine = {
       variants.push("playstation 5 standard");
       variants.push("ps5 standard");
       variants.push("disc edition");
+      variants.push("disk edition");
       variants.push("standard edition");
       variants.push("ps5 bundle");
+      variants.push("ps5 with games");
+      variants.push("ps5 2 controllers");
+      variants.push("ps5 with controller");
     }
 
     if (ctx.family === "ps5_digital") {
@@ -681,6 +748,7 @@ export const consoleEngine = {
       variants.push("playstation5 digital");
       variants.push("digital edition");
       variants.push("ps5 digital bundle");
+      variants.push("ps5 digital with games");
     }
 
     if (ctx.family === "xbox_series_x") {
@@ -688,6 +756,7 @@ export const consoleEngine = {
       variants.push("series x");
       variants.push("xbox x console");
       variants.push("xbox series x bundle");
+      variants.push("xbox series x with games");
     }
 
     if (ctx.family === "xbox_series_s") {
@@ -695,6 +764,7 @@ export const consoleEngine = {
       variants.push("series s");
       variants.push("xbox s console");
       variants.push("xbox series s bundle");
+      variants.push("xbox series s with games");
     }
 
     if (ctx.family === "switch_oled") {
@@ -702,12 +772,14 @@ export const consoleEngine = {
       variants.push("nintendo switch oled");
       variants.push("oled model");
       variants.push("switch oled bundle");
+      variants.push("switch oled with games");
     }
 
     if (ctx.family === "switch_lite") {
       variants.push("switch lite");
       variants.push("nintendo switch lite");
       variants.push("switch lite bundle");
+      variants.push("switch lite with games");
     }
 
     if (ctx.family === "switch_v2") {
@@ -715,6 +787,7 @@ export const consoleEngine = {
       variants.push("switch console");
       variants.push("switch v2");
       variants.push("switch bundle");
+      variants.push("switch with games");
     }
 
     return [...new Set(variants.filter(Boolean))];
