@@ -67,12 +67,12 @@ function buildBestOfferGuidance(item, scanner) {
 
   if (!askPrice || !resale) return null;
 
-  const suggestedOffer = roundMoney(askPrice * 0.9);
-  const aggressiveOffer = roundMoney(askPrice * 0.82);
+  const suggestedOffer = roundMoney(Math.min(askPrice * 0.9, askPrice));
+  const aggressiveOffer = roundMoney(Math.min(askPrice * 0.82, askPrice));
 
   let maxSafeOffer = roundMoney(resale * 0.7);
 
-  // ✅ HARD CAP (FIX)
+  // ✅ HARD CAP
   if (maxSafeOffer > askPrice) {
     maxSafeOffer = askPrice;
   }
@@ -107,6 +107,126 @@ function getUserFromCookie(req) {
   } catch {
     return null;
   }
+}
+
+/* =========================
+   🔎 DYSON MATCH HELPERS
+========================= */
+
+function hasAny(text, phrases = []) {
+  return phrases.some((phrase) => text.includes(phrase));
+}
+
+function isDysonAccessoryOrParts(text) {
+  return hasAny(text, [
+    "parts",
+    "spares",
+    "attachment",
+    "attachments",
+    "tool only",
+    "tools only",
+    "battery only",
+    "battery",
+    "charger",
+    "dock",
+    "wall dock",
+    "filter",
+    "filters",
+    "wand",
+    "pipe",
+    "crevice",
+    "brush",
+    "roller",
+    "roller head",
+    "head",
+    "floor head",
+    "motorhead",
+    "motor head",
+    "nozzle",
+    "hose",
+    "trigger",
+    "bin only",
+    "canister only",
+  ]);
+}
+
+function isDysonMainUnitListing(text) {
+  return hasAny(text, [
+    "main unit",
+    "motor unit",
+    "body only",
+    "main body",
+    "machine body",
+    "handheld unit",
+    "main vacuum unit",
+    "bare unit",
+    "unit only",
+  ]);
+}
+
+function isDysonFullMachineListing(text) {
+  return hasAny(text, [
+    "vacuum cleaner",
+    "cordless vacuum",
+    "stick vacuum",
+    "complete vacuum",
+    "full vacuum",
+    "complete machine",
+    "complete set",
+    "full set",
+  ]);
+}
+
+function matchesDysonVariant(searchText, titleText) {
+  if (!searchText.includes("dyson")) {
+    return true;
+  }
+
+  const wantsV11 = searchText.includes("v11");
+  const wantsOutsize = searchText.includes("outsize");
+  const wantsMainUnit =
+    searchText.includes("main unit") ||
+    searchText.includes("main body") ||
+    searchText.includes("body only") ||
+    searchText.includes("motor unit") ||
+    searchText.includes("body");
+
+  const titleHasV11 = titleText.includes("v11");
+  const titleHasOutsize = titleText.includes("outsize");
+  const titleIsMainUnit = isDysonMainUnitListing(titleText);
+  const titleIsParts = isDysonAccessoryOrParts(titleText);
+  const titleIsFullMachine =
+    isDysonFullMachineListing(titleText) ||
+    (!titleIsMainUnit && !titleIsParts);
+
+  if (titleIsParts) {
+    return false;
+  }
+
+  if (wantsV11 && !titleHasV11) {
+    return false;
+  }
+
+  if (wantsOutsize) {
+    if (!titleHasOutsize) return false;
+    if (titleIsMainUnit) return false;
+    return titleIsFullMachine;
+  }
+
+  if (wantsMainUnit) {
+    if (wantsV11 && !titleHasV11) return false;
+    if (titleHasOutsize) return false;
+    return titleIsMainUnit;
+  }
+
+  if (wantsV11) {
+    if (!titleHasV11) return false;
+    if (titleHasOutsize) return false;
+    if (titleIsMainUnit) return false;
+    return titleIsFullMachine;
+  }
+
+  return true;
 }
 
 /* =========================
@@ -172,34 +292,9 @@ app.post("/api/find-deals", async (req, res) => {
     let filtered = deals;
 
     if (searchText.includes("dyson")) {
-      const isMain = searchText.includes("main unit") || searchText.includes("body");
-      const isOutsize = searchText.includes("outsize");
-
       filtered = deals.filter((d) => {
-        const t = normalizeText(d.title);
-
-        const main =
-          t.includes("main unit") ||
-          t.includes("motor unit") ||
-          t.includes("body");
-
-        const outsize = t.includes("outsize");
-
-        const parts =
-          t.includes("battery only") ||
-          t.includes("filter") ||
-          t.includes("wand") ||
-          t.includes("head") ||
-          t.includes("attachments") ||
-          t.includes("spares") ||
-          t.includes("parts");
-
-        if (parts) return false;
-
-        if (isMain) return main && !outsize;
-        if (isOutsize) return outsize && !main;
-
-        return !main && !outsize;
+        const titleText = normalizeText(d.title);
+        return matchesDysonVariant(searchText, titleText);
       });
     }
 
