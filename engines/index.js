@@ -1,7 +1,8 @@
 import { baseEngine } from "./baseEngine.js";
 import { dysonEngine } from "./dysonEngine.js";
+import { phoneEngine } from "./phoneEngine.js";
 
-const engineRegistry = [dysonEngine];
+const engineRegistry = [dysonEngine, phoneEngine];
 
 export function detectCategoryEngine(query = "") {
   for (const engine of engineRegistry) {
@@ -13,4 +14,4 @@ export function detectCategoryEngine(query = "") {
   return baseEngine;
 }
 
-export { baseEngine, dysonEngine };
+export { baseEngine, dysonEngine, phoneEngine };
