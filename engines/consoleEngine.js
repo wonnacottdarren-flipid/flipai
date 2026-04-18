@@ -9,7 +9,7 @@ import {
 } from "./baseEngine.js";
 
 const CONSOLE_FAMILIES = [
-  ["ps5_disc", ["ps5 disc", "playstation 5 disc", "ps5 standard", "playstation 5 standard", "standard edition"]],
+  ["ps5_disc", ["ps5 disc", "playstation 5 disc", "ps5 standard", "playstation 5 standard", "standard edition", "disc edition"]],
   ["ps5_digital", ["ps5 digital", "playstation 5 digital", "digital edition"]],
   ["xbox_series_x", ["xbox series x", "series x"]],
   ["xbox_series_s", ["xbox series s", "series s"]],
@@ -22,10 +22,20 @@ function hasAny(text, phrases = []) {
   return phrases.some((phrase) => text.includes(phrase));
 }
 
-function detectConsoleBrand(text) {
-  const t = normalizeText(text);
+function normalizeConsoleText(value) {
+  return normalizeText(String(value || ""))
+    .replace(/\bps\s*5\b/g, "ps5")
+    .replace(/\bplaystation\s*5\b/g, "playstation5")
+    .replace(/\bplaystation 5\b/g, "playstation5")
+    .replace(/\bsony ps5\b/g, "ps5")
+    .replace(/\bps5 slim\b/g, "ps5")
+    .replace(/\bplaystation5 slim\b/g, "playstation5");
+}
 
-  if (t.includes("ps5") || t.includes("playstation 5")) return "playstation";
+function detectConsoleBrand(text) {
+  const t = normalizeConsoleText(text);
+
+  if (t.includes("ps5") || t.includes("playstation5")) return "playstation";
   if (t.includes("xbox")) return "xbox";
   if (t.includes("switch") || t.includes("nintendo")) return "nintendo";
 
@@ -33,10 +43,10 @@ function detectConsoleBrand(text) {
 }
 
 function parseConsoleFamily(text) {
-  const t = normalizeText(text);
+  const t = normalizeConsoleText(text);
 
   for (const [family, patterns] of CONSOLE_FAMILIES) {
-    if (patterns.some((pattern) => t.includes(pattern))) {
+    if (patterns.some((pattern) => t.includes(normalizeConsoleText(pattern)))) {
       return family;
     }
   }
@@ -45,7 +55,7 @@ function parseConsoleFamily(text) {
 }
 
 function isConsoleAccessoryOnly(text) {
-  const t = normalizeText(text);
+  const t = normalizeConsoleText(text);
 
   return hasAny(t, [
     "controller only",
@@ -73,11 +83,15 @@ function isConsoleAccessoryOnly(text) {
     "console stand",
     "disc drive only",
     "disc reader only",
+    "controller for ps5",
+    "ps5 controller",
+    "dualsense only",
+    "dualsense edge only",
   ]);
 }
 
 function isSeverelyBadConsole(text) {
-  const t = normalizeText(text);
+  const t = normalizeConsoleText(text);
 
   return hasAny(t, [
     "for parts",
@@ -88,7 +102,7 @@ function isSeverelyBadConsole(text) {
     "broken",
     "not working",
     "no power",
-    "won't turn on",
+    "wont turn on",
     "will not turn on",
     "hdmi fault",
     "no hdmi",
@@ -105,7 +119,7 @@ function isSeverelyBadConsole(text) {
 }
 
 function classifyConsoleConditionState(text) {
-  const t = normalizeText(text);
+  const t = normalizeConsoleText(text);
 
   if (
     hasAny(t, [
@@ -117,7 +131,7 @@ function classifyConsoleConditionState(text) {
       "broken",
       "not working",
       "no power",
-      "won't turn on",
+      "wont turn on",
       "will not turn on",
       "hdmi fault",
       "no hdmi",
@@ -156,7 +170,7 @@ function classifyConsoleConditionState(text) {
 }
 
 function shouldAllowDamagedConsoles(queryContext) {
-  const q = normalizeText(queryContext?.normalizedQuery || "");
+  const q = normalizeConsoleText(queryContext?.normalizedQuery || "");
 
   return hasAny(q, [
     "faulty",
@@ -176,7 +190,7 @@ function isDamagedConsoleConditionState(conditionState) {
 }
 
 function hasControllerIncluded(text, family) {
-  const t = normalizeText(text);
+  const t = normalizeConsoleText(text);
 
   if (family.startsWith("switch")) {
     if (hasAny(t, ["tablet only", "console only", "no joy cons", "no joy-cons"])) return false;
@@ -191,7 +205,7 @@ function hasControllerIncluded(text, family) {
 }
 
 function classifyConsoleBundleType(text, family) {
-  const t = normalizeText(text);
+  const t = normalizeConsoleText(text);
 
   if (hasAny(t, ["bundle", "with games", "2 controllers", "two controllers", "extra controller"])) {
     return "bundle";
@@ -209,7 +223,7 @@ function classifyConsoleBundleType(text, family) {
 }
 
 function estimateConsoleRepairCost(queryContext, conditionState, text) {
-  const t = normalizeText(text);
+  const t = normalizeConsoleText(text);
   const family = String(queryContext?.family || "");
 
   if (conditionState === "faulty_or_parts") {
@@ -237,20 +251,35 @@ function estimateConsoleRepairCost(queryContext, conditionState, text) {
 }
 
 function matchesConsoleFamily(text, queryContext) {
-  const t = normalizeText(text);
+  const t = normalizeConsoleText(text);
   const family = String(queryContext?.family || "");
 
   if (!family) return true;
 
   if (family === "ps5_disc") {
-    const hasPs5 = t.includes("ps5") || t.includes("playstation 5");
-    const saysDigital = t.includes("digital");
+    const hasPs5 =
+      t.includes("ps5") ||
+      t.includes("playstation5") ||
+      t.includes("sony ps5");
+
+    const saysDigital =
+      t.includes("digital") ||
+      t.includes("digital edition");
+
+    // Broad PS5 disc logic:
+    // if it clearly looks like a PS5 and does NOT clearly say digital, accept it
     return hasPs5 && !saysDigital;
   }
 
   if (family === "ps5_digital") {
-    const hasPs5 = t.includes("ps5") || t.includes("playstation 5");
-    const saysDigital = t.includes("digital");
+    const hasPs5 =
+      t.includes("ps5") ||
+      t.includes("playstation5");
+
+    const saysDigital =
+      t.includes("digital") ||
+      t.includes("digital edition");
+
     return hasPs5 && saysDigital;
   }
 
@@ -285,7 +314,7 @@ function matchesConsoleFamily(text, queryContext) {
 }
 
 function scoreConsoleCandidate(item, queryContext) {
-  const text = normalizeText(
+  const text = normalizeConsoleText(
     [
       item?.title,
       item?.condition,
@@ -337,7 +366,7 @@ function scoreConsoleCandidate(item, queryContext) {
 function enrichConsoleCompPool(queryContext, items = []) {
   return (Array.isArray(items) ? items : [])
     .map((item) => {
-      const text = normalizeText(
+      const text = normalizeConsoleText(
         [
           item?.title,
           item?.condition,
@@ -457,10 +486,11 @@ export const consoleEngine = {
   id: "console",
 
   detect(query = "") {
-    const text = normalizeText(query);
+    const text = normalizeConsoleText(query);
 
     return (
       text.includes("ps5") ||
+      text.includes("playstation5") ||
       text.includes("playstation 5") ||
       text.includes("xbox series x") ||
       text.includes("xbox series s") ||
@@ -472,7 +502,7 @@ export const consoleEngine = {
 
   classifyQuery(query = "") {
     const rawQuery = String(query || "").trim();
-    const normalizedQuery = normalizeText(rawQuery);
+    const normalizedQuery = normalizeConsoleText(rawQuery);
     const brand = detectConsoleBrand(normalizedQuery);
     const family = parseConsoleFamily(normalizedQuery);
     const allowDamaged = shouldAllowDamagedConsoles({ normalizedQuery });
@@ -493,16 +523,23 @@ export const consoleEngine = {
 
     if (ctx.family === "ps5_disc") {
       variants.push("ps5");
+      variants.push("ps 5");
       variants.push("ps5 console");
+      variants.push("sony ps5");
       variants.push("playstation 5");
+      variants.push("playstation5");
       variants.push("playstation 5 console");
+      variants.push("playstation5 console");
       variants.push("playstation 5 standard");
       variants.push("ps5 standard");
+      variants.push("disc edition");
+      variants.push("standard edition");
     }
 
     if (ctx.family === "ps5_digital") {
       variants.push("ps5 digital");
       variants.push("playstation 5 digital");
+      variants.push("playstation5 digital");
       variants.push("digital edition");
     }
 
@@ -539,7 +576,7 @@ export const consoleEngine = {
   },
 
   matchesItem(item, queryContext) {
-    const text = normalizeText(
+    const text = normalizeConsoleText(
       [
         item?.title,
         item?.condition,
@@ -575,7 +612,7 @@ export const consoleEngine = {
   },
 
   classifyItem(item, queryContext) {
-    const text = normalizeText(
+    const text = normalizeConsoleText(
       [
         item?.title,
         item?.condition,
