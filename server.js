@@ -50,10 +50,6 @@ function roundMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
-function moneyText(value) {
-  return `£${roundMoney(value).toFixed(2)}`;
-}
-
 function median(values) {
   const nums = values
     .map((v) => Number(v || 0))
@@ -127,26 +123,6 @@ function extractTotalPrice(item) {
   return roundMoney(extractNumericPrice(item) + extractNumericShipping(item));
 }
 
-function extractItemUrl(item) {
-  return (
-    item?.itemWebUrl ||
-    item?.viewItemURL ||
-    item?.url ||
-    item?.link ||
-    ""
-  );
-}
-
-function extractItemImage(item) {
-  return (
-    item?.image?.imageUrl ||
-    item?.thumbnailImages?.[0]?.imageUrl ||
-    item?.galleryURL ||
-    item?.imageUrl ||
-    ""
-  );
-}
-
 function itemMatchesCondition(item, conditionText) {
   const wanted = normalizeText(conditionText).trim();
   if (!wanted) return true;
@@ -212,6 +188,93 @@ function buildAutoCompsFromItems(items = []) {
     maxSoldPrice,
     samplePrices: cleanedPrices.slice(0, 12),
     manualSoldPricesText: cleanedPrices.join(", "),
+  };
+}
+
+function buildReasonBreakdown({
+  pricingMode = "Market median",
+  confidence = 0,
+  confidenceLabel = "Low",
+  compCount = 0,
+  marginPercent = 0,
+  undervaluedAmount = 0,
+  undervaluedPercent = 0,
+  estimatedProfit = 0,
+  estimatedResale = 0,
+  totalBuyPrice = 0,
+  ebayFees = 0,
+  risk = "High",
+  verdict = "AVOID",
+  title = "",
+}) {
+  const bullets = [];
+
+  if (undervaluedAmount > 0) {
+    bullets.push(
+      `Spread of ${roundMoney(undervaluedAmount).toFixed(2)} between total buy cost and estimated resale.`
+    );
+  }
+
+  if (estimatedProfit > 0) {
+    bullets.push(
+      `Projected profit of ${roundMoney(estimatedProfit).toFixed(2)} after estimated eBay fees.`
+    );
+  } else if (estimatedProfit < 0) {
+    bullets.push(
+      `Current pricing leaves an estimated loss of ${Math.abs(roundMoney(estimatedProfit)).toFixed(2)} after fees.`
+    );
+  }
+
+  if (compCount > 0) {
+    bullets.push(
+      `${compCount} pricing comps support this estimate using ${pricingMode.toLowerCase()}.`
+    );
+  } else {
+    bullets.push(`No strong comp depth was found, so confidence is lower on this estimate.`);
+  }
+
+  if (marginPercent >= 40) {
+    bullets.push(`Strong margin profile for a resale candidate.`);
+  } else if (marginPercent >= 15) {
+    bullets.push(`Decent margin if the item matches the expected condition.`);
+  } else if (marginPercent > 0) {
+    bullets.push(`Thin margin, so buying discipline matters here.`);
+  } else {
+    bullets.push(`No real safety margin at the current ask price.`);
+  }
+
+  if (confidenceLabel === "High") {
+    bullets.push(`High confidence from a stronger matching comp pool.`);
+  } else if (confidenceLabel === "Medium") {
+    bullets.push(`Medium confidence with enough comps for a usable guide price.`);
+  } else {
+    bullets.push(`Low confidence because the comp pool is still light or mixed.`);
+  }
+
+  if (risk === "Low") {
+    bullets.push(`Risk is lower because projected profit clears the current threshold comfortably.`);
+  } else if (risk === "Medium") {
+    bullets.push(`Risk is moderate because the deal has some buffer but not a huge one.`);
+  } else {
+    bullets.push(`Risk is high because the current price leaves little room for error.`);
+  }
+
+  return {
+    pricingMode,
+    confidence: Number(confidence || 0),
+    confidenceLabel,
+    compCount: Number(compCount || 0),
+    marginPercent: roundMoney(marginPercent),
+    undervaluedAmount: roundMoney(undervaluedAmount),
+    undervaluedPercent: roundMoney(undervaluedPercent),
+    estimatedProfit: roundMoney(estimatedProfit),
+    estimatedResale: roundMoney(estimatedResale),
+    totalBuyPrice: roundMoney(totalBuyPrice),
+    ebayFees: roundMoney(ebayFees),
+    risk,
+    verdict,
+    bullets,
+    title,
   };
 }
 
@@ -667,122 +730,16 @@ function buildPricingModel(searchText, marketItems = [], listingItems = []) {
   };
 }
 
-/* =========================
-   🧠 DEAL BREAKDOWN HELPERS
-========================= */
-
-function buildDealReasonBreakdown({
+function buildDealAnalytics({
   item,
-  scanner,
   pricing,
-  searchText,
-  bestOffer,
+  title,
 }) {
-  const price = Number(extractNumericPrice(item) || 0);
-  const shipping = Number(extractNumericShipping(item) || 0);
-  const totalBuyPrice = Number(scanner?.totalBuyPrice || 0);
-  const estimatedResale = Number(scanner?.estimatedResale || 0);
-  const estimatedProfit = Number(scanner?.estimatedProfit || 0);
-  const ebayFees = Number(scanner?.ebayFees || 0);
-  const marginPercent = Number(scanner?.marginPercent || 0);
-  const dealGap = roundMoney(Math.max(0, estimatedResale - totalBuyPrice));
-  const dealGapPercent =
-    totalBuyPrice > 0 ? roundMoney((dealGap / totalBuyPrice) * 100) : 0;
-
-  const breakdownItems = [];
-
-  if (dealGap > 0) {
-    breakdownItems.push({
-      title: "Priced below model",
-      text: `Current total buy cost is ${moneyText(dealGap)} below FlipAI’s modeled resale (${moneyText(estimatedResale)}).`,
-    });
-  } else {
-    breakdownItems.push({
-      title: "Tight pricing",
-      text: `Current total buy cost is close to the modeled resale (${moneyText(estimatedResale)}), so this is not a wide-margin setup.`,
-    });
-  }
-
-  breakdownItems.push({
-    title: "Profit after fees",
-    text: `After estimated eBay fees of ${moneyText(ebayFees)}, projected profit is ${moneyText(estimatedProfit)}.`,
-  });
-
-  breakdownItems.push({
-    title: "Model strength",
-    text: `${Number(pricing?.compCount || 0)} comps support this estimate with ${pricing?.confidenceLabel || "Low"} confidence using ${pricing?.pricingMode || "Market median"}.`,
-  });
-
-  if (marginPercent > 0) {
-    breakdownItems.push({
-      title: "Margin cushion",
-      text: `Projected return is ${marginPercent.toFixed(2)}% on total buy cost.`,
-    });
-  }
-
-  if (bestOffer?.hasBestOffer) {
-    breakdownItems.push({
-      title: "Negotiation angle",
-      text: `This listing accepts offers. Suggested entry is ${moneyText(bestOffer.suggestedOffer)} and the ceiling is ${moneyText(bestOffer.maxSafeOffer)}.`,
-    });
-  }
-
-  if (searchText.includes("dyson")) {
-    if (searchText.includes("main unit") || searchText.includes("main body") || searchText.includes("motor unit")) {
-      breakdownItems.push({
-        title: "Variant matched",
-        text: "FlipAI matched this against Dyson main-unit pricing logic rather than full-vacuum pricing.",
-      });
-    } else if (searchText.includes("outsize")) {
-      breakdownItems.push({
-        title: "Variant matched",
-        text: "FlipAI matched this against Dyson Outsize pricing logic rather than standard V11 pricing.",
-      });
-    } else if (searchText.includes("v11")) {
-      breakdownItems.push({
-        title: "Variant matched",
-        text: "FlipAI matched this against Dyson V11 full-machine pricing logic.",
-      });
-    }
-  }
-
-  const conditionText =
-    item?.condition ||
-    item?.conditionDisplayName ||
-    item?.itemCondition ||
-    "";
-
-  if (conditionText) {
-    breakdownItems.push({
-      title: "Condition context",
-      text: `Listing condition is ${String(conditionText)}.`,
-    });
-  }
-
-  let headline = "Worth checking";
-  if (estimatedProfit >= 40) {
-    headline = `Strong spread: about ${moneyText(dealGap)} below model with ${moneyText(estimatedProfit)} projected profit.`;
-  } else if (estimatedProfit >= 15) {
-    headline = `Usable spread: about ${moneyText(dealGap)} below model with ${moneyText(estimatedProfit)} projected profit.`;
-  } else if (estimatedProfit >= 5) {
-    headline = `Borderline spread: around ${moneyText(dealGap)} below model, but profit is tight after fees.`;
-  } else {
-    headline = `Weak spread: current total leaves little room after fees and resale slippage.`;
-  }
-
-  return {
-    headline,
-    summary: `Gap ${moneyText(dealGap)} (${dealGapPercent.toFixed(2)}%) | Profit ${moneyText(estimatedProfit)} | Confidence ${pricing?.confidenceLabel || "Low"}`,
-    items: breakdownItems.slice(0, 5),
-  };
-}
-
-function buildScoredDealFromItem(item, pricing, searchText) {
   const price = extractNumericPrice(item);
   const shipping = extractNumericShipping(item);
   const total = roundMoney(price + shipping);
 
-  const resale = roundMoney(pricing.estimatedResale || 0);
+  const resale = roundMoney(pricing?.estimatedResale || 0);
   const fees = roundMoney(resale * 0.15);
   const estimatedProfit = roundMoney(resale - fees - total);
   const marginPercent =
@@ -797,6 +754,20 @@ function buildScoredDealFromItem(item, pricing, searchText) {
   if (estimatedProfit >= 40) risk = "Low";
   else if (estimatedProfit >= 15) risk = "Medium";
 
+  const score = roundMoney(
+    Math.max(0, estimatedProfit) +
+      Math.max(0, marginPercent) +
+      (risk === "Low" ? 15 : risk === "Medium" ? 8 : 0)
+  );
+
+  const undervaluedAmount = roundMoney(Math.max(0, resale - total));
+  const undervaluedPercent =
+    total > 0 ? roundMoney((undervaluedAmount / total) * 100) : 0;
+
+  let finderLabel = "Tight";
+  if (estimatedProfit >= 40) finderLabel = "Buy";
+  else if (estimatedProfit >= 15) finderLabel = "Offer";
+
   const scanner = {
     totalBuyPrice: total,
     estimatedResale: resale,
@@ -806,49 +777,57 @@ function buildScoredDealFromItem(item, pricing, searchText) {
     marginPercent,
     verdict,
     risk,
-    score: roundMoney(
-      Math.max(0, estimatedProfit) +
-        Math.max(0, marginPercent) +
-        (risk === "Low" ? 15 : risk === "Medium" ? 8 : 0)
-    ),
-    compCount: Number(pricing.compCount || 0),
-    confidence: Number(pricing.confidence || 0),
-    confidenceLabel: pricing.confidenceLabel || "Low",
-    pricingMode: pricing.pricingMode || "Market median",
+    score,
+    compCount: Number(pricing?.compCount || 0),
+    confidence: Number(pricing?.confidence || 0),
+    confidenceLabel: pricing?.confidenceLabel || "Low",
+    pricingMode: pricing?.pricingMode || "Market median",
   };
 
-  const bestOffer = buildBestOfferGuidance(item, scanner);
-  const undervaluedAmount = roundMoney(Math.max(0, resale - total));
-  const undervaluedPercent =
-    total > 0 ? roundMoney((undervaluedAmount / total) * 100) : 0;
-
-  let finderLabel = "Tight";
-  if (estimatedProfit >= 40) finderLabel = "Buy";
-  else if (estimatedProfit >= 15) finderLabel = "Offer";
-
-  const reasonBreakdown = buildDealReasonBreakdown({
-    item,
-    scanner,
-    pricing,
-    searchText,
-    bestOffer,
+  const reasonBreakdown = buildReasonBreakdown({
+    pricingMode: scanner.pricingMode,
+    confidence: scanner.confidence,
+    confidenceLabel: scanner.confidenceLabel,
+    compCount: scanner.compCount,
+    marginPercent,
+    undervaluedAmount,
+    undervaluedPercent,
+    estimatedProfit,
+    estimatedResale: resale,
+    totalBuyPrice: total,
+    ebayFees: fees,
+    risk,
+    verdict,
+    title,
   });
 
+  let reason = `Estimated resale based on conservative UK resale assumptions. Risk: ${risk}.`;
+
+  if (undervaluedAmount > 0 && estimatedProfit > 0) {
+    reason = `Strong spread: about £${undervaluedAmount.toFixed(2)} below model with £${estimatedProfit.toFixed(2)} projected profit.`;
+  } else if (estimatedProfit > 0) {
+    reason = `Projected profit of about £${estimatedProfit.toFixed(2)} after fees. Risk: ${risk}.`;
+  } else {
+    reason = `Limited or negative margin at the current ask price. Risk: ${risk}.`;
+  }
+
   return {
-    ...item,
     price,
     shipping,
-    imageUrl: extractItemImage(item),
-    scanner,
-    bestOffer,
+    total,
+    resale,
+    fees,
     estimatedProfit,
-    dealScore: scanner.score,
+    marginPercent,
+    verdict,
+    risk,
+    score,
     undervaluedAmount,
     undervaluedPercent,
     finderLabel,
-    reason: reasonBreakdown.headline,
+    scanner,
     reasonBreakdown,
-    url: extractItemUrl(item),
+    reason,
   };
 }
 
@@ -894,7 +873,7 @@ app.post("/api/search-ebay", async (req, res) => {
       return res.status(400).json({ error: "Search query required." });
     }
 
-    const listings = await searchEbayListings({
+    const items = await searchEbayListings({
       query,
       maxPrice: filterPriceMax,
       condition,
@@ -910,8 +889,9 @@ app.post("/api/search-ebay", async (req, res) => {
 
     const searchText = normalizeText(query);
 
-    let filtered = Array.isArray(listings) ? listings : [];
+    let filtered = Array.isArray(items) ? items : [];
     let cleanMarket = Array.isArray(market) ? market : [];
+    let cleanListingsForPricing = Array.isArray(items) ? items : [];
 
     filtered = filtered.filter((item) => itemMatchesCondition(item, condition));
     filtered = filtered.filter((item) => itemMatchesPrice(item, filterPriceMax));
@@ -921,15 +901,43 @@ app.post("/api/search-ebay", async (req, res) => {
 
     if (searchText.includes("dyson")) {
       filtered = filtered.filter((item) => matchesDysonVariant(searchText, item));
-      cleanMarket = cleanMarket.filter((item) =>
+      cleanMarket = cleanMarket.filter((item) => matchesDysonVariant(searchText, item));
+      cleanListingsForPricing = cleanListingsForPricing.filter((item) =>
         matchesDysonVariant(searchText, item)
       );
     }
 
-    const pricing = buildPricingModel(searchText, cleanMarket, filtered);
-    const enrichedItems = filtered.map((item) =>
-      buildScoredDealFromItem(item, pricing, searchText)
-    );
+    const pricing = buildPricingModel(searchText, cleanMarket, cleanListingsForPricing);
+
+    const enrichedItems = filtered.map((item) => {
+      const title = extractItemTitle(item);
+      const analytics = buildDealAnalytics({
+        item,
+        pricing,
+        title,
+      });
+
+      return {
+        ...item,
+        price: analytics.price,
+        shipping: analytics.shipping,
+        scanner: analytics.scanner,
+        estimatedProfit: analytics.estimatedProfit,
+        reason: analytics.reason,
+        reasonBreakdown: analytics.reasonBreakdown,
+        bestOffer: buildBestOfferGuidance(item, analytics.scanner),
+        dealScore: analytics.score,
+        undervaluedAmount: analytics.undervaluedAmount,
+        undervaluedPercent: analytics.undervaluedPercent,
+        finderLabel: analytics.finderLabel,
+        url:
+          item?.itemWebUrl ||
+          item?.viewItemURL ||
+          item?.url ||
+          item?.link ||
+          "",
+      };
+    });
 
     return res.json({
       ok: true,
@@ -1043,9 +1051,36 @@ app.post("/api/find-deals", async (req, res) => {
 
     const pricing = buildPricingModel(searchText, cleanMarket, cleanListingsForPricing);
 
-    let deals = (Array.isArray(listings) ? listings : []).map((item) =>
-      buildScoredDealFromItem(item, pricing, searchText)
-    );
+    let deals = (Array.isArray(listings) ? listings : []).map((item) => {
+      const title = extractItemTitle(item);
+
+      const analytics = buildDealAnalytics({
+        item,
+        pricing,
+        title,
+      });
+
+      return {
+        ...item,
+        price: analytics.price,
+        shipping: analytics.shipping,
+        scanner: analytics.scanner,
+        bestOffer: buildBestOfferGuidance(item, analytics.scanner),
+        estimatedProfit: analytics.estimatedProfit,
+        dealScore: analytics.score,
+        undervaluedAmount: analytics.undervaluedAmount,
+        undervaluedPercent: analytics.undervaluedPercent,
+        finderLabel: analytics.finderLabel,
+        reason: analytics.reason,
+        reasonBreakdown: analytics.reasonBreakdown,
+        url:
+          item?.itemWebUrl ||
+          item?.viewItemURL ||
+          item?.url ||
+          item?.link ||
+          "",
+      };
+    });
 
     deals = deals.filter((item) => itemMatchesCondition(item, condition));
     deals = deals.filter((item) => itemMatchesPrice(item, filterPriceMax));
