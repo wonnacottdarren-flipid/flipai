@@ -82,18 +82,13 @@ function isAccessoryTitle(text) {
   const t = normalizeConsoleText(text);
 
   return hasAny(t, [
-    "controller",
-    "dualsense",
-    "dualsense",
-    "dual shock",
-    "dualshock",
-    "joy con",
-    "joy-con",
-    "headset",
-    "headphones",
-    "earbuds",
+    "controller only",
+    "dualsense only",
+    "dualshock only",
+    "joy con only",
+    "joy-con only",
+    "headset only",
     "charging dock",
-    "dock station",
     "dock only",
     "charger only",
     "power cable only",
@@ -117,6 +112,9 @@ function isAccessoryTitle(text) {
     "disc reader only",
     "mount only",
     "fan only",
+    "controller for ps5",
+    "controller for xbox",
+    "controller for switch",
   ]);
 }
 
@@ -271,22 +269,70 @@ function hasControllerIncluded(text, family) {
   return true;
 }
 
-function classifyConsoleBundleType(text, family) {
+function detectExtraControllerCount(text) {
   const t = normalizeConsoleText(text);
 
-  if (hasAny(t, ["bundle", "with games", "2 controllers", "two controllers", "extra controller"])) {
-    return "bundle";
-  }
+  if (hasAny(t, ["3 controllers", "three controllers"])) return 2;
+  if (hasAny(t, ["2 controllers", "two controllers", "extra controller", "second controller"])) return 1;
+  return 0;
+}
 
-  if (hasAny(t, ["boxed", "box included", "original box"])) {
-    return "boxed";
-  }
+function detectIncludedGamesCount(text) {
+  const t = normalizeConsoleText(text);
+
+  if (hasAny(t, ["10 games", "10x games", "ten games"])) return 10;
+  if (hasAny(t, ["5 games", "five games"])) return 5;
+  if (hasAny(t, ["3 games", "three games"])) return 3;
+  if (hasAny(t, ["2 games", "two games"])) return 2;
+  if (hasAny(t, ["with game", "with games", "game included", "games included", "bundle"])) return 1;
+  return 0;
+}
+
+function detectBundleSignals(text, family) {
+  const t = normalizeConsoleText(text);
+  const extraControllerCount = detectExtraControllerCount(t);
+  const includedGamesCount = detectIncludedGamesCount(t);
+
+  const hasBox =
+    hasAny(t, ["boxed", "box included", "original box", "complete in box"]) ? 1 : 0;
+
+  const hasAccessories =
+    hasAny(t, [
+      "with headset",
+      "with charging station",
+      "with dock",
+      "with camera",
+      "with media remote",
+      "with accessories",
+      "extras included",
+      "with extra accessories",
+    ]) ? 1 : 0;
+
+  let bundleType = "standard";
 
   if (!hasControllerIncluded(t, family)) {
-    return "console_only";
+    bundleType = "console_only";
   }
 
-  return "standard";
+  if (hasBox) {
+    bundleType = "boxed";
+  }
+
+  if (extraControllerCount > 0 || includedGamesCount > 0 || hasAccessories) {
+    bundleType = "bundle";
+  }
+
+  return {
+    bundleType,
+    extraControllerCount,
+    includedGamesCount,
+    hasBox: Boolean(hasBox),
+    hasAccessories: Boolean(hasAccessories),
+  };
+}
+
+function classifyConsoleBundleType(text, family) {
+  return detectBundleSignals(text, family).bundleType;
 }
 
 function estimateConsoleRepairCost(queryContext, conditionState, text) {
@@ -324,26 +370,14 @@ function matchesConsoleFamily(text, queryContext) {
   if (!family) return true;
 
   if (family === "ps5_disc") {
-    const hasPs5 =
-      t.includes("ps5") ||
-      t.includes("playstation5");
-
-    const saysDigital =
-      t.includes("digital") ||
-      t.includes("digital edition");
-
+    const hasPs5 = t.includes("ps5") || t.includes("playstation5");
+    const saysDigital = t.includes("digital") || t.includes("digital edition");
     return hasPs5 && !saysDigital;
   }
 
   if (family === "ps5_digital") {
-    const hasPs5 =
-      t.includes("ps5") ||
-      t.includes("playstation5");
-
-    const saysDigital =
-      t.includes("digital") ||
-      t.includes("digital edition");
-
+    const hasPs5 = t.includes("ps5") || t.includes("playstation5");
+    const saysDigital = t.includes("digital") || t.includes("digital edition");
     return hasPs5 && saysDigital;
   }
 
@@ -377,6 +411,40 @@ function matchesConsoleFamily(text, queryContext) {
   return true;
 }
 
+function estimateBundleValueBonus(queryContext, bundleSignals) {
+  const family = String(queryContext?.family || "");
+  const extraControllerCount = Number(bundleSignals?.extraControllerCount || 0);
+  const includedGamesCount = Number(bundleSignals?.includedGamesCount || 0);
+  const hasBox = Boolean(bundleSignals?.hasBox);
+  const hasAccessories = Boolean(bundleSignals?.hasAccessories);
+
+  let bonus = 0;
+
+  if (family.startsWith("ps5")) {
+    bonus += extraControllerCount * 35;
+    bonus += Math.min(includedGamesCount, 5) * 10;
+    if (hasBox) bonus += 8;
+    if (hasAccessories) bonus += 10;
+  } else if (family.startsWith("xbox_series")) {
+    bonus += extraControllerCount * 30;
+    bonus += Math.min(includedGamesCount, 5) * 9;
+    if (hasBox) bonus += 8;
+    if (hasAccessories) bonus += 8;
+  } else if (family.startsWith("switch")) {
+    bonus += extraControllerCount * 28;
+    bonus += Math.min(includedGamesCount, 5) * 8;
+    if (hasBox) bonus += 10;
+    if (hasAccessories) bonus += 10;
+  } else {
+    bonus += extraControllerCount * 25;
+    bonus += Math.min(includedGamesCount, 5) * 8;
+    if (hasBox) bonus += 8;
+    if (hasAccessories) bonus += 8;
+  }
+
+  return roundMoney(bonus);
+}
+
 function scoreConsoleCandidate(item, queryContext) {
   const text = getCombinedItemText(item);
 
@@ -394,7 +462,8 @@ function scoreConsoleCandidate(item, queryContext) {
   let score = 0;
 
   const itemBrand = detectConsoleBrand(text);
-  const bundleType = classifyConsoleBundleType(text, queryContext.family || "");
+  const bundleSignals = detectBundleSignals(text, queryContext.family || "");
+  const bundleType = bundleSignals.bundleType;
 
   if (queryContext.brand) {
     if (itemBrand === queryContext.brand) score += 1.2;
@@ -411,9 +480,13 @@ function scoreConsoleCandidate(item, queryContext) {
   if (conditionState === "minor_fault") score -= 2;
   if (conditionState === "faulty_or_parts") score -= 8;
 
-  if (bundleType === "bundle") score += 0.8;
+  if (bundleType === "bundle") score += 1.3;
   if (bundleType === "boxed") score += 0.5;
   if (bundleType === "console_only") score -= 1.5;
+
+  score += Math.min(bundleSignals.extraControllerCount, 2) * 0.6;
+  score += Math.min(bundleSignals.includedGamesCount, 4) * 0.2;
+  if (bundleSignals.hasAccessories) score += 0.25;
 
   return score;
 }
@@ -422,12 +495,18 @@ function enrichConsoleCompPool(queryContext, items = []) {
   return (Array.isArray(items) ? items : [])
     .map((item) => {
       const text = getCombinedItemText(item);
+      const bundleSignals = detectBundleSignals(text, queryContext.family || "");
+      const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals);
 
       return {
         item,
         total: extractTotalPrice(item),
+        adjustedTotal: roundMoney(extractTotalPrice(item) - bundleValueBonus),
         score: scoreConsoleCandidate(item, queryContext),
         conditionState: classifyConsoleConditionState(text),
+        bundleType: bundleSignals.bundleType,
+        bundleSignals,
+        bundleValueBonus,
       };
     })
     .filter((entry) => entry.total > 0 && entry.score > -5)
@@ -465,13 +544,13 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   let marketTotals = removePriceOutliers(
     (usableMarket.length ? usableMarket : marketConditionPool)
       .slice(0, 20)
-      .map((entry) => entry.total)
+      .map((entry) => entry.adjustedTotal)
   );
 
   let listingTotals = removePriceOutliers(
     (usableListings.length ? usableListings : listingConditionPool)
       .slice(0, 14)
-      .map((entry) => entry.total)
+      .map((entry) => entry.adjustedTotal)
   );
 
   if (marketTotals.length < 3 && listingTotals.length >= 2) {
@@ -524,6 +603,19 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     marketMedian: roundMoney(marketMedian),
     marketLow: roundMoney(marketLow),
     listingMedian: roundMoney(listingMedian),
+  };
+}
+
+function applyBundleValueToListing(queryContext, item, baseResale) {
+  const text = getCombinedItemText(item);
+  const bundleSignals = detectBundleSignals(text, queryContext.family || "");
+  const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals);
+
+  return {
+    bundleSignals,
+    bundleType: bundleSignals.bundleType,
+    bundleValueBonus,
+    estimatedResale: roundMoney(Number(baseResale || 0) + bundleValueBonus),
   };
 }
 
@@ -580,6 +672,7 @@ export const consoleEngine = {
       variants.push("ps5 standard");
       variants.push("disc edition");
       variants.push("standard edition");
+      variants.push("ps5 bundle");
     }
 
     if (ctx.family === "ps5_digital") {
@@ -587,35 +680,41 @@ export const consoleEngine = {
       variants.push("playstation 5 digital");
       variants.push("playstation5 digital");
       variants.push("digital edition");
+      variants.push("ps5 digital bundle");
     }
 
     if (ctx.family === "xbox_series_x") {
       variants.push("xbox series x");
       variants.push("series x");
       variants.push("xbox x console");
+      variants.push("xbox series x bundle");
     }
 
     if (ctx.family === "xbox_series_s") {
       variants.push("xbox series s");
       variants.push("series s");
       variants.push("xbox s console");
+      variants.push("xbox series s bundle");
     }
 
     if (ctx.family === "switch_oled") {
       variants.push("switch oled");
       variants.push("nintendo switch oled");
       variants.push("oled model");
+      variants.push("switch oled bundle");
     }
 
     if (ctx.family === "switch_lite") {
       variants.push("switch lite");
       variants.push("nintendo switch lite");
+      variants.push("switch lite bundle");
     }
 
     if (ctx.family === "switch_v2") {
       variants.push("nintendo switch");
       variants.push("switch console");
       variants.push("switch v2");
+      variants.push("switch bundle");
     }
 
     return [...new Set(variants.filter(Boolean))];
@@ -650,15 +749,22 @@ export const consoleEngine = {
 
   classifyItem(item, queryContext) {
     const text = getCombinedItemText(item);
-
     const conditionState = classifyConsoleConditionState(text);
     const repairCost = estimateConsoleRepairCost(queryContext, conditionState, text);
-    const bundleType = classifyConsoleBundleType(text, queryContext.family || "");
+    const bundleSignals = detectBundleSignals(text, queryContext.family || "");
+    const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals);
 
     return {
       conditionState,
       repairCost,
-      bundleType,
+      bundleType: bundleSignals.bundleType,
+      bundleSignals,
+      bundleValueBonus,
     };
+  },
+
+  adjustListingPricing({ queryContext, item, pricingModel }) {
+    const baseResale = Number(pricingModel?.estimatedResale || 0);
+    return applyBundleValueToListing(queryContext, item, baseResale);
   },
 };
