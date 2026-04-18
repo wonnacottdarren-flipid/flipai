@@ -852,6 +852,43 @@
       background: rgba(255,255,255,0.03);
     }
 
+    .finder-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+    }
+
+    .finder-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: #dbeafe;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .finder-toggle input {
+      width: auto;
+      margin: 0;
+      accent-color: var(--blue);
+      transform: scale(1.05);
+    }
+
+    .finder-toolbar-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
     .footer {
       margin-top: 30px;
       padding: 18px 0 10px;
@@ -888,6 +925,10 @@
 
       .topbar {
         flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .finder-toolbar {
         align-items: flex-start;
       }
     }
@@ -1159,6 +1200,17 @@
       <p class="account-subline" style="margin-top:0;">
         This uses FlipAI’s scoring to surface likely opportunities first, instead of just listing search results.
       </p>
+
+      <div class="finder-toolbar">
+        <label class="finder-toggle" for="showTightDeals">
+          <input id="showTightDeals" type="checkbox" />
+          Reveal Tight deals
+        </label>
+        <div class="finder-toolbar-note">
+          Buy and Offer deals are shown by default. Tight deals stay hidden unless you switch them on.
+        </div>
+      </div>
+
       <div id="finderResults" class="deal-empty">
         Use the “Find Best Deals” button above and your ranked deal results will appear here.
       </div>
@@ -1288,6 +1340,9 @@
     const finderStatusEl = document.getElementById("finderStatus");
     const dealResultsEl = document.getElementById("dealResults");
     const finderResultsEl = document.getElementById("finderResults");
+    const showTightDealsCheckbox = document.getElementById("showTightDeals");
+
+    window.__lastFinderResponse = null;
 
     function getPayload() {
       return {
@@ -1700,6 +1755,14 @@
       `;
     }
 
+    function shouldShowFinderDeal(deal) {
+      const label = String(deal.finderLabel || "").toLowerCase();
+      if (label.includes("buy")) return true;
+      if (label.includes("offer")) return true;
+      if (showTightDealsCheckbox.checked && label.includes("tight")) return true;
+      return false;
+    }
+
     window.useDealForAnalysis = useDealForAnalysis;
 
     function renderDealResults(data) {
@@ -1829,13 +1892,20 @@
     }
 
     function renderFinderResults(data) {
-      const rawDeals = data.deals || [];
-      const deals = rawDeals.map(mapFinderDeal);
+      if (data) {
+        window.__lastFinderResponse = data;
+      }
+
+      const source = data || window.__lastFinderResponse || {};
+      const rawDeals = source.deals || [];
+      const deals = rawDeals.map(mapFinderDeal).filter(shouldShowFinderDeal);
       window.__lastFoundDeals = deals;
 
       if (!deals.length) {
-        finderResultsEl.innerHTML =
-          '<div class="deal-empty">No ranked deals found for that search. Try widening the max price or using a broader search term.</div>';
+        const message = showTightDealsCheckbox.checked
+          ? "No ranked deals found for that search. Try widening the max price or using a broader search term."
+          : "No Buy or Offer deals found right now. Switch on “Reveal Tight deals” to see borderline opportunities.";
+        finderResultsEl.innerHTML = `<div class="deal-empty">${escapeHtml(message)}</div>`;
         return;
       }
 
@@ -2143,6 +2213,8 @@
       setFinderStatus("", "");
       window.__lastDeals = [];
       window.__lastFoundDeals = [];
+      window.__lastFinderResponse = null;
+      showTightDealsCheckbox.checked = false;
     }
 
     async function loadUser() {
@@ -2282,6 +2354,8 @@
         setFinderStatus("", "");
         window.__lastDeals = [];
         window.__lastFoundDeals = [];
+        window.__lastFinderResponse = null;
+        showTightDealsCheckbox.checked = false;
         await loadUser();
       } catch (err) {
         setAuthStatus(`Error: ${err.message}`, "error");
@@ -2358,6 +2432,7 @@
     starterBtn.addEventListener("click", () => window.startCheckout("starter"));
     proBtn.addEventListener("click", () => window.startCheckout("pro"));
     billingBtn.addEventListener("click", openBillingPortal);
+    showTightDealsCheckbox.addEventListener("change", () => renderFinderResults());
 
     loadUser();
   </script>
