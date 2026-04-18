@@ -155,6 +155,7 @@ function isAccessoryOnly(text) {
     "screen assembly",
     "battery replacement",
     "rear glass only",
+    "front glass only",
   ]);
 }
 
@@ -197,85 +198,111 @@ function isExplicitlyUnlocked(text) {
 function classifyPhoneConditionState(text) {
   const t = normalizeText(text);
 
-  const severeFault = hasAny(t, [
-    "for parts",
-    "for spares",
-    "spares or repairs",
-    "spares/repairs",
-    "not working",
-    "faulty",
-    "dead",
-    "won't turn on",
-    "will not turn on",
-    "no power",
-    "water damaged",
-    "boot loop",
-    "bootloop",
-    "stuck on logo",
-    "motherboard fault",
-    "board fault",
-    "no display",
-    "touch not working",
-    "face id not working",
-    "camera not working",
-    "imei issue",
-    "signal issue",
-  ]);
-
-  if (severeFault) {
+  if (
+    hasAny(t, [
+      "for parts",
+      "for spares",
+      "spares or repairs",
+      "spares/repairs",
+      "not working",
+      "faulty",
+      "dead",
+      "won't turn on",
+      "will not turn on",
+      "no power",
+      "water damaged",
+      "boot loop",
+      "bootloop",
+      "stuck on logo",
+      "motherboard fault",
+      "board fault",
+      "no display",
+      "touch not working",
+      "face id not working",
+      "camera not working",
+      "imei issue",
+      "signal issue",
+    ])
+  ) {
     return "faulty_or_parts";
   }
 
-  const majorDamage = hasAny(t, [
-    "cracked screen",
-    "screen cracked",
-    "cracked display",
-    "display cracked",
-    "broken screen",
-    "needs screen",
-    "screen replacement needed",
-    "screen replacement required",
-    "screen issue",
-    "screen issues",
-    "green line",
-    "pink line",
-    "black spot",
-    "burn in",
-    "screen burn",
-    "lcd bleed",
-    "dead pixels",
-    "back cracked",
-    "rear cracked",
-    "front cracked",
-    "glass cracked",
-  ]);
-
-  if (majorDamage) {
+  if (
+    hasAny(t, [
+      "cracked screen",
+      "screen cracked",
+      "cracked display",
+      "display cracked",
+      "broken screen",
+      "needs screen",
+      "screen replacement needed",
+      "screen replacement required",
+      "screen issue",
+      "screen issues",
+      "green line",
+      "pink line",
+      "black spot",
+      "burn in",
+      "screen burn",
+      "lcd bleed",
+      "dead pixels",
+      "back cracked",
+      "rear cracked",
+      "front cracked",
+      "glass cracked",
+      "*cracked*",
+    ])
+  ) {
     return "screen_cracked";
   }
 
-  const poorCosmetic = hasAny(t, [
-    "poor condition",
-    "heavy wear",
-    "heavily worn",
-    "deep scratches",
-    "scratches all over",
-    "bad condition",
-    "fair condition",
-    "used fair",
-    "used poor",
-    "no s pen",
-    "missing s pen",
-    "no pen",
-    "battery service",
-    "battery health low",
-  ]);
-
-  if (poorCosmetic) {
+  if (
+    hasAny(t, [
+      "poor condition",
+      "heavy wear",
+      "heavily worn",
+      "deep scratches",
+      "scratches all over",
+      "bad condition",
+      "fair condition",
+      "used fair",
+      "used poor",
+      "no s pen",
+      "missing s pen",
+      "no pen",
+      "battery service",
+      "battery health low",
+    ])
+  ) {
     return "minor_fault";
   }
 
   return "clean_working";
+}
+
+function shouldAllowDamagedListings(queryContext) {
+  const q = normalizeText(queryContext?.normalizedQuery || "");
+
+  return hasAny(q, [
+    "cracked",
+    "faulty",
+    "broken",
+    "damaged",
+    "for parts",
+    "for spares",
+    "spares",
+    "repairs",
+    "needs screen",
+    "poor condition",
+  ]);
+}
+
+function isDamagedConditionState(conditionState) {
+  return (
+    conditionState === "minor_fault" ||
+    conditionState === "screen_cracked" ||
+    conditionState === "faulty_or_parts"
+  );
 }
 
 function estimatePhoneRepairCost(queryContext, conditionState, text) {
@@ -310,21 +337,6 @@ function estimatePhoneRepairCost(queryContext, conditionState, text) {
   return 0;
 }
 
-function shouldAllowDamagedListings(queryContext) {
-  const q = normalizeText(queryContext?.normalizedQuery || "");
-
-  return hasAny(q, [
-    "cracked",
-    "faulty",
-    "broken",
-    "poor condition",
-    "damaged",
-    "needs screen",
-    "for parts",
-    "spares",
-  ]);
-}
-
 function scorePhoneCandidate(item, queryContext) {
   const text = normalizeText(
     [
@@ -344,7 +356,7 @@ function scorePhoneCandidate(item, queryContext) {
   const conditionState = classifyPhoneConditionState(text);
   const allowDamaged = shouldAllowDamagedListings(queryContext);
 
-  if (!allowDamaged && conditionState !== "clean_working") {
+  if (!allowDamaged && isDamagedConditionState(conditionState)) {
     return -10;
   }
 
@@ -373,8 +385,8 @@ function scorePhoneCandidate(item, queryContext) {
   if (queryContext.wantsUnlocked) {
     if (isExplicitlyUnlocked(text)) score += 0.8;
     if (isNetworkLocked(text)) score -= 3;
-  } else {
-    if (isNetworkLocked(text)) score -= 1.5;
+  } else if (isNetworkLocked(text)) {
+    score -= 1.5;
   }
 
   if (conditionState === "clean_working") score += 1.5;
@@ -442,11 +454,15 @@ function buildPhonePricingModel(queryContext, marketItems = [], listingItems = [
       : listingConditionPool.filter((entry) => entry.score >= 3);
 
   let marketTotals = removePriceOutliers(
-    (usableMarket.length ? usableMarket : marketConditionPool).slice(0, 20).map((entry) => entry.total)
+    (usableMarket.length ? usableMarket : marketConditionPool)
+      .slice(0, 20)
+      .map((entry) => entry.total)
   );
 
   let listingTotals = removePriceOutliers(
-    (usableListings.length ? usableListings : listingConditionPool).slice(0, 14).map((entry) => entry.total)
+    (usableListings.length ? usableListings : listingConditionPool)
+      .slice(0, 14)
+      .map((entry) => entry.total)
   );
 
   if (marketTotals.length < 3 && listingTotals.length >= 2) {
@@ -592,7 +608,8 @@ export const phoneEngine = {
     const conditionState = classifyPhoneConditionState(text);
     const allowDamaged = Boolean(queryContext?.allowDamaged);
 
-    if (!allowDamaged && conditionState !== "clean_working") {
+    // HARD EXCLUSION: normal phone searches must not include damaged stock.
+    if (!allowDamaged && isDamagedConditionState(conditionState)) {
       return false;
     }
 
@@ -610,6 +627,10 @@ export const phoneEngine = {
       itemStorageGb > 0 &&
       itemStorageGb !== queryContext.storageGb
     ) {
+      return false;
+    }
+
+    if (queryContext.wantsUnlocked && !isExplicitlyUnlocked(text)) {
       return false;
     }
 
