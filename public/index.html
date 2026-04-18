@@ -793,14 +793,14 @@
 
     .offer-box {
       margin-bottom: 12px;
-      padding: 14px;
+      padding: 16px;
       border-radius: 16px;
       background: rgba(79,140,255,0.09);
       border: 1px solid rgba(79,140,255,0.2);
     }
 
     .offer-box h4 {
-      margin: 0 0 10px;
+      margin: 0 0 8px;
       font-size: 15px;
       color: #dbeafe;
     }
@@ -835,6 +835,7 @@
       font-size: 13px;
       color: #cbd5e1;
       line-height: 1.6;
+      margin-top: 2px;
     }
 
     .deal-image-wrap {
@@ -1599,7 +1600,7 @@
         price,
         shipping,
         estimatedResale: Number(scanner.estimatedResale || 0),
-        estimatedProfit: Number(scanner.estimatedProfit || 0),
+        estimatedProfit: Number(scanner.estimatedProfit || rawDeal.estimatedProfit || 0),
         totalBuyPrice: Number(scanner.totalBuyPrice || price + shipping),
         ebayFees: Number(scanner.ebayFees || 0),
         score: Number(scanner.score || 0),
@@ -1663,7 +1664,7 @@
 
       return `
         <div class="offer-box">
-          <h4>Best offer guidance</h4>
+          <h4>Offer guidance</h4>
           <div class="offer-grid">
             <div class="offer-stat">
               <div class="label">Suggested offer</div>
@@ -1674,7 +1675,7 @@
               <div class="value">${currency(bestOffer.aggressiveOffer)}</div>
             </div>
             <div class="offer-stat">
-              <div class="label">Max safe offer</div>
+              <div class="label">Do not go above</div>
               <div class="value">${currency(bestOffer.maxSafeOffer)}</div>
             </div>
           </div>
@@ -1688,12 +1689,12 @@
               <div class="value">${currency(bestOffer.profitAtAggressive)}</div>
             </div>
             <div class="offer-stat">
-              <div class="label">Profit @ max safe</div>
+              <div class="label">Profit @ ceiling</div>
               <div class="value">${currency(bestOffer.profitAtMaxSafe)}</div>
             </div>
           </div>
           <div class="offer-subline">
-            Ask price: <strong>${currency(bestOffer.askPrice)}</strong>
+            Current ask price: <strong>${currency(bestOffer.askPrice)}</strong>
           </div>
         </div>
       `;
@@ -1806,7 +1807,7 @@
         shipping: Number(rawDeal.shipping || 0),
         totalBuyPrice: Number(scanner.totalBuyPrice || Number(rawDeal.price || 0) + Number(rawDeal.shipping || 0)),
         estimatedResale: Number(scanner.estimatedResale || 0),
-        estimatedProfit: Number(scanner.estimatedProfit || 0),
+        estimatedProfit: Number(scanner.estimatedProfit || rawDeal.estimatedProfit || 0),
         ebayFees: Number(scanner.ebayFees || 0),
         verdict: scanner.verdict || "SKIP",
         risk: scanner.risk || "High",
