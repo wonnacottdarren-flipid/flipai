@@ -215,9 +215,62 @@ function uniqueByItemId(items) {
   return output;
 }
 
+function buildDysonSearchVariants(query) {
+  const q = normalizeText(query);
+  const variants = [String(query).trim()];
+
+  const isDyson = q.includes("dyson");
+  const isV11 = q.includes("v11");
+  const isOutsize = q.includes("outsize");
+  const isMainUnit =
+    q.includes("main unit") ||
+    q.includes("main body") ||
+    q.includes("body only") ||
+    q.includes("motor unit") ||
+    q.includes("body");
+
+  if (!isDyson) {
+    return variants;
+  }
+
+  if (isOutsize) {
+    variants.push("dyson v11 outsize");
+    variants.push("dyson outsize");
+    variants.push("dyson outsize absolute");
+    variants.push("dyson v11 outsize absolute");
+  } else if (isMainUnit) {
+    if (isV11) {
+      variants.push("dyson v11 main unit");
+      variants.push("dyson v11 main body");
+      variants.push("dyson v11 motor unit");
+      variants.push("dyson v11 body only");
+      variants.push("dyson v11 unit only");
+      variants.push("dyson v11 handheld unit");
+      variants.push("dyson v11 bare unit");
+    } else {
+      variants.push("dyson main unit");
+      variants.push("dyson main body");
+      variants.push("dyson motor unit");
+      variants.push("dyson body only");
+      variants.push("dyson unit only");
+    }
+  } else if (isV11) {
+    variants.push("dyson v11");
+    variants.push("dyson v11 absolute");
+    variants.push("dyson v11 cordless vacuum");
+    variants.push("dyson cordless stick vacuum cleaner v11");
+  }
+
+  return [...new Set(variants.filter(Boolean))];
+}
+
 function buildSearchVariants(query) {
   const q = normalizeText(query);
   const variants = [String(query).trim()];
+
+  if (q.includes("dyson")) {
+    return buildDysonSearchVariants(query);
+  }
 
   if (q.includes("ps5 disc") || q.includes("playstation 5 disc")) {
     variants.push("playstation 5 disc");
