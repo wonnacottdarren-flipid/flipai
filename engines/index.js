@@ -3,11 +3,15 @@ import { dysonEngine } from "./dysonEngine.js";
 import { phoneEngine } from "./phoneEngine.js";
 import { consoleEngine } from "./consoleEngine.js";
 
-const engineRegistry = [dysonEngine, phoneEngine, consoleEngine];
+const engines = [
+  dysonEngine,
+  phoneEngine,
+  consoleEngine,
+];
 
-export function detectCategoryEngine(query = "") {
-  for (const engine of engineRegistry) {
-    if (engine.detect(query)) {
+export function detectEngineForQuery(query = "") {
+  for (const engine of engines) {
+    if (engine && typeof engine.detect === "function" && engine.detect(query)) {
       return engine;
     }
   }
@@ -15,4 +19,18 @@ export function detectCategoryEngine(query = "") {
   return baseEngine;
 }
 
-export { baseEngine, dysonEngine, phoneEngine, consoleEngine };
+export function getEngineForQuery(query = "") {
+  return detectEngineForQuery(query);
+}
+
+export { engines, baseEngine, dysonEngine, phoneEngine, consoleEngine };
+
+export default {
+  detectEngineForQuery,
+  getEngineForQuery,
+  engines,
+  baseEngine,
+  dysonEngine,
+  phoneEngine,
+  consoleEngine,
+};
