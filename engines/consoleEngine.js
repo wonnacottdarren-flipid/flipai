@@ -32,6 +32,30 @@ function normalizeConsoleText(value) {
     .replace(/\bplaystation5 slim\b/g, "playstation5");
 }
 
+function getCombinedItemText(item) {
+  return normalizeConsoleText(
+    [
+      item?.title,
+      item?.subtitle,
+      item?.condition,
+      item?.conditionDisplayName,
+      item?.itemCondition,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+}
+
+function getCategoryText(item) {
+  const categories = Array.isArray(item?.categories) ? item.categories : [];
+  return normalizeConsoleText(
+    categories
+      .map((category) => category?.categoryName)
+      .filter(Boolean)
+      .join(" ")
+  );
+}
+
 function detectConsoleBrand(text) {
   const t = normalizeConsoleText(text);
 
@@ -54,39 +78,82 @@ function parseConsoleFamily(text) {
   return "";
 }
 
-function isConsoleAccessoryOnly(text) {
+function isAccessoryTitle(text) {
   const t = normalizeConsoleText(text);
 
   return hasAny(t, [
-    "controller only",
-    "pad only",
-    "joy con only",
-    "joy-con only",
+    "controller",
+    "dualsense",
+    "dualsense",
+    "dual shock",
+    "dualshock",
+    "joy con",
+    "joy-con",
+    "headset",
+    "headphones",
+    "earbuds",
+    "charging dock",
+    "dock station",
     "dock only",
-    "hdmi only",
-    "power cable only",
     "charger only",
+    "power cable only",
+    "cable only",
+    "hdmi cable",
     "stand only",
-    "vertical stand only",
-    "base stand only",
-    "faceplate only",
+    "vertical stand",
+    "base stand",
+    "faceplate",
+    "face plate",
     "shell only",
+    "replacement shell",
+    "replacement housing",
     "cover only",
+    "skin only",
+    "case only",
+    "thumb grips",
+    "remote only",
+    "media remote",
+    "disc drive only",
+    "disc reader only",
+    "mount only",
+    "fan only",
+  ]);
+}
+
+function isAccessoryCategory(item) {
+  const categoryText = getCategoryText(item);
+
+  return hasAny(categoryText, [
+    "controllers attachments",
+    "controllers and attachments",
+    "video game accessories",
+    "accessories",
+    "headsets",
+    "chargers docks",
+    "chargers and docks",
+    "replacement parts tools",
+    "replacement parts and tools",
+    "bags skins travel",
+    "bags skins and travel",
+  ]);
+}
+
+function isConsoleAccessoryOnly(itemOrText) {
+  if (typeof itemOrText === "string") {
+    return isAccessoryTitle(itemOrText);
+  }
+
+  const item = itemOrText || {};
+  const text = getCombinedItemText(item);
+
+  if (isAccessoryTitle(text)) return true;
+  if (isAccessoryCategory(item)) return true;
+
+  return hasAny(text, [
     "empty box",
     "box only",
     "manual only",
-    "replacement shell",
-    "replacement housing",
-    "thumb grips",
-    "skin only",
-    "case only",
     "console stand",
-    "disc drive only",
-    "disc reader only",
-    "controller for ps5",
-    "ps5 controller",
-    "dualsense only",
-    "dualsense edge only",
   ]);
 }
 
@@ -97,7 +164,7 @@ function isSeverelyBadConsole(text) {
     "for parts",
     "for spares",
     "spares or repairs",
-    "spares/repairs",
+    "spares repairs",
     "faulty",
     "broken",
     "not working",
@@ -126,7 +193,7 @@ function classifyConsoleConditionState(text) {
       "for parts",
       "for spares",
       "spares or repairs",
-      "spares/repairs",
+      "spares repairs",
       "faulty",
       "broken",
       "not working",
@@ -259,15 +326,12 @@ function matchesConsoleFamily(text, queryContext) {
   if (family === "ps5_disc") {
     const hasPs5 =
       t.includes("ps5") ||
-      t.includes("playstation5") ||
-      t.includes("sony ps5");
+      t.includes("playstation5");
 
     const saysDigital =
       t.includes("digital") ||
       t.includes("digital edition");
 
-    // Broad PS5 disc logic:
-    // if it clearly looks like a PS5 and does NOT clearly say digital, accept it
     return hasPs5 && !saysDigital;
   }
 
@@ -314,19 +378,10 @@ function matchesConsoleFamily(text, queryContext) {
 }
 
 function scoreConsoleCandidate(item, queryContext) {
-  const text = normalizeConsoleText(
-    [
-      item?.title,
-      item?.condition,
-      item?.conditionDisplayName,
-      item?.subtitle,
-    ]
-      .filter(Boolean)
-      .join(" ")
-  );
+  const text = getCombinedItemText(item);
 
   if (!text) return -10;
-  if (isConsoleAccessoryOnly(text)) return -10;
+  if (isConsoleAccessoryOnly(item)) return -10;
   if (isSeverelyBadConsole(text) && !shouldAllowDamagedConsoles(queryContext)) return -10;
 
   const conditionState = classifyConsoleConditionState(text);
@@ -366,16 +421,7 @@ function scoreConsoleCandidate(item, queryContext) {
 function enrichConsoleCompPool(queryContext, items = []) {
   return (Array.isArray(items) ? items : [])
     .map((item) => {
-      const text = normalizeConsoleText(
-        [
-          item?.title,
-          item?.condition,
-          item?.conditionDisplayName,
-          item?.subtitle,
-        ]
-          .filter(Boolean)
-          .join(" ")
-      );
+      const text = getCombinedItemText(item);
 
       return {
         item,
@@ -576,19 +622,10 @@ export const consoleEngine = {
   },
 
   matchesItem(item, queryContext) {
-    const text = normalizeConsoleText(
-      [
-        item?.title,
-        item?.condition,
-        item?.conditionDisplayName,
-        item?.subtitle,
-      ]
-        .filter(Boolean)
-        .join(" ")
-    );
+    const text = getCombinedItemText(item);
 
     if (!text) return false;
-    if (isConsoleAccessoryOnly(text)) return false;
+    if (isConsoleAccessoryOnly(item)) return false;
     if (isSeverelyBadConsole(text) && !queryContext.allowDamaged) return false;
 
     const conditionState = classifyConsoleConditionState(text);
@@ -612,16 +649,7 @@ export const consoleEngine = {
   },
 
   classifyItem(item, queryContext) {
-    const text = normalizeConsoleText(
-      [
-        item?.title,
-        item?.condition,
-        item?.conditionDisplayName,
-        item?.subtitle,
-      ]
-        .filter(Boolean)
-        .join(" ")
-    );
+    const text = getCombinedItemText(item);
 
     const conditionState = classifyConsoleConditionState(text);
     const repairCost = estimateConsoleRepairCost(queryContext, conditionState, text);
