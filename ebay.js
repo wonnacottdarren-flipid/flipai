@@ -464,6 +464,14 @@ function buildSearchVariants(query) {
   return [...new Set(variants.filter(Boolean))];
 }
 
+function resolveSearchVariants(query, searchVariantsOverride) {
+  if (Array.isArray(searchVariantsOverride) && searchVariantsOverride.length) {
+    return [...new Set(searchVariantsOverride.map((v) => String(v || "").trim()).filter(Boolean))];
+  }
+
+  return buildSearchVariants(query);
+}
+
 async function searchWithFallbacks({
   query,
   maxPrice,
@@ -472,8 +480,9 @@ async function searchWithFallbacks({
   limit = 20,
   fixedPriceOnly = true,
   allowConditionFallback = true,
+  searchVariantsOverride,
 }) {
-  const variants = buildSearchVariants(query);
+  const variants = resolveSearchVariants(query, searchVariantsOverride);
   const searchText = normalizeText(query);
   let combined = [];
 
@@ -572,6 +581,7 @@ export async function searchEbayListings({
   condition,
   freeShippingOnly = false,
   limit = 20,
+  searchVariantsOverride,
 }) {
   return searchWithFallbacks({
     query,
@@ -581,6 +591,7 @@ export async function searchEbayListings({
     limit,
     fixedPriceOnly: true,
     allowConditionFallback: true,
+    searchVariantsOverride,
   });
 }
 
@@ -588,6 +599,7 @@ export async function searchEbayMarketPool({
   query,
   condition = "",
   limit = 50,
+  searchVariantsOverride,
 }) {
   return searchWithFallbacks({
     query,
@@ -596,5 +608,6 @@ export async function searchEbayMarketPool({
     freeShippingOnly: false,
     fixedPriceOnly: true,
     allowConditionFallback: true,
+    searchVariantsOverride,
   });
 }
