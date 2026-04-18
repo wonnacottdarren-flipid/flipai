@@ -761,6 +761,58 @@
       margin-bottom: 12px;
     }
 
+    .deal-why-box {
+      margin-bottom: 12px;
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(34,197,94,0.09);
+      border: 1px solid rgba(34,197,94,0.18);
+    }
+
+    .deal-why-box h4 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      color: #dcfce7;
+    }
+
+    .deal-why-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .deal-why-stat {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .deal-why-stat .label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .deal-why-stat .value {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .deal-why-list {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: #d1fae5;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .deal-why-list li {
+      margin-bottom: 4px;
+    }
+
     .deal-actions {
       display: flex;
       gap: 10px;
@@ -911,7 +963,8 @@
       .deal-metrics,
       .button-row,
       .three-button-row,
-      .offer-grid {
+      .offer-grid,
+      .deal-why-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1605,6 +1658,143 @@
       }
     }
 
+    function roundCurrencyValue(value) {
+      return Math.round(Number(value || 0) * 100) / 100;
+    }
+
+    function formatReasonLabel(value) {
+      return String(value || "")
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function renderReasonBreakdown(reasonBreakdown) {
+      if (!reasonBreakdown || typeof reasonBreakdown !== "object") {
+        return "";
+      }
+
+      const pricingMode = reasonBreakdown.pricingMode || reasonBreakdown.marketPricingMode || "";
+      const confidenceLabel = reasonBreakdown.confidenceLabel || "";
+      const confidence = Number(reasonBreakdown.confidence || 0);
+      const compCount = Number(reasonBreakdown.compCount || 0);
+      const marginPercent = Number(reasonBreakdown.marginPercent || 0);
+      const undervaluedAmount = Number(reasonBreakdown.undervaluedAmount || 0);
+      const estimatedProfit = Number(reasonBreakdown.estimatedProfit || 0);
+      const risk = reasonBreakdown.risk || "";
+      const bullets = Array.isArray(reasonBreakdown.bullets) ? reasonBreakdown.bullets : [];
+
+      const hasStats =
+        pricingMode ||
+        confidenceLabel ||
+        compCount > 0 ||
+        Number.isFinite(marginPercent) ||
+        Number.isFinite(undervaluedAmount) ||
+        Number.isFinite(estimatedProfit) ||
+        risk;
+
+      if (!hasStats && !bullets.length) {
+        return "";
+      }
+
+      return `
+        <div class="deal-why-box">
+          <h4>Why it’s a deal</h4>
+
+          <div class="deal-why-grid">
+            ${
+              pricingMode
+                ? `
+                  <div class="deal-why-stat">
+                    <div class="label">Pricing mode</div>
+                    <div class="value">${escapeHtml(pricingMode)}</div>
+                  </div>
+                `
+                : ""
+            }
+
+            ${
+              confidenceLabel || confidence > 0
+                ? `
+                  <div class="deal-why-stat">
+                    <div class="label">Confidence</div>
+                    <div class="value">${escapeHtml(confidenceLabel || "Low")} (${confidence})</div>
+                  </div>
+                `
+                : ""
+            }
+
+            ${
+              compCount > 0
+                ? `
+                  <div class="deal-why-stat">
+                    <div class="label">Comps used</div>
+                    <div class="value">${compCount}</div>
+                  </div>
+                `
+                : ""
+            }
+
+            ${
+              Number.isFinite(marginPercent)
+                ? `
+                  <div class="deal-why-stat">
+                    <div class="label">Margin %</div>
+                    <div class="value">${marginPercent.toFixed(2)}%</div>
+                  </div>
+                `
+                : ""
+            }
+
+            ${
+              Number.isFinite(undervaluedAmount) && undervaluedAmount > 0
+                ? `
+                  <div class="deal-why-stat">
+                    <div class="label">Under market by</div>
+                    <div class="value">${currency(undervaluedAmount)}</div>
+                  </div>
+                `
+                : ""
+            }
+
+            ${
+              Number.isFinite(estimatedProfit)
+                ? `
+                  <div class="deal-why-stat">
+                    <div class="label">Projected profit</div>
+                    <div class="value">${currency(estimatedProfit)}</div>
+                  </div>
+                `
+                : ""
+            }
+
+            ${
+              risk
+                ? `
+                  <div class="deal-why-stat">
+                    <div class="label">Risk</div>
+                    <div class="value">${escapeHtml(risk)}</div>
+                  </div>
+                `
+                : ""
+            }
+          </div>
+
+          ${
+            bullets.length
+              ? `
+                <ul class="deal-why-list">
+                  ${bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}
+                </ul>
+              `
+              : ""
+          }
+        </div>
+      `;
+    }
+
     function mapDealFields(rawDeal = {}) {
       const scanner = rawDeal.scanner || {};
 
@@ -1664,6 +1854,11 @@
         reason:
           rawDeal.reason ||
           `Estimated resale based on conservative UK resale assumptions. Risk: ${scanner.risk || "High"}.`,
+        reasonBreakdown:
+          rawDeal.reasonBreakdown ||
+          rawDeal.dealWhy ||
+          scanner.reasonBreakdown ||
+          null,
         condition,
         extras: "",
         repairCost: Number(scanner.repairCost || 0),
@@ -1706,10 +1901,6 @@
         "Deal loaded into analyzer. Comp box left empty. Click Auto-fill comps to fetch pricing comps, or enter your own manually.",
         "success"
       );
-    }
-
-    function roundCurrencyValue(value) {
-      return Math.round(Number(value || 0) * 100) / 100;
     }
 
     function renderBestOfferBox(bestOffer) {
@@ -1843,6 +2034,8 @@
                 <strong>Shipping:</strong> ${currency(deal.shipping)}
               </div>
 
+              ${renderReasonBreakdown(deal.reasonBreakdown)}
+
               <div class="deal-summary">${escapeHtml(deal.reason)}</div>
 
               ${renderBestOfferBox(deal.bestOffer)}
@@ -1879,6 +2072,11 @@
         undervaluedPercent: Number(rawDeal.undervaluedPercent || 0),
         finderLabel: rawDeal.finderLabel || "Worth checking",
         reason: rawDeal.reason || "Possible opportunity found.",
+        reasonBreakdown:
+          rawDeal.reasonBreakdown ||
+          rawDeal.dealWhy ||
+          scanner.reasonBreakdown ||
+          null,
         condition: rawDeal.condition || "",
         marketBucket: rawDeal.marketBucket || "",
         url: rawDeal.url || rawDeal.itemWebUrl || rawDeal.viewItemURL || rawDeal.itemWebUrl || "",
@@ -1981,6 +2179,8 @@
                 <strong>Margin %:</strong> ${Number(deal.marginPercent || 0).toFixed(2)}%<br>
                 <strong>Comps used:</strong> ${Number(deal.compCount || 0)}
               </div>
+
+              ${renderReasonBreakdown(deal.reasonBreakdown)}
 
               <div class="deal-summary">${escapeHtml(deal.reason)}</div>
 
