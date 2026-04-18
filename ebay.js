@@ -426,6 +426,132 @@ function buildDysonSearchVariants(query) {
   return [...new Set(variants.filter(Boolean))];
 }
 
+function isConsoleBundleIntent(text) {
+  return hasAny(text, [
+    "bundle",
+    "with games",
+    "with game",
+    "games",
+    "2 controllers",
+    "two controllers",
+    "with controller",
+    "controllers",
+    "job lot",
+    "comes with",
+    "includes",
+    "plus games",
+    "inc games",
+    "includes games",
+    "with extras",
+    "extras",
+  ]);
+}
+
+function buildConsoleBundleVariants(query, baseVariants = []) {
+  const q = normalizeText(query);
+  const variants = [...baseVariants];
+
+  const add = (value) => {
+    if (value && !variants.includes(value)) variants.push(value);
+  };
+
+  const wantsPs5 = q.includes("ps5") || q.includes("playstation 5") || q.includes("playstation5");
+  const wantsDigital = q.includes("digital");
+  const wantsDisc =
+    q.includes("disc") ||
+    q.includes("disk") ||
+    q.includes("standard");
+  const wantsSeriesX = q.includes("xbox series x") || q.includes("series x");
+  const wantsSeriesS = q.includes("xbox series s") || q.includes("series s");
+  const wantsSwitchOled = q.includes("switch oled") || q.includes("nintendo switch oled");
+  const wantsSwitchLite = q.includes("switch lite");
+  const wantsSwitch =
+    q.includes("nintendo switch") || q.includes("switch");
+
+  if (wantsPs5) {
+    if (wantsDigital) {
+      add("ps5 digital bundle");
+      add("ps5 digital with games");
+      add("ps5 digital with controller");
+      add("playstation 5 digital bundle");
+      add("playstation 5 digital with games");
+      add("playstation 5 digital with controller");
+      add("ps5 digital job lot");
+    } else if (wantsDisc) {
+      add("ps5 disc bundle");
+      add("ps5 disc with games");
+      add("ps5 disc with controller");
+      add("ps5 disc 2 controllers");
+      add("playstation 5 disc bundle");
+      add("playstation 5 disc with games");
+      add("playstation 5 disc with controller");
+      add("playstation 5 standard bundle");
+      add("ps5 standard bundle");
+      add("ps5 disk edition bundle");
+      add("ps5 bundle with games");
+      add("ps5 bundle controller");
+      add("ps5 with extras");
+      add("ps5 job lot");
+    } else {
+      add("ps5 bundle");
+      add("ps5 with games");
+      add("ps5 with controller");
+      add("ps5 2 controllers");
+      add("ps5 plus games");
+      add("ps5 inc games");
+      add("ps5 includes games");
+      add("ps5 extras");
+      add("ps5 with extras");
+      add("ps5 console bundle");
+      add("ps5 console with games");
+      add("playstation 5 bundle");
+      add("playstation 5 with games");
+      add("playstation 5 with controller");
+      add("playstation 5 job lot");
+      add("ps5 job lot");
+    }
+  }
+
+  if (wantsSeriesX) {
+    add("xbox series x bundle");
+    add("xbox series x with games");
+    add("xbox series x with controller");
+    add("xbox series x 2 controllers");
+    add("xbox series x job lot");
+    add("series x bundle");
+  }
+
+  if (wantsSeriesS) {
+    add("xbox series s bundle");
+    add("xbox series s with games");
+    add("xbox series s with controller");
+    add("xbox series s 2 controllers");
+    add("xbox series s job lot");
+    add("series s bundle");
+  }
+
+  if (wantsSwitchOled) {
+    add("switch oled bundle");
+    add("switch oled with games");
+    add("switch oled with extras");
+    add("nintendo switch oled bundle");
+    add("nintendo switch oled with games");
+  } else if (wantsSwitchLite) {
+    add("switch lite bundle");
+    add("switch lite with games");
+    add("nintendo switch lite bundle");
+  } else if (wantsSwitch) {
+    add("switch bundle");
+    add("switch with games");
+    add("switch with extras");
+    add("nintendo switch bundle");
+    add("nintendo switch with games");
+    add("switch job lot");
+  }
+
+  return [...new Set(variants.filter(Boolean))];
+}
+
 function buildSearchVariants(query) {
   const q = normalizeText(query);
   const variants = [String(query).trim()];
@@ -442,7 +568,7 @@ function buildSearchVariants(query) {
     variants.push("playstation 5 digital");
     variants.push("ps5 digital");
     variants.push("playstation 5");
-  } else if (q.includes("ps5")) {
+  } else if (q.includes("ps5") || q.includes("playstation 5")) {
     variants.push("playstation 5");
     variants.push("ps5");
   }
@@ -461,15 +587,117 @@ function buildSearchVariants(query) {
     variants.push(String(query).trim());
   }
 
-  return [...new Set(variants.filter(Boolean))];
-}
+  const deduped = [...new Set(variants.filter(Boolean))];
 
-function resolveSearchVariants(query, searchVariantsOverride) {
-  if (Array.isArray(searchVariantsOverride) && searchVariantsOverride.length) {
-    return [...new Set(searchVariantsOverride.map((v) => String(v || "").trim()).filter(Boolean))];
+  if (isConsoleBundleIntent(q)) {
+    return buildConsoleBundleVariants(query, deduped);
   }
 
-  return buildSearchVariants(query);
+  return deduped;
+}
+
+function isConsoleCategory(item) {
+  const categories = Array.isArray(item?.categories) ? item.categories : [];
+  const categoryText = normalizeText(
+    categories.map((c) => c?.categoryName).filter(Boolean).join(" ")
+  );
+
+  return hasAny(categoryText, [
+    "video game consoles",
+    "video games consoles",
+    "consoles",
+  ]);
+}
+
+function titleLooksLikeBundle(text) {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "bundle",
+    "with games",
+    "with game",
+    "games included",
+    "game included",
+    "2 controllers",
+    "two controllers",
+    "extra controller",
+    "second controller",
+    "spare controller",
+    "comes with",
+    "includes",
+    "plus games",
+    "inc games",
+    "includes games",
+    "job lot",
+    "with extras",
+    "extras included",
+  ]);
+}
+
+function isAccessoryStyleTitle(text) {
+  const t = normalizeText(text);
+
+  const hasConsoleWords =
+    t.includes("ps5") ||
+    t.includes("playstation 5") ||
+    t.includes("xbox series x") ||
+    t.includes("xbox series s") ||
+    t.includes("switch") ||
+    t.includes("console");
+
+  const explicitAccessoryOnly = hasAny(t, [
+    "controller only",
+    "dualsense only",
+    "dualshock only",
+    "joy con only",
+    "joy-con only",
+    "headset only",
+    "dock only",
+    "charger only",
+    "power cable only",
+    "cable only",
+    "stand only",
+    "faceplate",
+    "shell only",
+    "cover only",
+    "skin only",
+    "remote only",
+    "disc drive only",
+    "empty box",
+    "box only",
+  ]);
+
+  if (explicitAccessoryOnly) return true;
+
+  if (
+    t.includes("controller") &&
+    !hasConsoleWords
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function filterConsoleBundleIntent(query, items = []) {
+  const q = normalizeText(query);
+
+  if (!isConsoleBundleIntent(q)) {
+    return items;
+  }
+
+  const filtered = items.filter((item) => {
+    const titleText = normalizeText(item?.title || "");
+    const consoleCategory = isConsoleCategory(item);
+    const bundleish = titleLooksLikeBundle(titleText);
+
+    if (isAccessoryStyleTitle(titleText)) return false;
+    if (!consoleCategory) return false;
+
+    return bundleish;
+  });
+
+  return filtered.length ? filtered : items;
 }
 
 async function searchWithFallbacks({
@@ -480,9 +708,8 @@ async function searchWithFallbacks({
   limit = 20,
   fixedPriceOnly = true,
   allowConditionFallback = true,
-  searchVariantsOverride,
 }) {
-  const variants = resolveSearchVariants(query, searchVariantsOverride);
+  const variants = buildSearchVariants(query);
   const searchText = normalizeText(query);
   let combined = [];
 
@@ -498,7 +725,7 @@ async function searchWithFallbacks({
 
     combined = uniqueByItemId([...combined, ...results]);
 
-    if (combined.length >= limit * 2) {
+    if (combined.length >= limit * 3) {
       break;
     }
   }
@@ -518,6 +745,7 @@ async function searchWithFallbacks({
     }
   }
 
+  combined = filterConsoleBundleIntent(searchText, combined);
   combined = uniqueByItemId(combined);
 
   if (combined.length >= limit) {
@@ -543,7 +771,7 @@ async function searchWithFallbacks({
 
       fallbackCombined = uniqueByItemId([...fallbackCombined, ...results]);
 
-      if (fallbackCombined.length >= limit * 2) {
+      if (fallbackCombined.length >= limit * 3) {
         break;
       }
     }
@@ -565,6 +793,7 @@ async function searchWithFallbacks({
       }
     }
 
+    fallbackCombined = filterConsoleBundleIntent(searchText, fallbackCombined);
     fallbackCombined = uniqueByItemId(fallbackCombined);
 
     if (fallbackCombined.length > 0) {
@@ -581,7 +810,6 @@ export async function searchEbayListings({
   condition,
   freeShippingOnly = false,
   limit = 20,
-  searchVariantsOverride,
 }) {
   return searchWithFallbacks({
     query,
@@ -591,7 +819,6 @@ export async function searchEbayListings({
     limit,
     fixedPriceOnly: true,
     allowConditionFallback: true,
-    searchVariantsOverride,
   });
 }
 
@@ -599,7 +826,6 @@ export async function searchEbayMarketPool({
   query,
   condition = "",
   limit = 50,
-  searchVariantsOverride,
 }) {
   return searchWithFallbacks({
     query,
@@ -608,6 +834,5 @@ export async function searchEbayMarketPool({
     freeShippingOnly: false,
     fixedPriceOnly: true,
     allowConditionFallback: true,
-    searchVariantsOverride,
   });
 }
