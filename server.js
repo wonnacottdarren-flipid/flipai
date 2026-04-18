@@ -687,6 +687,9 @@ app.post("/api/search-ebay", async (req, res) => {
 
     const items = await searchEbayListings({
       query,
+      maxPrice: filterPriceMax,
+      condition,
+      freeShippingOnly,
       limit,
     });
 
@@ -735,6 +738,7 @@ app.post("/api/auto-comps", async (req, res) => {
 
     const marketItems = await searchEbayMarketPool({
       query: searchQuery,
+      condition,
       limit: 24,
     });
 
@@ -789,11 +793,15 @@ app.post("/api/find-deals", async (req, res) => {
 
     const listings = await searchEbayListings({
       query,
+      maxPrice: filterPriceMax,
+      condition,
+      freeShippingOnly,
       limit,
     });
 
     const market = await searchEbayMarketPool({
       query,
+      condition,
       limit: 50,
     });
 
@@ -887,6 +895,21 @@ app.post("/api/find-deals", async (req, res) => {
     if (searchText.includes("dyson")) {
       deals = deals.filter((item) => matchesDysonVariant(searchText, item));
     }
+
+    /* =========================
+       🔥 HIDE ZERO-SCORE AVOIDS
+    ========================= */
+
+    deals = deals.filter((item) => {
+      const verdict = String(item?.scanner?.verdict || "").toUpperCase();
+      const score = Number(item?.dealScore || item?.scanner?.score || 0);
+
+      if (verdict === "AVOID" && score <= 0) {
+        return false;
+      }
+
+      return true;
+    });
 
     deals.sort((a, b) => Number(b.dealScore || 0) - Number(a.dealScore || 0));
 
