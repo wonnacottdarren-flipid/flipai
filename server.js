@@ -31,7 +31,6 @@ import {
   roundMoney,
   average,
   median,
-  percentile,
   extractNumericPrice,
   extractNumericShipping,
   extractItemTitle,
@@ -260,14 +259,16 @@ function buildDealAnalytics({
   item,
   pricing,
   title,
+  itemContext = {},
 }) {
   const price = extractNumericPrice(item);
   const shipping = extractNumericShipping(item);
   const total = roundMoney(price + shipping);
 
+  const repairCost = Number(itemContext?.repairCost || 0);
   const resale = roundMoney(pricing?.estimatedResale || 0);
   const fees = roundMoney(resale * 0.15);
-  const estimatedProfit = roundMoney(resale - fees - total);
+  const estimatedProfit = roundMoney(resale - fees - total - repairCost);
   const marginPercent =
     total > 0 ? roundMoney((estimatedProfit / total) * 100) : 0;
 
@@ -297,7 +298,7 @@ function buildDealAnalytics({
   const scanner = {
     totalBuyPrice: total,
     estimatedResale: resale,
-    repairCost: 0,
+    repairCost,
     estimatedProfit,
     ebayFees: fees,
     marginPercent,
@@ -329,7 +330,9 @@ function buildDealAnalytics({
 
   let reason = `Estimated resale based on conservative UK resale assumptions. Risk: ${risk}.`;
 
-  if (undervaluedAmount > 0 && estimatedProfit > 0) {
+  if (repairCost > 0) {
+    reason = `Repair-adjusted deal: about £${undervaluedAmount.toFixed(2)} below model with £${estimatedProfit.toFixed(2)} projected profit after fees and estimated repair cost.`;
+  } else if (undervaluedAmount > 0 && estimatedProfit > 0) {
     reason = `Strong spread: about £${undervaluedAmount.toFixed(2)} below model with £${estimatedProfit.toFixed(2)} projected profit.`;
   } else if (estimatedProfit > 0) {
     reason = `Projected profit of about £${estimatedProfit.toFixed(2)} after fees. Risk: ${risk}.`;
@@ -343,6 +346,7 @@ function buildDealAnalytics({
     total,
     resale,
     fees,
+    repairCost,
     estimatedProfit,
     marginPercent,
     verdict,
@@ -393,6 +397,7 @@ app.post("/api/search-ebay", async (req, res) => {
 
     const engine = detectCategoryEngine(query);
     const queryContext = engine.classifyQuery(query);
+    const searchVariantsOverride = engine.expandSearchVariants(query);
 
     const items = await searchEbayListings({
       query,
@@ -400,12 +405,14 @@ app.post("/api/search-ebay", async (req, res) => {
       condition,
       freeShippingOnly,
       limit,
+      searchVariantsOverride,
     });
 
     const market = await searchEbayMarketPool({
       query,
       condition,
       limit: 50,
+      searchVariantsOverride,
     });
 
     let filtered = Array.isArray(items) ? items : [];
@@ -431,10 +438,16 @@ app.post("/api/search-ebay", async (req, res) => {
 
     const enrichedItems = filtered.map((item) => {
       const title = extractItemTitle(item);
+      const itemContext =
+        typeof engine.classifyItem === "function"
+          ? engine.classifyItem(item, queryContext)
+          : {};
+
       const analytics = buildDealAnalytics({
         item,
         pricing,
         title,
+        itemContext,
       });
 
       return {
@@ -485,11 +498,13 @@ app.post("/api/auto-comps", async (req, res) => {
     const searchQuery = [product, condition].filter(Boolean).join(" ").trim();
     const engine = detectCategoryEngine(searchQuery);
     const queryContext = engine.classifyQuery(searchQuery);
+    const searchVariantsOverride = engine.expandSearchVariants(searchQuery);
 
     const marketItems = await searchEbayMarketPool({
       query: searchQuery,
       condition,
       limit: 24,
+      searchVariantsOverride,
     });
 
     let filtered = Array.isArray(marketItems) ? marketItems : [];
@@ -536,6 +551,7 @@ app.post("/api/find-deals", async (req, res) => {
 
     const engine = detectCategoryEngine(query);
     const queryContext = engine.classifyQuery(query);
+    const searchVariantsOverride = engine.expandSearchVariants(query);
 
     const listings = await searchEbayListings({
       query,
@@ -543,12 +559,14 @@ app.post("/api/find-deals", async (req, res) => {
       condition,
       freeShippingOnly,
       limit,
+      searchVariantsOverride,
     });
 
     const market = await searchEbayMarketPool({
       query,
       condition,
       limit: 50,
+      searchVariantsOverride,
     });
 
     let cleanMarket = Array.isArray(market) ? market : [];
@@ -568,11 +586,16 @@ app.post("/api/find-deals", async (req, res) => {
 
     let deals = (Array.isArray(listings) ? listings : []).map((item) => {
       const title = extractItemTitle(item);
+      const itemContext =
+        typeof engine.classifyItem === "function"
+          ? engine.classifyItem(item, queryContext)
+          : {};
 
       const analytics = buildDealAnalytics({
         item,
         pricing,
         title,
+        itemContext,
       });
 
       return {
