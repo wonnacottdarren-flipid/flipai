@@ -255,6 +255,87 @@ function getUserFromCookie(req) {
   }
 }
 
+function buildWarningAnalysis(item) {
+  const text = normalizeText(
+    [
+      item?.title,
+      item?.subtitle,
+      item?.condition,
+      item?.conditionDisplayName,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+
+  const warningRules = [
+    {
+      flag: "Read description carefully",
+      penalty: 8,
+      patterns: ["read description", "see description", "please read", "read full description"],
+    },
+    {
+      flag: "Sold as seen / as is",
+      penalty: 10,
+      patterns: ["sold as seen", "as is", "no warranty implied"],
+    },
+    {
+      flag: "No returns",
+      penalty: 7,
+      patterns: ["no returns", "returns not accepted"],
+    },
+    {
+      flag: "Untested listing",
+      penalty: 14,
+      patterns: ["untested", "unable to test", "not tested"],
+    },
+    {
+      flag: "Possible repair / hidden issue",
+      penalty: 14,
+      patterns: ["for repair", "repair needed", "needs attention", "issue", "issues present"],
+    },
+    {
+      flag: "Battery-related warning",
+      penalty: 6,
+      patterns: ["battery health", "battery service", "battery issue", "battery replacement"],
+    },
+    {
+      flag: "Display / burn-in warning",
+      penalty: 10,
+      patterns: ["burn in", "screen burn", "green line", "pink line", "dead pixels", "lcd bleed"],
+    },
+    {
+      flag: "Screen previously replaced",
+      penalty: 5,
+      patterns: ["screen replaced", "replacement screen", "display replaced"],
+    },
+    {
+      flag: "Parts may be missing",
+      penalty: 8,
+      patterns: ["parts missing", "missing parts", "missing accessories", "missing item"],
+    },
+    {
+      flag: "Account / lock issue warning",
+      penalty: 20,
+      patterns: ["account issue", "account locked", "icloud locked", "google locked", "frp locked"],
+    },
+  ];
+
+  const warningFlags = [];
+  let warningScorePenalty = 0;
+
+  for (const rule of warningRules) {
+    if (rule.patterns.some((pattern) => text.includes(pattern))) {
+      warningFlags.push(rule.flag);
+      warningScorePenalty += rule.penalty;
+    }
+  }
+
+  return {
+    warningFlags,
+    warningScorePenalty: Math.min(40, warningScorePenalty),
+  };
+}
+
 function buildDealAnalytics({
   item,
   pricing,
@@ -281,10 +362,16 @@ function buildDealAnalytics({
   if (estimatedProfit >= 40) risk = "Low";
   else if (estimatedProfit >= 15) risk = "Medium";
 
-  const score = roundMoney(
+  const warningAnalysis = buildWarningAnalysis(item);
+
+  const rawScore = roundMoney(
     Math.max(0, estimatedProfit) +
       Math.max(0, marginPercent) +
       (risk === "Low" ? 15 : risk === "Medium" ? 8 : 0)
+  );
+
+  const score = roundMoney(
+    Math.max(0, rawScore - Number(warningAnalysis.warningScorePenalty || 0))
   );
 
   const undervaluedAmount = roundMoney(Math.max(0, resale - total));
@@ -305,6 +392,8 @@ function buildDealAnalytics({
     verdict,
     risk,
     score,
+    rawScore,
+    warningScorePenalty: Number(warningAnalysis.warningScorePenalty || 0),
     compCount: Number(pricing?.compCount || 0),
     confidence: Number(pricing?.confidence || 0),
     confidenceLabel: pricing?.confidenceLabel || "Low",
@@ -352,6 +441,9 @@ function buildDealAnalytics({
     verdict,
     risk,
     score,
+    rawScore,
+    warningFlags: warningAnalysis.warningFlags,
+    warningScorePenalty: warningAnalysis.warningScorePenalty,
     undervaluedAmount,
     undervaluedPercent,
     finderLabel,
@@ -458,6 +550,8 @@ app.post("/api/search-ebay", async (req, res) => {
         estimatedProfit: analytics.estimatedProfit,
         reason: analytics.reason,
         reasonBreakdown: analytics.reasonBreakdown,
+        warningFlags: analytics.warningFlags,
+        warningScorePenalty: analytics.warningScorePenalty,
         bestOffer: buildBestOfferGuidance(item, analytics.scanner),
         dealScore: analytics.score,
         undervaluedAmount: analytics.undervaluedAmount,
@@ -606,6 +700,9 @@ app.post("/api/find-deals", async (req, res) => {
         bestOffer: buildBestOfferGuidance(item, analytics.scanner),
         estimatedProfit: analytics.estimatedProfit,
         dealScore: analytics.score,
+        rawDealScore: analytics.rawScore,
+        warningFlags: analytics.warningFlags,
+        warningScorePenalty: analytics.warningScorePenalty,
         undervaluedAmount: analytics.undervaluedAmount,
         undervaluedPercent: analytics.undervaluedPercent,
         finderLabel: analytics.finderLabel,
