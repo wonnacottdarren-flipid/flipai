@@ -25,17 +25,7 @@ import {
 
 import { runAnalysis } from "./openai.js";
 import { searchEbayListings, searchEbayMarketPool } from "./ebay.js";
-import { detectCategoryEngine } from "./engines/index.js";
-import {
-  normalizeText,
-  roundMoney,
-  average,
-  median,
-  extractNumericPrice,
-  extractNumericShipping,
-  extractItemTitle,
-  removePriceOutliers,
-} from "./engines/baseEngine.js";
+import { detectEngineForQuery } from "./engines/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +39,110 @@ app.use(cors({ origin: appUrl, credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+
+function normalizeText(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function roundMoney(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function median(values) {
+  const nums = values
+    .map((v) => Number(v || 0))
+    .filter((v) => Number.isFinite(v) && v > 0)
+    .sort((a, b) => a - b);
+
+  if (!nums.length) return 0;
+
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 === 0
+    ? roundMoney((nums[mid - 1] + nums[mid]) / 2)
+    : roundMoney(nums[mid]);
+}
+
+function average(values) {
+  const nums = values
+    .map((v) => Number(v || 0))
+    .filter((v) => Number.isFinite(v) && v > 0);
+
+  if (!nums.length) return 0;
+  return roundMoney(nums.reduce((sum, v) => sum + v, 0) / nums.length);
+}
+
+function percentile(values, p) {
+  const nums = values
+    .map((v) => Number(v || 0))
+    .filter((v) => Number.isFinite(v) && v > 0)
+    .sort((a, b) => a - b);
+
+  if (!nums.length) return 0;
+  if (nums.length === 1) return roundMoney(nums[0]);
+
+  const index = (nums.length - 1) * p;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+
+  if (lower === upper) return roundMoney(nums[lower]);
+
+  const weight = index - lower;
+  return roundMoney(nums[lower] * (1 - weight) + nums[upper] * weight);
+}
+
+function removePriceOutliers(values = []) {
+  const nums = values
+    .map((v) => Number(v || 0))
+    .filter((v) => Number.isFinite(v) && v > 0)
+    .sort((a, b) => a - b);
+
+  if (nums.length <= 4) return nums;
+
+  const q1 = percentile(nums, 0.25);
+  const q3 = percentile(nums, 0.75);
+  const iqr = q3 - q1;
+
+  if (!Number.isFinite(iqr) || iqr <= 0) return nums;
+
+  const lower = q1 - iqr * 1.5;
+  const upper = q3 + iqr * 1.5;
+
+  const filtered = nums.filter((v) => v >= lower && v <= upper);
+  return filtered.length >= Math.max(3, Math.floor(nums.length * 0.5))
+    ? filtered
+    : nums;
+}
+
+function extractNumericPrice(item) {
+  return roundMoney(
+    Number(
+      item?.price?.value ??
+        item?.currentPrice?.value ??
+        item?.sellingStatus?.currentPrice?.value ??
+        item?.price ??
+        0
+    ) || 0
+  );
+}
+
+function extractNumericShipping(item) {
+  return roundMoney(
+    Number(
+      item?.shippingOptions?.[0]?.shippingCost?.value ??
+        item?.shippingCost?.value ??
+        item?.shipping ??
+        0
+    ) || 0
+  );
+}
+
+function extractItemTitle(item) {
+  return String(item?.title || item?.name || item?.product || "").trim();
+}
+
+function extractTotalPrice(item) {
+  return roundMoney(extractNumericPrice(item) + extractNumericShipping(item));
+}
 
 function itemMatchesCondition(item, conditionText) {
   const wanted = normalizeText(conditionText).trim();
@@ -118,93 +212,6 @@ function buildAutoCompsFromItems(items = []) {
   };
 }
 
-function buildReasonBreakdown({
-  pricingMode = "Market median",
-  confidence = 0,
-  confidenceLabel = "Low",
-  compCount = 0,
-  marginPercent = 0,
-  undervaluedAmount = 0,
-  undervaluedPercent = 0,
-  estimatedProfit = 0,
-  estimatedResale = 0,
-  totalBuyPrice = 0,
-  ebayFees = 0,
-  risk = "High",
-  verdict = "AVOID",
-  title = "",
-}) {
-  const bullets = [];
-
-  if (undervaluedAmount > 0) {
-    bullets.push(
-      `Spread of ${roundMoney(undervaluedAmount).toFixed(2)} between total buy cost and estimated resale.`
-    );
-  }
-
-  if (estimatedProfit > 0) {
-    bullets.push(
-      `Projected profit of ${roundMoney(estimatedProfit).toFixed(2)} after estimated eBay fees.`
-    );
-  } else if (estimatedProfit < 0) {
-    bullets.push(
-      `Current pricing leaves an estimated loss of ${Math.abs(roundMoney(estimatedProfit)).toFixed(2)} after fees.`
-    );
-  }
-
-  if (compCount > 0) {
-    bullets.push(
-      `${compCount} pricing comps support this estimate using ${pricingMode.toLowerCase()}.`
-    );
-  } else {
-    bullets.push(`No strong comp depth was found, so confidence is lower on this estimate.`);
-  }
-
-  if (marginPercent >= 40) {
-    bullets.push(`Strong margin profile for a resale candidate.`);
-  } else if (marginPercent >= 15) {
-    bullets.push(`Decent margin if the item matches the expected condition.`);
-  } else if (marginPercent > 0) {
-    bullets.push(`Thin margin, so buying discipline matters here.`);
-  } else {
-    bullets.push(`No real safety margin at the current ask price.`);
-  }
-
-  if (confidenceLabel === "High") {
-    bullets.push(`High confidence from a stronger matching comp pool.`);
-  } else if (confidenceLabel === "Medium") {
-    bullets.push(`Medium confidence with enough comps for a usable guide price.`);
-  } else {
-    bullets.push(`Low confidence because the comp pool is still light or mixed.`);
-  }
-
-  if (risk === "Low") {
-    bullets.push(`Risk is lower because projected profit clears the current threshold comfortably.`);
-  } else if (risk === "Medium") {
-    bullets.push(`Risk is moderate because the deal has some buffer but not a huge one.`);
-  } else {
-    bullets.push(`Risk is high because the current price leaves little room for error.`);
-  }
-
-  return {
-    pricingMode,
-    confidence: Number(confidence || 0),
-    confidenceLabel,
-    compCount: Number(compCount || 0),
-    marginPercent: roundMoney(marginPercent),
-    undervaluedAmount: roundMoney(undervaluedAmount),
-    undervaluedPercent: roundMoney(undervaluedPercent),
-    estimatedProfit: roundMoney(estimatedProfit),
-    estimatedResale: roundMoney(estimatedResale),
-    totalBuyPrice: roundMoney(totalBuyPrice),
-    ebayFees: roundMoney(ebayFees),
-    risk,
-    verdict,
-    bullets,
-    title,
-  };
-}
-
 function buildBestOfferGuidance(item, scanner) {
   const hasBestOffer =
     Array.isArray(item?.buyingOptions) &&
@@ -255,101 +262,188 @@ function getUserFromCookie(req) {
   }
 }
 
-function buildWarningAnalysis(item) {
-  const text = normalizeText(
-    [
-      item?.title,
-      item?.subtitle,
-      item?.condition,
-      item?.conditionDisplayName,
-    ]
-      .filter(Boolean)
-      .join(" ")
+function createGenericPricingModel(items = []) {
+  const totals = removePriceOutliers(
+    (Array.isArray(items) ? items : [])
+      .map((item) => extractTotalPrice(item))
+      .filter((v) => Number.isFinite(v) && v > 0)
   );
 
-  const warningRules = [
-    {
-      flag: "Read description carefully",
-      penalty: 8,
-      patterns: ["read description", "see description", "please read", "read full description"],
-    },
-    {
-      flag: "Sold as seen / as is",
-      penalty: 10,
-      patterns: ["sold as seen", "as is", "no warranty implied"],
-    },
-    {
-      flag: "No returns",
-      penalty: 7,
-      patterns: ["no returns", "returns not accepted"],
-    },
-    {
-      flag: "Untested listing",
-      penalty: 14,
-      patterns: ["untested", "unable to test", "not tested"],
-    },
-    {
-      flag: "Possible repair / hidden issue",
-      penalty: 14,
-      patterns: ["for repair", "repair needed", "needs attention", "issue", "issues present"],
-    },
-    {
-      flag: "Battery-related warning",
-      penalty: 6,
-      patterns: ["battery health", "battery service", "battery issue", "battery replacement"],
-    },
-    {
-      flag: "Display / burn-in warning",
-      penalty: 10,
-      patterns: ["burn in", "screen burn", "green line", "pink line", "dead pixels", "lcd bleed"],
-    },
-    {
-      flag: "Screen previously replaced",
-      penalty: 5,
-      patterns: ["screen replaced", "replacement screen", "display replaced"],
-    },
-    {
-      flag: "Parts may be missing",
-      penalty: 8,
-      patterns: ["parts missing", "missing parts", "missing accessories", "missing item"],
-    },
-    {
-      flag: "Account / lock issue warning",
-      penalty: 20,
-      patterns: ["account issue", "account locked", "icloud locked", "google locked", "frp locked"],
-    },
-  ];
+  const marketMedian = median(totals);
+  const marketLow = percentile(totals, 0.35);
 
-  const warningFlags = [];
-  let warningScorePenalty = 0;
+  let baseline = marketMedian || marketLow || 0;
+  const estimatedResale = roundMoney(baseline * 0.95);
 
-  for (const rule of warningRules) {
-    if (rule.patterns.some((pattern) => text.includes(pattern))) {
-      warningFlags.push(rule.flag);
-      warningScorePenalty += rule.penalty;
-    }
-  }
+  const compCount = totals.length;
+  let confidence = 22;
+  if (compCount >= 3) confidence = 55;
+  if (compCount >= 5) confidence = 70;
+  if (compCount >= 8) confidence = 84;
+
+  confidence = Math.min(92, confidence);
+
+  let confidenceLabel = "Low";
+  if (confidence >= 80) confidenceLabel = "High";
+  else if (confidence >= 55) confidenceLabel = "Medium";
 
   return {
-    warningFlags,
-    warningScorePenalty: Math.min(40, warningScorePenalty),
+    estimatedResale,
+    compCount,
+    confidence,
+    confidenceLabel,
+    pricingMode: "Generic market median",
+    marketMedian,
+    marketLow,
+    listingMedian: 0,
   };
 }
 
-function buildDealAnalytics({
-  item,
-  pricing,
+function buildDealReasonBreakdown({
   title,
-  itemContext = {},
+  pricingMode,
+  confidence,
+  confidenceLabel,
+  compCount,
+  marginPercent,
+  undervaluedAmount,
+  undervaluedPercent,
+  estimatedProfit,
+  estimatedResale,
+  totalBuyPrice,
+  ebayFees,
+  risk,
+  verdict,
+  bundleValueBonus = 0,
+  repairCost = 0,
+  warningFlags = [],
+  warningScorePenalty = 0,
 }) {
+  const bullets = [];
+
+  bullets.push(
+    `Spread of ${roundMoney(undervaluedAmount).toFixed(2)} between total buy cost and estimated resale.`
+  );
+  bullets.push(
+    `Projected profit of ${roundMoney(estimatedProfit).toFixed(2)} after estimated eBay fees.`
+  );
+
+  if (compCount > 0) {
+    bullets.push(
+      `${Number(compCount || 0)} pricing comps support this estimate using ${pricingMode || "market pricing"}.`
+    );
+  }
+
+  if (bundleValueBonus > 0) {
+    bullets.push(
+      `Bundle value boost of ${roundMoney(bundleValueBonus).toFixed(2)} applied for included extras.`
+    );
+  }
+
+  if (repairCost > 0) {
+    bullets.push(
+      `Repair or replacement allowance of ${roundMoney(repairCost).toFixed(2)} was factored into the deal.`
+    );
+  }
+
+  if (marginPercent >= 25) {
+    bullets.push("Strong margin profile for a resale candidate.");
+  } else if (marginPercent >= 12) {
+    bullets.push("Decent margin if the item matches the expected condition.");
+  } else {
+    bullets.push("Thin margin, so buying discipline matters here.");
+  }
+
+  if (confidence >= 80) {
+    bullets.push("High confidence from a stronger matching comp pool.");
+  } else if (confidence >= 55) {
+    bullets.push("Medium confidence because there is some useful comp support.");
+  } else {
+    bullets.push("Low confidence, so this needs extra manual checking.");
+  }
+
+  if (warningFlags.length) {
+    bullets.push(
+      `${warningFlags.length} warning${warningFlags.length > 1 ? "s were" : " was"} detected and ranking was adjusted.`
+    );
+  }
+
+  if (risk === "Low") {
+    bullets.push("Risk is lower because projected profit clears the current threshold comfortably.");
+  } else if (risk === "Medium") {
+    bullets.push("Risk is moderate because the deal has some buffer but not a huge one.");
+  } else {
+    bullets.push("Risk is high because the current price leaves little room for error.");
+  }
+
+  return {
+    pricingMode,
+    confidence,
+    confidenceLabel,
+    compCount,
+    marginPercent: roundMoney(marginPercent),
+    undervaluedAmount: roundMoney(undervaluedAmount),
+    undervaluedPercent: roundMoney(undervaluedPercent),
+    estimatedProfit: roundMoney(estimatedProfit),
+    estimatedResale: roundMoney(estimatedResale),
+    totalBuyPrice: roundMoney(totalBuyPrice),
+    ebayFees: roundMoney(ebayFees),
+    repairCost: roundMoney(repairCost),
+    bundleValueBonus: roundMoney(bundleValueBonus),
+    warningFlags,
+    warningScorePenalty,
+    risk,
+    verdict,
+    bullets,
+    title: String(title || "").trim(),
+  };
+}
+
+function buildReasonText({ estimatedProfit, undervaluedAmount }) {
+  return `Strong spread: about £${roundMoney(undervaluedAmount).toFixed(2)} below model with £${roundMoney(estimatedProfit).toFixed(2)} projected profit.`;
+}
+
+function evaluateDeal({
+  item,
+  pricingModel,
+  queryContext,
+  engine,
+}) {
+  const title = extractItemTitle(item);
   const price = extractNumericPrice(item);
   const shipping = extractNumericShipping(item);
   const total = roundMoney(price + shipping);
 
-  const repairCost = Number(itemContext?.repairCost || 0);
-  const resale = roundMoney(pricing?.estimatedResale || 0);
-  const fees = roundMoney(resale * 0.15);
-  const estimatedProfit = roundMoney(resale - fees - total - repairCost);
+  const classified = typeof engine?.classifyItem === "function"
+    ? engine.classifyItem(item, queryContext)
+    : {};
+
+  const repairCost = roundMoney(classified?.repairCost || 0);
+
+  const adjusted = typeof engine?.adjustListingPricing === "function"
+    ? engine.adjustListingPricing({
+        queryContext,
+        item,
+        pricingModel,
+        classifiedItem: classified,
+      })
+    : {
+        estimatedResale: roundMoney(pricingModel?.estimatedResale || 0),
+        bundleValueBonus: 0,
+        warningFlags: [],
+        warningScorePenalty: 0,
+        bundleSignals: classified?.bundleSignals || {},
+        bundleType: classified?.bundleType || "standard",
+      };
+
+  const estimatedResale = roundMoney(
+    adjusted?.estimatedResale ?? pricingModel?.estimatedResale ?? 0
+  );
+
+  const ebayFees = roundMoney(estimatedResale * 0.15);
+  const estimatedProfit = roundMoney(
+    estimatedResale - ebayFees - total - repairCost
+  );
   const marginPercent =
     total > 0 ? roundMoney((estimatedProfit / total) * 100) : 0;
 
@@ -362,19 +456,27 @@ function buildDealAnalytics({
   if (estimatedProfit >= 40) risk = "Low";
   else if (estimatedProfit >= 15) risk = "Medium";
 
-  const warningAnalysis = buildWarningAnalysis(item);
-
   const rawScore = roundMoney(
     Math.max(0, estimatedProfit) +
       Math.max(0, marginPercent) +
       (risk === "Low" ? 15 : risk === "Medium" ? 8 : 0)
   );
 
-  const score = roundMoney(
-    Math.max(0, rawScore - Number(warningAnalysis.warningScorePenalty || 0))
-  );
+  const warningFlags = Array.isArray(adjusted?.warningFlags)
+    ? adjusted.warningFlags
+    : Array.isArray(classified?.warningFlags)
+      ? classified.warningFlags
+      : [];
 
-  const undervaluedAmount = roundMoney(Math.max(0, resale - total));
+  const warningScorePenalty = Number(
+    adjusted?.warningScorePenalty ??
+      classified?.warningScorePenalty ??
+      0
+  ) || 0;
+
+  const score = roundMoney(Math.max(0, rawScore - warningScorePenalty));
+
+  const undervaluedAmount = roundMoney(Math.max(0, estimatedResale - total));
   const undervaluedPercent =
     total > 0 ? roundMoney((undervaluedAmount / total) * 100) : 0;
 
@@ -384,73 +486,102 @@ function buildDealAnalytics({
 
   const scanner = {
     totalBuyPrice: total,
-    estimatedResale: resale,
+    estimatedResale,
     repairCost,
     estimatedProfit,
-    ebayFees: fees,
+    ebayFees,
     marginPercent,
     verdict,
     risk,
     score,
     rawScore,
-    warningScorePenalty: Number(warningAnalysis.warningScorePenalty || 0),
-    compCount: Number(pricing?.compCount || 0),
-    confidence: Number(pricing?.confidence || 0),
-    confidenceLabel: pricing?.confidenceLabel || "Low",
-    pricingMode: pricing?.pricingMode || "Market median",
+    warningScorePenalty,
+    compCount: Number(pricingModel?.compCount || 0),
+    confidence: Number(pricingModel?.confidence || 0),
+    confidenceLabel: pricingModel?.confidenceLabel || "Low",
+    pricingMode: pricingModel?.pricingMode || "Market median",
   };
 
-  const reasonBreakdown = buildReasonBreakdown({
+  const reasonBreakdown = buildDealReasonBreakdown({
+    title,
     pricingMode: scanner.pricingMode,
     confidence: scanner.confidence,
     confidenceLabel: scanner.confidenceLabel,
     compCount: scanner.compCount,
-    marginPercent,
+    marginPercent: scanner.marginPercent,
     undervaluedAmount,
     undervaluedPercent,
     estimatedProfit,
-    estimatedResale: resale,
+    estimatedResale,
     totalBuyPrice: total,
-    ebayFees: fees,
+    ebayFees,
+    repairCost,
+    bundleValueBonus: roundMoney(adjusted?.bundleValueBonus || 0),
+    warningFlags,
+    warningScorePenalty,
     risk,
     verdict,
-    title,
   });
 
-  let reason = `Estimated resale based on conservative UK resale assumptions. Risk: ${risk}.`;
-
-  if (repairCost > 0) {
-    reason = `Repair-adjusted deal: about £${undervaluedAmount.toFixed(2)} below model with £${estimatedProfit.toFixed(2)} projected profit after fees and estimated repair cost.`;
-  } else if (undervaluedAmount > 0 && estimatedProfit > 0) {
-    reason = `Strong spread: about £${undervaluedAmount.toFixed(2)} below model with £${estimatedProfit.toFixed(2)} projected profit.`;
-  } else if (estimatedProfit > 0) {
-    reason = `Projected profit of about £${estimatedProfit.toFixed(2)} after fees. Risk: ${risk}.`;
-  } else {
-    reason = `Limited or negative margin at the current ask price. Risk: ${risk}.`;
-  }
-
   return {
+    ...item,
+    title,
     price,
     shipping,
-    total,
-    resale,
-    fees,
-    repairCost,
+    scanner,
+    bestOffer: buildBestOfferGuidance(item, scanner),
     estimatedProfit,
-    marginPercent,
-    verdict,
-    risk,
-    score,
-    rawScore,
-    warningFlags: warningAnalysis.warningFlags,
-    warningScorePenalty: warningAnalysis.warningScorePenalty,
+    dealScore: score,
+    rawDealScore: rawScore,
+    warningFlags,
+    warningScorePenalty,
     undervaluedAmount,
     undervaluedPercent,
     finderLabel,
-    scanner,
+    reason: buildReasonText({ estimatedProfit, undervaluedAmount }),
     reasonBreakdown,
-    reason,
+    url:
+      item?.itemWebUrl ||
+      item?.viewItemURL ||
+      item?.url ||
+      item?.link ||
+      "",
+    bundleType: adjusted?.bundleType || classified?.bundleType || "",
+    bundleSignals: adjusted?.bundleSignals || classified?.bundleSignals || {},
+    bundleValueBonus: roundMoney(adjusted?.bundleValueBonus || 0),
   };
+}
+
+function sortDealsForFindDeals(deals = [], queryContext = {}) {
+  const wantsBundle = Boolean(queryContext?.wantsBundle);
+
+  const sorted = [...deals].sort((a, b) => {
+    if (wantsBundle) {
+      const aBundle = a?.bundleType === "bundle" ? 1 : 0;
+      const bBundle = b?.bundleType === "bundle" ? 1 : 0;
+
+      if (bBundle !== aBundle) {
+        return bBundle - aBundle;
+      }
+    }
+
+    return Number(b?.dealScore || 0) - Number(a?.dealScore || 0);
+  });
+
+  return sorted;
+}
+
+function applyBundlePreferenceFallback(deals = [], queryContext = {}) {
+  if (!queryContext?.wantsBundle) {
+    return deals;
+  }
+
+  const bundleDeals = deals.filter((deal) => deal?.bundleType === "bundle");
+  if (bundleDeals.length > 0) {
+    return sortDealsForFindDeals(bundleDeals, queryContext);
+  }
+
+  return sortDealsForFindDeals(deals, queryContext);
 }
 
 app.get("/api/me", (req, res) => {
@@ -487,9 +618,11 @@ app.post("/api/search-ebay", async (req, res) => {
       return res.status(400).json({ error: "Search query required." });
     }
 
-    const engine = detectCategoryEngine(query);
-    const queryContext = engine.classifyQuery(query);
-    const searchVariantsOverride = engine.expandSearchVariants(query);
+    const engine = detectEngineForQuery(query);
+    const queryContext =
+      typeof engine?.classifyQuery === "function"
+        ? engine.classifyQuery(query)
+        : { rawQuery: query, normalizedQuery: normalizeText(query) };
 
     const items = await searchEbayListings({
       query,
@@ -497,78 +630,23 @@ app.post("/api/search-ebay", async (req, res) => {
       condition,
       freeShippingOnly,
       limit,
-      searchVariantsOverride,
-    });
-
-    const market = await searchEbayMarketPool({
-      query,
-      condition,
-      limit: 50,
-      searchVariantsOverride,
     });
 
     let filtered = Array.isArray(items) ? items : [];
-    let cleanMarket = Array.isArray(market) ? market : [];
-    let cleanListingsForPricing = Array.isArray(items) ? items : [];
 
     filtered = filtered.filter((item) => itemMatchesCondition(item, condition));
     filtered = filtered.filter((item) => itemMatchesPrice(item, filterPriceMax));
-    filtered = filtered.filter((item) => itemMatchesFreeShipping(item, freeShippingOnly));
-    filtered = filtered.filter((item) => engine.matchesItem(item, queryContext));
-
-    cleanMarket = cleanMarket.filter((item) => engine.matchesItem(item, queryContext));
-    cleanListingsForPricing = cleanListingsForPricing.filter((item) =>
-      engine.matchesItem(item, queryContext)
+    filtered = filtered.filter((item) =>
+      itemMatchesFreeShipping(item, freeShippingOnly)
     );
 
-    const pricing = engine.buildPricingModel({
-      query,
-      queryContext,
-      marketItems: cleanMarket,
-      listingItems: cleanListingsForPricing,
-    });
-
-    const enrichedItems = filtered.map((item) => {
-      const title = extractItemTitle(item);
-      const itemContext =
-        typeof engine.classifyItem === "function"
-          ? engine.classifyItem(item, queryContext)
-          : {};
-
-      const analytics = buildDealAnalytics({
-        item,
-        pricing,
-        title,
-        itemContext,
-      });
-
-      return {
-        ...item,
-        price: analytics.price,
-        shipping: analytics.shipping,
-        scanner: analytics.scanner,
-        estimatedProfit: analytics.estimatedProfit,
-        reason: analytics.reason,
-        reasonBreakdown: analytics.reasonBreakdown,
-        warningFlags: analytics.warningFlags,
-        warningScorePenalty: analytics.warningScorePenalty,
-        bestOffer: buildBestOfferGuidance(item, analytics.scanner),
-        dealScore: analytics.score,
-        undervaluedAmount: analytics.undervaluedAmount,
-        undervaluedPercent: analytics.undervaluedPercent,
-        finderLabel: analytics.finderLabel,
-        url:
-          item?.itemWebUrl ||
-          item?.viewItemURL ||
-          item?.url ||
-          item?.link ||
-          "",
-      };
-    });
+    if (typeof engine?.matchesItem === "function") {
+      filtered = filtered.filter((item) => engine.matchesItem(item, queryContext));
+    }
 
     return res.json({
       ok: true,
-      items: enrichedItems,
+      items: filtered,
     });
   } catch (err) {
     console.error(err);
@@ -590,15 +668,16 @@ app.post("/api/auto-comps", async (req, res) => {
     }
 
     const searchQuery = [product, condition].filter(Boolean).join(" ").trim();
-    const engine = detectCategoryEngine(searchQuery);
-    const queryContext = engine.classifyQuery(searchQuery);
-    const searchVariantsOverride = engine.expandSearchVariants(searchQuery);
+    const engine = detectEngineForQuery(searchQuery);
+    const queryContext =
+      typeof engine?.classifyQuery === "function"
+        ? engine.classifyQuery(searchQuery)
+        : { rawQuery: searchQuery, normalizedQuery: normalizeText(searchQuery) };
 
     const marketItems = await searchEbayMarketPool({
       query: searchQuery,
       condition,
       limit: 24,
-      searchVariantsOverride,
     });
 
     let filtered = Array.isArray(marketItems) ? marketItems : [];
@@ -607,7 +686,9 @@ app.post("/api/auto-comps", async (req, res) => {
       filtered = filtered.filter((item) => itemMatchesCondition(item, condition));
     }
 
-    filtered = filtered.filter((item) => engine.matchesItem(item, queryContext));
+    if (typeof engine?.matchesItem === "function") {
+      filtered = filtered.filter((item) => engine.matchesItem(item, queryContext));
+    }
 
     const autoComps = buildAutoCompsFromItems(filtered);
 
@@ -643,9 +724,11 @@ app.post("/api/find-deals", async (req, res) => {
       return res.status(400).json({ error: "Search query required." });
     }
 
-    const engine = detectCategoryEngine(query);
-    const queryContext = engine.classifyQuery(query);
-    const searchVariantsOverride = engine.expandSearchVariants(query);
+    const engine = detectEngineForQuery(query);
+    const queryContext =
+      typeof engine?.classifyQuery === "function"
+        ? engine.classifyQuery(query)
+        : { rawQuery: query, normalizedQuery: normalizeText(query) };
 
     const listings = await searchEbayListings({
       query,
@@ -653,74 +736,49 @@ app.post("/api/find-deals", async (req, res) => {
       condition,
       freeShippingOnly,
       limit,
-      searchVariantsOverride,
     });
 
     const market = await searchEbayMarketPool({
       query,
       condition,
       limit: 50,
-      searchVariantsOverride,
     });
 
+    let cleanListings = Array.isArray(listings) ? listings : [];
     let cleanMarket = Array.isArray(market) ? market : [];
-    let cleanListingsForPricing = Array.isArray(listings) ? listings : [];
 
-    cleanMarket = cleanMarket.filter((item) => engine.matchesItem(item, queryContext));
-    cleanListingsForPricing = cleanListingsForPricing.filter((item) =>
-      engine.matchesItem(item, queryContext)
+    cleanListings = cleanListings.filter((item) => itemMatchesCondition(item, condition));
+    cleanListings = cleanListings.filter((item) => itemMatchesPrice(item, filterPriceMax));
+    cleanListings = cleanListings.filter((item) =>
+      itemMatchesFreeShipping(item, freeShippingOnly)
     );
 
-    const pricing = engine.buildPricingModel({
-      query,
-      queryContext,
-      marketItems: cleanMarket,
-      listingItems: cleanListingsForPricing,
-    });
+    if (condition.trim()) {
+      cleanMarket = cleanMarket.filter((item) => itemMatchesCondition(item, condition));
+    }
 
-    let deals = (Array.isArray(listings) ? listings : []).map((item) => {
-      const title = extractItemTitle(item);
-      const itemContext =
-        typeof engine.classifyItem === "function"
-          ? engine.classifyItem(item, queryContext)
-          : {};
+    if (typeof engine?.matchesItem === "function") {
+      cleanListings = cleanListings.filter((item) => engine.matchesItem(item, queryContext));
+      cleanMarket = cleanMarket.filter((item) => engine.matchesItem(item, queryContext));
+    }
 
-      const analytics = buildDealAnalytics({
+    const pricingModel =
+      typeof engine?.buildPricingModel === "function"
+        ? engine.buildPricingModel({
+            queryContext,
+            marketItems: cleanMarket,
+            listingItems: cleanListings,
+          })
+        : createGenericPricingModel(cleanMarket);
+
+    let deals = cleanListings.map((item) =>
+      evaluateDeal({
         item,
-        pricing,
-        title,
-        itemContext,
-      });
-
-      return {
-        ...item,
-        price: analytics.price,
-        shipping: analytics.shipping,
-        scanner: analytics.scanner,
-        bestOffer: buildBestOfferGuidance(item, analytics.scanner),
-        estimatedProfit: analytics.estimatedProfit,
-        dealScore: analytics.score,
-        rawDealScore: analytics.rawScore,
-        warningFlags: analytics.warningFlags,
-        warningScorePenalty: analytics.warningScorePenalty,
-        undervaluedAmount: analytics.undervaluedAmount,
-        undervaluedPercent: analytics.undervaluedPercent,
-        finderLabel: analytics.finderLabel,
-        reason: analytics.reason,
-        reasonBreakdown: analytics.reasonBreakdown,
-        url:
-          item?.itemWebUrl ||
-          item?.viewItemURL ||
-          item?.url ||
-          item?.link ||
-          "",
-      };
-    });
-
-    deals = deals.filter((item) => itemMatchesCondition(item, condition));
-    deals = deals.filter((item) => itemMatchesPrice(item, filterPriceMax));
-    deals = deals.filter((item) => itemMatchesFreeShipping(item, freeShippingOnly));
-    deals = deals.filter((item) => engine.matchesItem(item, queryContext));
+        pricingModel,
+        queryContext,
+        engine,
+      })
+    );
 
     deals = deals.filter((item) => {
       const verdict = String(item?.scanner?.verdict || "").toUpperCase();
@@ -733,22 +791,23 @@ app.post("/api/find-deals", async (req, res) => {
       return true;
     });
 
-    deals.sort((a, b) => Number(b.dealScore || 0) - Number(a.dealScore || 0));
-
-    const finalDeals = deals.slice(0, Number(topN || 8)).map((deal, index) => ({
-      ...deal,
-      bestDeal: index === 0,
-    }));
+    const preferredDeals = applyBundlePreferenceFallback(deals, queryContext);
+    const finalDeals = preferredDeals
+      .slice(0, Number(topN || 8))
+      .map((deal, index) => ({
+        ...deal,
+        bestDeal: index === 0,
+      }));
 
     return res.json({
       ok: true,
       deals: finalDeals,
       totalFetched: Array.isArray(listings) ? listings.length : 0,
-      totalMatched: deals.length,
+      totalMatched: preferredDeals.length,
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to find deals" });
+    return res.status(500).json({ error: "Failed to find deals" });
   }
 });
 
