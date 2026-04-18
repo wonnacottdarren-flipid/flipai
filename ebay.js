@@ -29,6 +29,169 @@ function normalizeText(value) {
     .trim();
 }
 
+function hasAny(text, phrases = []) {
+  return phrases.some((phrase) => text.includes(phrase));
+}
+
+function isDysonMainUnitQuery(text) {
+  return (
+    text.includes("dyson") &&
+    (
+      text.includes("main unit") ||
+      text.includes("main body") ||
+      text.includes("body only") ||
+      text.includes("motor unit") ||
+      text.includes("bare unit") ||
+      text.includes("unit only") ||
+      text.includes("handheld unit") ||
+      text.includes("body")
+    )
+  );
+}
+
+function isDysonOutsizeQuery(text) {
+  return text.includes("dyson") && text.includes("outsize");
+}
+
+function isDysonPartsCategory(item) {
+  const categories = Array.isArray(item?.categories) ? item.categories : [];
+  return categories.some((category) =>
+    normalizeText(category?.categoryName).includes("parts")
+  );
+}
+
+function isDysonAccessoryOrPartsTitle(text) {
+  return hasAny(text, [
+    "parts",
+    "spares",
+    "attachment",
+    "attachments",
+    "tool only",
+    "tools only",
+    "battery only",
+    "charger only",
+    "filter only",
+    "wand only",
+    "head only",
+    "battery",
+    "charger",
+    "dock",
+    "wall dock",
+    "filter",
+    "filters",
+    "wand",
+    "pipe",
+    "crevice",
+    "brush",
+    "roller",
+    "roller head",
+    "floor head",
+    "motorhead",
+    "motor head",
+    "nozzle",
+    "hose",
+    "trigger",
+    "bin only",
+    "canister only",
+  ]);
+}
+
+function isDysonMainUnitTitle(text) {
+  return hasAny(text, [
+    "main unit",
+    "motor unit",
+    "body only",
+    "main body",
+    "machine body",
+    "body",
+    "handheld unit",
+    "main vacuum unit",
+    "bare unit",
+    "unit only",
+  ]);
+}
+
+function isDysonFullVacTitle(text) {
+  return hasAny(text, [
+    "vacuum cleaner",
+    "cordless vacuum",
+    "stick vacuum",
+    "complete vacuum",
+    "full vacuum",
+    "complete machine",
+    "complete set",
+    "full set",
+  ]);
+}
+
+function matchesDysonVariantForEbay(query, item) {
+  const searchText = normalizeText(query);
+  if (!searchText.includes("dyson")) return true;
+
+  const titleText = normalizeText(item?.title || "");
+  const wantsV11 = searchText.includes("v11");
+  const wantsOutsize = isDysonOutsizeQuery(searchText);
+  const wantsMainUnit = isDysonMainUnitQuery(searchText);
+
+  const titleHasV11 = titleText.includes("v11");
+  const titleHasOutsize = titleText.includes("outsize");
+  const titleIsMainUnit = isDysonMainUnitTitle(titleText);
+  const titleIsParts = isDysonAccessoryOrPartsTitle(titleText);
+  const titleIsFullMachine =
+    isDysonFullVacTitle(titleText) || (!titleIsMainUnit && !titleIsParts);
+
+  if (isDysonPartsCategory(item)) return false;
+  if (titleIsParts) return false;
+  if (wantsV11 && !titleHasV11) return false;
+
+  if (wantsOutsize) {
+    if (!titleHasOutsize) return false;
+    if (titleIsMainUnit) return false;
+    return titleIsFullMachine;
+  }
+
+  if (wantsMainUnit) {
+    if (titleHasOutsize) return false;
+    return titleIsMainUnit;
+  }
+
+  if (wantsV11) {
+    if (titleHasOutsize) return false;
+    if (titleIsMainUnit) return false;
+    return titleIsFullMachine;
+  }
+
+  return true;
+}
+
+function scoreMainUnitCandidate(query, item) {
+  const searchText = normalizeText(query);
+  const titleText = normalizeText(item?.title || "");
+
+  if (!isDysonMainUnitQuery(searchText)) {
+    return 0;
+  }
+
+  let score = 0;
+
+  if (titleText.includes("v11")) score += 3;
+  if (titleText.includes("main unit")) score += 5;
+  if (titleText.includes("main body")) score += 5;
+  if (titleText.includes("motor unit")) score += 5;
+  if (titleText.includes("body only")) score += 5;
+  if (titleText.includes("bare unit")) score += 4;
+  if (titleText.includes("unit only")) score += 4;
+  if (titleText.includes("handheld unit")) score += 4;
+  if (titleText.includes("body")) score += 2;
+
+  if (titleText.includes("outsize")) score -= 8;
+  if (isDysonAccessoryOrPartsTitle(titleText)) score -= 10;
+  if (isDysonPartsCategory(item)) score -= 10;
+  if (isDysonFullVacTitle(titleText)) score -= 8;
+
+  return score;
+}
+
 async function getEbayAccessToken() {
   const now = Date.now();
 
@@ -221,13 +384,8 @@ function buildDysonSearchVariants(query) {
 
   const isDyson = q.includes("dyson");
   const isV11 = q.includes("v11");
-  const isOutsize = q.includes("outsize");
-  const isMainUnit =
-    q.includes("main unit") ||
-    q.includes("main body") ||
-    q.includes("body only") ||
-    q.includes("motor unit") ||
-    q.includes("body");
+  const isOutsize = isDysonOutsizeQuery(q);
+  const isMainUnit = isDysonMainUnitQuery(q);
 
   if (!isDyson) {
     return variants;
@@ -247,12 +405,16 @@ function buildDysonSearchVariants(query) {
       variants.push("dyson v11 unit only");
       variants.push("dyson v11 handheld unit");
       variants.push("dyson v11 bare unit");
+      variants.push("dyson cordless v11 main body");
+      variants.push("dyson cordless v11 motor unit");
+      variants.push("dyson v11 body");
     } else {
       variants.push("dyson main unit");
       variants.push("dyson main body");
       variants.push("dyson motor unit");
       variants.push("dyson body only");
       variants.push("dyson unit only");
+      variants.push("dyson bare unit");
     }
   } else if (isV11) {
     variants.push("dyson v11");
@@ -312,6 +474,7 @@ async function searchWithFallbacks({
   allowConditionFallback = true,
 }) {
   const variants = buildSearchVariants(query);
+  const searchText = normalizeText(query);
   let combined = [];
 
   for (const variant of variants) {
@@ -326,17 +489,38 @@ async function searchWithFallbacks({
 
     combined = uniqueByItemId([...combined, ...results]);
 
-    if (combined.length >= limit) {
-      return combined.slice(0, limit);
+    if (combined.length >= limit * 2) {
+      break;
     }
   }
 
-  if (combined.length > 0) {
+  if (searchText.includes("dyson")) {
+    combined = combined.filter((item) => matchesDysonVariantForEbay(searchText, item));
+
+    if (isDysonMainUnitQuery(searchText)) {
+      combined = combined
+        .map((item) => ({
+          item,
+          score: scoreMainUnitCandidate(searchText, item),
+        }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score || (a.item.totalBuyPrice - b.item.totalBuyPrice))
+        .map((entry) => entry.item);
+    }
+  }
+
+  combined = uniqueByItemId(combined);
+
+  if (combined.length >= limit) {
+    return combined.slice(0, limit);
+  }
+
+  if (combined.length > 0 && !allowConditionFallback) {
     return combined.slice(0, limit);
   }
 
   if (allowConditionFallback && condition) {
-    let fallbackCombined = [];
+    let fallbackCombined = [...combined];
 
     for (const variant of variants) {
       const results = await browseSearch({
@@ -350,17 +534,36 @@ async function searchWithFallbacks({
 
       fallbackCombined = uniqueByItemId([...fallbackCombined, ...results]);
 
-      if (fallbackCombined.length >= limit) {
-        return fallbackCombined.slice(0, limit);
+      if (fallbackCombined.length >= limit * 2) {
+        break;
       }
     }
+
+    if (searchText.includes("dyson")) {
+      fallbackCombined = fallbackCombined.filter((item) =>
+        matchesDysonVariantForEbay(searchText, item)
+      );
+
+      if (isDysonMainUnitQuery(searchText)) {
+        fallbackCombined = fallbackCombined
+          .map((item) => ({
+            item,
+            score: scoreMainUnitCandidate(searchText, item),
+          }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score || (a.item.totalBuyPrice - b.item.totalBuyPrice))
+          .map((entry) => entry.item);
+      }
+    }
+
+    fallbackCombined = uniqueByItemId(fallbackCombined);
 
     if (fallbackCombined.length > 0) {
       return fallbackCombined.slice(0, limit);
     }
   }
 
-  return [];
+  return combined.slice(0, limit);
 }
 
 export async function searchEbayListings({
