@@ -77,10 +77,10 @@ function extractNumericPrice(item) {
   return roundMoney(
     Number(
       item?.price?.value ??
-      item?.currentPrice?.value ??
-      item?.sellingStatus?.currentPrice?.value ??
-      item?.price ??
-      0
+        item?.currentPrice?.value ??
+        item?.sellingStatus?.currentPrice?.value ??
+        item?.price ??
+        0
     ) || 0
   );
 }
@@ -89,9 +89,9 @@ function extractNumericShipping(item) {
   return roundMoney(
     Number(
       item?.shippingOptions?.[0]?.shippingCost?.value ??
-      item?.shippingCost?.value ??
-      item?.shipping ??
-      0
+        item?.shippingCost?.value ??
+        item?.shipping ??
+        0
     ) || 0
   );
 }
@@ -232,6 +232,13 @@ function hasAny(text, phrases = []) {
   return phrases.some((phrase) => text.includes(phrase));
 }
 
+function isDysonPartsCategory(item) {
+  const categories = Array.isArray(item?.categories) ? item.categories : [];
+  return categories.some((category) =>
+    normalizeText(category?.categoryName).includes("parts")
+  );
+}
+
 function isDysonAccessoryOrParts(text) {
   return hasAny(text, [
     "parts",
@@ -241,6 +248,10 @@ function isDysonAccessoryOrParts(text) {
     "tool only",
     "tools only",
     "battery only",
+    "charger only",
+    "filter only",
+    "wand only",
+    "head only",
     "battery",
     "charger",
     "dock",
@@ -253,7 +264,6 @@ function isDysonAccessoryOrParts(text) {
     "brush",
     "roller",
     "roller head",
-    "head only",
     "floor head",
     "motorhead",
     "motor head",
@@ -272,6 +282,7 @@ function isDysonMainUnitListing(text) {
     "body only",
     "main body",
     "machine body",
+    "body",
     "handheld unit",
     "main vacuum unit",
     "bare unit",
@@ -292,10 +303,12 @@ function isDysonFullMachineListing(text) {
   ]);
 }
 
-function matchesDysonVariant(searchText, titleText) {
+function matchesDysonVariant(searchText, item) {
   if (!searchText.includes("dyson")) {
     return true;
   }
+
+  const titleText = normalizeText(item?.title || item?.name || item?.product || "");
 
   const wantsV11 = searchText.includes("v11");
   const wantsOutsize = searchText.includes("outsize");
@@ -313,6 +326,10 @@ function matchesDysonVariant(searchText, titleText) {
   const titleIsFullMachine =
     isDysonFullMachineListing(titleText) ||
     (!titleIsMainUnit && !titleIsParts);
+
+  if (isDysonPartsCategory(item)) {
+    return false;
+  }
 
   if (titleIsParts) {
     return false;
@@ -402,10 +419,7 @@ app.post("/api/search-ebay", async (req, res) => {
     );
 
     if (searchText.includes("dyson")) {
-      filtered = filtered.filter((item) => {
-        const titleText = normalizeText(extractItemTitle(item));
-        return matchesDysonVariant(searchText, titleText);
-      });
+      filtered = filtered.filter((item) => matchesDysonVariant(searchText, item));
     }
 
     return res.json({
@@ -450,10 +464,7 @@ app.post("/api/auto-comps", async (req, res) => {
 
     const searchText = normalizeText(searchQuery);
     if (searchText.includes("dyson")) {
-      filtered = filtered.filter((item) => {
-        const titleText = normalizeText(extractItemTitle(item));
-        return matchesDysonVariant(searchText, titleText);
-      });
+      filtered = filtered.filter((item) => matchesDysonVariant(searchText, item));
     }
 
     const autoComps = buildAutoCompsFromItems(filtered);
@@ -504,7 +515,15 @@ app.post("/api/find-deals", async (req, res) => {
       limit: 50,
     });
 
-    const marketPrices = (Array.isArray(market) ? market : [])
+    const searchText = normalizeText(query);
+
+    let cleanMarket = Array.isArray(market) ? market : [];
+
+    if (searchText.includes("dyson")) {
+      cleanMarket = cleanMarket.filter((item) => matchesDysonVariant(searchText, item));
+    }
+
+    const marketPrices = cleanMarket
       .map((m) => extractNumericPrice(m))
       .filter((v) => Number.isFinite(v) && v > 0);
 
@@ -580,13 +599,8 @@ app.post("/api/find-deals", async (req, res) => {
     deals = deals.filter((item) => itemMatchesPrice(item, filterPriceMax));
     deals = deals.filter((item) => itemMatchesFreeShipping(item, freeShippingOnly));
 
-    const searchText = normalizeText(query);
-
     if (searchText.includes("dyson")) {
-      deals = deals.filter((d) => {
-        const titleText = normalizeText(d.title);
-        return matchesDysonVariant(searchText, titleText);
-      });
+      deals = deals.filter((item) => matchesDysonVariant(searchText, item));
     }
 
     deals.sort((a, b) => Number(b.dealScore || 0) - Number(a.dealScore || 0));
