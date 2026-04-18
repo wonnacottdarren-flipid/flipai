@@ -9,8 +9,8 @@ import {
 } from "./baseEngine.js";
 
 const CONSOLE_FAMILIES = [
-  ["ps5_disc", ["ps5 disc", "playstation 5 disc", "ps5 standard", "playstation 5 standard", "standard edition", "disc edition", "disk edition"]],
-  ["ps5_digital", ["ps5 digital", "playstation 5 digital", "digital edition"]],
+  ["ps5_disc", ["ps5 disc", "playstation 5 disc", "ps5 standard", "playstation 5 standard", "standard edition", "disc edition", "disk edition", "cfi 1116a", "cfi 1216a"]],
+  ["ps5_digital", ["ps5 digital", "playstation 5 digital", "digital edition", "cfi 1116b", "cfi 1216b"]],
   ["xbox_series_x", ["xbox series x", "series x"]],
   ["xbox_series_s", ["xbox series s", "series s"]],
   ["switch_oled", ["switch oled", "nintendo switch oled", "oled model"]],
@@ -310,6 +310,7 @@ function hasControllerIncluded(text, family) {
 function detectExtraControllerCount(text) {
   const t = normalizeConsoleText(text);
 
+  if (hasAny(t, ["4 controllers", "four controllers"])) return 3;
   if (hasAny(t, ["3 controllers", "three controllers"])) return 2;
   if (hasAny(t, ["2 controllers", "two controllers", "extra controller", "second controller", "spare controller"])) return 1;
   return 0;
@@ -320,6 +321,7 @@ function detectIncludedGamesCount(text) {
 
   if (hasAny(t, ["10 games", "10x games", "ten games"])) return 10;
   if (hasAny(t, ["8 games", "eight games"])) return 8;
+  if (hasAny(t, ["6 games", "six games"])) return 6;
   if (hasAny(t, ["5 games", "five games"])) return 5;
   if (hasAny(t, ["4 games", "four games"])) return 4;
   if (hasAny(t, ["3 games", "three games"])) return 3;
@@ -484,7 +486,7 @@ function estimateBundleValueBonus(queryContext, bundleSignals, text) {
     if (hasBox) bonus += 8;
     if (hasAccessories) bonus += 10;
 
-    if (hasAny(t, ["fifa", "fc 24", "cod", "call of duty", "spiderman", "spider man", "gow", "god of war", "gran turismo"])) {
+    if (hasAny(t, ["fifa", "fc 24", "fc24", "cod", "call of duty", "spiderman", "spider man", "gow", "god of war", "gran turismo", "gta"])) {
       bonus += 10;
     }
   } else if (family.startsWith("xbox_series")) {
@@ -511,8 +513,12 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
   const t = normalizeConsoleText(text);
   const flags = [];
 
-  if (hasAny(t, ["read description", "read desc", "read caption", "see description"])) {
+  if (hasAny(t, ["read description", "read desc", "see description"])) {
     flags.push("Read description carefully");
+  }
+
+  if (hasAny(t, ["read caption", "see caption"])) {
+    flags.push("Seller may have important notes in caption");
   }
 
   if (hasAny(t, ["no controller", "missing controller", "without controller"])) {
@@ -523,16 +529,24 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
     flags.push("Console-only listing");
   }
 
-  if (hasAny(t, ["unboxed", "no box"])) {
+  if (hasAny(t, ["unboxed", "no box", "without box"])) {
     flags.push("No box included");
   }
 
-  if (hasAny(t, ["poor condition", "heavy wear", "bad condition", "fair condition"])) {
+  if (hasAny(t, ["poor condition", "heavy wear", "bad condition", "fair condition", "worn"])) {
     flags.push("Condition may reduce resale appeal");
   }
 
-  if (hasAny(t, ["read caption"])) {
-    flags.push("Seller may have important notes in caption");
+  if (hasAny(t, ["scratches", "scratched", "cosmetic marks", "cosmetic wear"])) {
+    flags.push("Visible cosmetic wear mentioned");
+  }
+
+  if (hasAny(t, ["upcoming giveaway", "giveaway", "for giveaway"])) {
+    flags.push("Listing wording looks unusual");
+  }
+
+  if (hasAny(t, ["low firmware", "jailbreak", "modded", "modded firmware"])) {
+    flags.push("Specialist buyer wording");
   }
 
   if (
@@ -550,15 +564,39 @@ function calculateWarningPenalty(flags = []) {
 
   for (const flag of flags) {
     if (flag === "Read description carefully") penalty += 8;
+    else if (flag === "Seller may have important notes in caption") penalty += 6;
     else if (flag === "No controller included") penalty += 10;
     else if (flag === "Console-only listing") penalty += 6;
     else if (flag === "No box included") penalty += 2;
     else if (flag === "Condition may reduce resale appeal") penalty += 5;
-    else if (flag === "Seller may have important notes in caption") penalty += 4;
+    else if (flag === "Visible cosmetic wear mentioned") penalty += 4;
+    else if (flag === "Listing wording looks unusual") penalty += 7;
+    else if (flag === "Specialist buyer wording") penalty += 4;
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 6;
   }
 
   return penalty;
+}
+
+function getDiscDigitalPricingBias(queryContext, text) {
+  const family = String(queryContext?.family || "");
+  const t = normalizeConsoleText(text);
+
+  if (family === "ps5_disc") {
+    if (hasAny(t, ["disc edition", "disk edition", "standard edition", "cfi 1116a", "cfi 1216a"])) {
+      return 15;
+    }
+    return 8;
+  }
+
+  if (family === "ps5_digital") {
+    if (hasAny(t, ["digital edition", "cfi 1116b", "cfi 1216b"])) {
+      return -8;
+    }
+    return -5;
+  }
+
+  return 0;
 }
 
 function scoreConsoleCandidate(item, queryContext) {
@@ -605,6 +643,14 @@ function scoreConsoleCandidate(item, queryContext) {
   if (bundleSignals.hasAccessories) score += 0.25;
   if (bundleSignals.explicitBundleWords) score += 0.35;
 
+  if (queryContext.family === "ps5_disc" && hasAny(text, ["disc edition", "disk edition", "standard edition"])) {
+    score += 1;
+  }
+
+  if (queryContext.family === "ps5_digital" && hasAny(text, ["digital edition"])) {
+    score += 1;
+  }
+
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
   const warningPenalty = calculateWarningPenalty(warningFlags);
 
@@ -619,11 +665,17 @@ function enrichConsoleCompPool(queryContext, items = []) {
       const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals, text);
       const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
       const warningPenalty = calculateWarningPenalty(warningFlags);
+      const discDigitalBias = getDiscDigitalPricingBias(queryContext, text);
 
       return {
         item,
         total: extractTotalPrice(item),
-        adjustedTotal: roundMoney(extractTotalPrice(item) - bundleValueBonus + Math.min(warningPenalty, 12)),
+        adjustedTotal: roundMoney(
+          extractTotalPrice(item) -
+            bundleValueBonus +
+            Math.min(warningPenalty, 12) +
+            discDigitalBias * -1
+        ),
         score: scoreConsoleCandidate(item, queryContext),
         conditionState: classifyConsoleConditionState(text),
         bundleType: bundleSignals.bundleType,
@@ -631,6 +683,7 @@ function enrichConsoleCompPool(queryContext, items = []) {
         bundleValueBonus,
         warningFlags,
         warningPenalty,
+        discDigitalBias,
       };
     })
     .filter((entry) => entry.total > 0 && entry.score > -5)
@@ -698,6 +751,18 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   let conservativeMultiplier = 0.95;
   if (exactMarket.length >= 5) conservativeMultiplier = 0.96;
 
+  if (queryContext.family === "ps5_disc") {
+    baseline = roundMoney(baseline + 12);
+    pricingMode = "PS5 disc median";
+  } else if (queryContext.family === "ps5_digital") {
+    baseline = roundMoney(Math.max(0, baseline - 8));
+    pricingMode = "PS5 digital median";
+  } else if (queryContext.family === "xbox_series_x") {
+    pricingMode = "Series X median";
+  } else if (queryContext.family === "xbox_series_s") {
+    pricingMode = "Series S median";
+  }
+
   const estimatedResale = roundMoney(baseline * conservativeMultiplier);
 
   const compCount = marketTotals.length;
@@ -736,6 +801,7 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
   const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals, text);
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
   const warningPenalty = calculateWarningPenalty(warningFlags);
+  const discDigitalBias = getDiscDigitalPricingBias(queryContext, text);
 
   return {
     bundleSignals,
@@ -743,7 +809,9 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
     bundleValueBonus,
     warningFlags,
     warningScorePenalty: warningPenalty,
-    estimatedResale: roundMoney(Number(baseResale || 0) + bundleValueBonus),
+    estimatedResale: roundMoney(
+      Number(baseResale || 0) + bundleValueBonus + discDigitalBias
+    ),
   };
 }
 
