@@ -485,6 +485,46 @@ function enrichCompPool(searchText, items = []) {
     .sort((a, b) => b.score - a.score);
 }
 
+function uniqueRoundedValues(values = []) {
+  const seen = new Set();
+  const result = [];
+
+  for (const raw of values) {
+    const value = roundMoney(raw);
+    if (!value || !Number.isFinite(value)) continue;
+    const key = value.toFixed(2);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+
+  return result;
+}
+
+function buildLowCompFallbackTotals(searchText, marketPool = [], listingPool = []) {
+  const isMainUnit =
+    searchText.includes("main unit") ||
+    searchText.includes("main body") ||
+    searchText.includes("body only") ||
+    searchText.includes("motor unit") ||
+    searchText.includes("body");
+
+  const isOutsize = searchText.includes("outsize");
+
+  const relaxedMarket = marketPool
+    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? 0.2 : 0.15))
+    .slice(0, 12)
+    .map((entry) => entry.total);
+
+  const relaxedListings = listingPool
+    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? 0.2 : 0.15))
+    .slice(0, 10)
+    .map((entry) => entry.total);
+
+  const combined = uniqueRoundedValues([...relaxedMarket, ...relaxedListings]);
+  return removePriceOutliers(combined);
+}
+
 function buildPricingModel(searchText, marketItems = [], listingItems = []) {
   const marketPool = enrichCompPool(searchText, marketItems);
   const listingPool = enrichCompPool(searchText, listingItems);
@@ -495,8 +535,32 @@ function buildPricingModel(searchText, marketItems = [], listingItems = []) {
   const strongListings = listingPool.filter((entry) => entry.score >= 0.45);
   const usableListings = strongListings.length >= 2 ? strongListings : listingPool;
 
-  const marketTotals = removePriceOutliers(usableMarket.map((entry) => entry.total));
-  const listingTotals = removePriceOutliers(usableListings.map((entry) => entry.total));
+  let marketTotals = removePriceOutliers(usableMarket.map((entry) => entry.total));
+  let listingTotals = removePriceOutliers(usableListings.map((entry) => entry.total));
+
+  const isDyson = searchText.includes("dyson");
+  const isOutsize = searchText.includes("outsize");
+  const isMainUnit =
+    searchText.includes("main unit") ||
+    searchText.includes("main body") ||
+    searchText.includes("body only") ||
+    searchText.includes("motor unit") ||
+    searchText.includes("body");
+
+  let pricingMode = "Market median";
+
+  if (marketTotals.length < 3) {
+    const fallbackTotals = buildLowCompFallbackTotals(searchText, marketPool, listingPool);
+
+    if (fallbackTotals.length >= marketTotals.length) {
+      marketTotals = fallbackTotals;
+      pricingMode = "Low-comp fallback blend";
+    }
+
+    if (listingTotals.length < 2 && fallbackTotals.length >= 2) {
+      listingTotals = fallbackTotals;
+    }
+  }
 
   const marketMedian = median(marketTotals);
   const marketLow = percentile(marketTotals, 0.35);
@@ -508,35 +572,43 @@ function buildPricingModel(searchText, marketItems = [], listingItems = []) {
     baseline = listingMedian;
   }
 
-  let pricingMode = "Market median";
   if (!marketMedian && listingMedian) pricingMode = "Listings median fallback";
   if (!marketMedian && !listingMedian && marketLow) pricingMode = "Market low-band";
 
-  const hasDyson = searchText.includes("dyson");
-  const isOutsize = searchText.includes("outsize");
-  const isMainUnit =
-    searchText.includes("main unit") ||
-    searchText.includes("main body") ||
-    searchText.includes("body only") ||
-    searchText.includes("motor unit") ||
-    searchText.includes("body");
-
   let conservativeMultiplier = 0.94;
 
-  if (hasDyson && isOutsize) conservativeMultiplier = 0.97;
-  else if (hasDyson && isMainUnit) conservativeMultiplier = 0.95;
-  else if (hasDyson) conservativeMultiplier = 0.95;
+  if (isDyson && isOutsize) conservativeMultiplier = 0.97;
+  else if (isDyson && isMainUnit) conservativeMultiplier = 0.95;
+  else if (isDyson) conservativeMultiplier = 0.95;
 
   let estimatedResale = roundMoney(baseline * conservativeMultiplier);
 
   if (isOutsize && marketMedian && listingMedian) {
-    estimatedResale = roundMoney(Math.max(estimatedResale, marketMedian * 0.96, listingMedian * 0.93));
-    pricingMode = "Outsize weighted median";
+    estimatedResale = roundMoney(
+      Math.max(estimatedResale, marketMedian * 0.96, listingMedian * 0.93)
+    );
+    pricingMode =
+      pricingMode === "Low-comp fallback blend"
+        ? "Outsize fallback blend"
+        : "Outsize weighted median";
   }
 
-  if (isMainUnit && marketMedian && listingMedian) {
-    estimatedResale = roundMoney(Math.max(estimatedResale, marketMedian * 0.94, listingMedian * 0.9));
-    pricingMode = "Main unit weighted median";
+  if (isMainUnit) {
+    if (marketMedian && listingMedian) {
+      estimatedResale = roundMoney(
+        Math.max(estimatedResale, marketMedian * 0.94, listingMedian * 0.9)
+      );
+      pricingMode =
+        pricingMode === "Low-comp fallback blend"
+          ? "Main unit fallback blend"
+          : "Main unit weighted median";
+    } else if (marketMedian) {
+      estimatedResale = roundMoney(Math.max(estimatedResale, marketMedian * 0.95));
+      pricingMode = "Main unit fallback blend";
+    } else if (listingMedian) {
+      estimatedResale = roundMoney(Math.max(estimatedResale, listingMedian * 0.9));
+      pricingMode = "Main unit listings fallback";
+    }
   }
 
   const compCount = marketTotals.length;
@@ -548,6 +620,10 @@ function buildPricingModel(searchText, marketItems = [], listingItems = []) {
   if (usableMarket.length >= 5) confidence += 4;
   if (strongMarket.length >= 5) confidence += 4;
   if (usableListings.length >= 4) confidence += 3;
+
+  if (pricingMode.includes("fallback")) {
+    confidence = Math.min(confidence, 68);
+  }
 
   confidence = Math.min(92, confidence);
 
