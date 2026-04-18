@@ -826,6 +826,21 @@
       padding: 4px 0;
     }
 
+    .finder-hidden-note {
+      margin-bottom: 14px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(79,140,255,0.09);
+      border: 1px solid rgba(79,140,255,0.22);
+      color: #dbeafe;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    .finder-hidden-note strong {
+      color: #ffffff;
+    }
+
     .offer-box {
       margin-bottom: 12px;
       padding: 16px;
@@ -1821,6 +1836,48 @@
       return false;
     }
 
+    function getFinderVisibilityMeta(rawDeals = []) {
+      const counts = {
+        total: 0,
+        visible: 0,
+        hiddenTight: 0,
+        hiddenOther: 0
+      };
+
+      for (const deal of rawDeals) {
+        counts.total += 1;
+
+        if (shouldShowFinderDeal(deal)) {
+          counts.visible += 1;
+          continue;
+        }
+
+        const label = String(deal.finderLabel || "").toLowerCase();
+        if (label.includes("tight")) {
+          counts.hiddenTight += 1;
+        } else {
+          counts.hiddenOther += 1;
+        }
+      }
+
+      return counts;
+    }
+
+    function renderFinderHiddenNote(meta) {
+      if (!meta || meta.hiddenTight <= 0 || showTightDealsCheckbox.checked) {
+        return "";
+      }
+
+      const noun = meta.hiddenTight === 1 ? "deal is" : "deals are";
+
+      return `
+        <div class="finder-hidden-note">
+          <strong>${meta.hiddenTight} Tight ${noun} hidden</strong> by the current filter.
+          Tick <strong>Reveal Tight deals</strong> to show borderline opportunities instead of only Buy and Offer results.
+        </div>
+      `;
+    }
+
     window.useDealForAnalysis = useDealForAnalysis;
 
     function renderDealResults(data) {
@@ -1970,119 +2027,130 @@
       }
 
       const source = data || window.__lastFinderResponse || {};
-      const rawDeals = source.deals || [];
-      const deals = rawDeals.map(mapFinderDeal).filter(shouldShowFinderDeal);
+      const rawDeals = (source.deals || []).map(mapFinderDeal);
+      const visibilityMeta = getFinderVisibilityMeta(rawDeals);
+      const deals = rawDeals.filter(shouldShowFinderDeal);
       window.__lastFoundDeals = deals;
 
       if (!deals.length) {
+        const hiddenNote = renderFinderHiddenNote(visibilityMeta);
+
         const message = showTightDealsCheckbox.checked
           ? "No ranked deals found for that search. Try widening the max price or using a broader search term."
-          : "No Buy or Offer deals found right now. Switch on “Reveal Tight deals” to see borderline opportunities.";
-        finderResultsEl.innerHTML = `<div class="deal-empty">${escapeHtml(message)}</div>`;
+          : visibilityMeta.hiddenTight > 0
+            ? "No Buy or Offer deals are visible right now."
+            : "No Buy or Offer deals found right now. Switch on “Reveal Tight deals” to see borderline opportunities.";
+
+        finderResultsEl.innerHTML = `
+          ${hiddenNote}
+          <div class="deal-empty">${escapeHtml(message)}</div>
+        `;
         return;
       }
 
-      finderResultsEl.innerHTML = deals
-        .map((deal, index) => {
-          return `
-            <div class="deal-card" style="${
-              index === 0
-                ? "border:1px solid rgba(79,140,255,0.45); box-shadow: 0 0 0 1px rgba(79,140,255,0.18), 0 20px 60px rgba(0,0,0,0.28);"
-                : ""
-            }">
-              ${
+      finderResultsEl.innerHTML =
+        renderFinderHiddenNote(visibilityMeta) +
+        deals
+          .map((deal, index) => {
+            return `
+              <div class="deal-card" style="${
                 index === 0
-                  ? `<div class="panel" style="margin-bottom:12px;font-weight:800;color:#93c5fd;">TOP RANKED DEAL FINDER RESULT 🚀</div>`
+                  ? "border:1px solid rgba(79,140,255,0.45); box-shadow: 0 0 0 1px rgba(79,140,255,0.18), 0 20px 60px rgba(0,0,0,0.28);"
                   : ""
-              }
-
-              ${deal.image ? `<div class="deal-image-wrap"><img class="deal-image" src="${escapeHtml(deal.image)}" alt="${escapeHtml(deal.title)}" /></div>` : ""}
-
-              <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
-
-              <div class="deal-price-row">
-                <div class="deal-price">${currency(deal.price)}</div>
-                <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
-                <div class="deal-badge ${labelClass(deal.finderLabel)}">${escapeHtml(deal.finderLabel)}</div>
+              }">
                 ${
-                  deal.condition
-                    ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
+                  index === 0
+                    ? `<div class="panel" style="margin-bottom:12px;font-weight:800;color:#93c5fd;">TOP RANKED DEAL FINDER RESULT 🚀</div>`
                     : ""
                 }
-                ${
-                  deal.marketBucket
-                    ? `<div class="deal-bucket">${escapeHtml(deal.marketBucket)}</div>`
-                    : ""
-                }
-                ${
-                  deal.bestOffer && deal.bestOffer.hasBestOffer
-                    ? `<div class="deal-offer-chip">Best offer</div>`
-                    : ""
-                }
-                <div class="deal-score">Deal score ${escapeHtml(deal.dealScore)}</div>
-                ${
-                  Array.isArray(deal.warningFlags) && deal.warningFlags.length
-                    ? `<div class="warning-chip">${deal.warningFlags.length} warning${deal.warningFlags.length > 1 ? "s" : ""}</div>`
-                    : ""
-                }
-              </div>
 
-              <div class="deal-metrics">
-                <div class="deal-metric">
-                  <div class="label">Estimated resale</div>
-                  <div class="value">${currency(deal.estimatedResale)}</div>
+                ${deal.image ? `<div class="deal-image-wrap"><img class="deal-image" src="${escapeHtml(deal.image)}" alt="${escapeHtml(deal.title)}" /></div>` : ""}
+
+                <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
+
+                <div class="deal-price-row">
+                  <div class="deal-price">${currency(deal.price)}</div>
+                  <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
+                  <div class="deal-badge ${labelClass(deal.finderLabel)}">${escapeHtml(deal.finderLabel)}</div>
+                  ${
+                    deal.condition
+                      ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
+                      : ""
+                  }
+                  ${
+                    deal.marketBucket
+                      ? `<div class="deal-bucket">${escapeHtml(deal.marketBucket)}</div>`
+                      : ""
+                  }
+                  ${
+                    deal.bestOffer && deal.bestOffer.hasBestOffer
+                      ? `<div class="deal-offer-chip">Best offer</div>`
+                      : ""
+                  }
+                  <div class="deal-score">Deal score ${escapeHtml(deal.dealScore)}</div>
+                  ${
+                    Array.isArray(deal.warningFlags) && deal.warningFlags.length
+                      ? `<div class="warning-chip">${deal.warningFlags.length} warning${deal.warningFlags.length > 1 ? "s" : ""}</div>`
+                      : ""
+                  }
                 </div>
-                <div class="deal-metric">
-                  <div class="label">Estimated profit</div>
-                  <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
-                    ${currency(deal.estimatedProfit)}
+
+                <div class="deal-metrics">
+                  <div class="deal-metric">
+                    <div class="label">Estimated resale</div>
+                    <div class="value">${currency(deal.estimatedResale)}</div>
+                  </div>
+                  <div class="deal-metric">
+                    <div class="label">Estimated profit</div>
+                    <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
+                      ${currency(deal.estimatedProfit)}
+                    </div>
+                  </div>
+                  <div class="deal-metric">
+                    <div class="label">Undervalued by</div>
+                    <div class="value">${currency(deal.undervaluedAmount)}</div>
+                  </div>
+                  <div class="deal-metric">
+                    <div class="label">Undervalued %</div>
+                    <div class="value">${Number(deal.undervaluedPercent || 0).toFixed(2)}%</div>
                   </div>
                 </div>
-                <div class="deal-metric">
-                  <div class="label">Undervalued by</div>
-                  <div class="value">${currency(deal.undervaluedAmount)}</div>
+
+                <div class="panel" style="font-weight:800;color:${scannerVerdictColor(deal.verdict)};">
+                  Verdict: ${escapeHtml(deal.verdict)}
                 </div>
-                <div class="deal-metric">
-                  <div class="label">Undervalued %</div>
-                  <div class="value">${Number(deal.undervaluedPercent || 0).toFixed(2)}%</div>
+
+                <div class="panel">
+                  <strong>Risk:</strong> ${escapeHtml(deal.risk)}<br>
+                  <strong>Total buy cost:</strong> ${currency(deal.totalBuyPrice)}<br>
+                  <strong>eBay fees:</strong> ${currency(deal.ebayFees)}<br>
+                  <strong>Margin %:</strong> ${Number(deal.marginPercent || 0).toFixed(2)}%<br>
+                  <strong>Comps used:</strong> ${Number(deal.compCount || 0)}<br>
+                  ${
+                    Number(deal.warningScorePenalty || 0) > 0
+                      ? `<strong>Warning penalty:</strong> -${Number(deal.warningScorePenalty || 0).toFixed(0)} points`
+                      : ""
+                  }
+                </div>
+
+                ${renderWarningBox(deal.warningFlags, deal.warningScorePenalty)}
+
+                <div class="deal-summary">${escapeHtml(deal.reason)}</div>
+
+                ${renderBestOfferBox(deal.bestOffer)}
+
+                <div class="deal-actions">
+                  <button onclick="useDealForAnalysis(${index}, '__lastFoundDeals')">Send to Analyzer</button>
+                  ${
+                    deal.url
+                      ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
+                      : ""
+                  }
                 </div>
               </div>
-
-              <div class="panel" style="font-weight:800;color:${scannerVerdictColor(deal.verdict)};">
-                Verdict: ${escapeHtml(deal.verdict)}
-              </div>
-
-              <div class="panel">
-                <strong>Risk:</strong> ${escapeHtml(deal.risk)}<br>
-                <strong>Total buy cost:</strong> ${currency(deal.totalBuyPrice)}<br>
-                <strong>eBay fees:</strong> ${currency(deal.ebayFees)}<br>
-                <strong>Margin %:</strong> ${Number(deal.marginPercent || 0).toFixed(2)}%<br>
-                <strong>Comps used:</strong> ${Number(deal.compCount || 0)}<br>
-                ${
-                  Number(deal.warningScorePenalty || 0) > 0
-                    ? `<strong>Warning penalty:</strong> -${Number(deal.warningScorePenalty || 0).toFixed(0)} points`
-                    : ""
-                }
-              </div>
-
-              ${renderWarningBox(deal.warningFlags, deal.warningScorePenalty)}
-
-              <div class="deal-summary">${escapeHtml(deal.reason)}</div>
-
-              ${renderBestOfferBox(deal.bestOffer)}
-
-              <div class="deal-actions">
-                <button onclick="useDealForAnalysis(${index}, '__lastFoundDeals')">Send to Analyzer</button>
-                ${
-                  deal.url
-                    ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
-                    : ""
-                }
-              </div>
-            </div>
-          `;
-        })
-        .join("");
+            `;
+          })
+          .join("");
     }
 
     async function autoFillComps() {
