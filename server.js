@@ -25,7 +25,7 @@ import {
 
 import { runAnalysis } from "./openai.js";
 import { searchEbayListings, searchEbayMarketPool } from "./ebay.js";
-import { detectEngineForQuery } from "./engines/index.js";
+import * as engineRegistry from "./engines/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -299,6 +299,54 @@ function createGenericPricingModel(items = []) {
   };
 }
 
+function resolveEngineForQuery(query) {
+  try {
+    if (typeof engineRegistry.detectEngineForQuery === "function") {
+      return engineRegistry.detectEngineForQuery(query);
+    }
+
+    if (typeof engineRegistry.getEngineForQuery === "function") {
+      return engineRegistry.getEngineForQuery(query);
+    }
+
+    if (typeof engineRegistry.detectEngine === "function") {
+      return engineRegistry.detectEngine(query);
+    }
+
+    if (engineRegistry.default && typeof engineRegistry.default.detectEngineForQuery === "function") {
+      return engineRegistry.default.detectEngineForQuery(query);
+    }
+
+    if (engineRegistry.default && typeof engineRegistry.default.getEngineForQuery === "function") {
+      return engineRegistry.default.getEngineForQuery(query);
+    }
+
+    if (engineRegistry.default && typeof engineRegistry.default.detectEngine === "function") {
+      return engineRegistry.default.detectEngine(query);
+    }
+
+    const possibleEngines = Object.values(engineRegistry).filter(
+      (value) =>
+        value &&
+        typeof value === "object" &&
+        typeof value.detect === "function"
+    );
+
+    for (const engine of possibleEngines) {
+      try {
+        if (engine.detect(query)) {
+          return engine;
+        }
+      } catch {
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function buildDealReasonBreakdown({
   title,
   pricingMode,
@@ -414,27 +462,29 @@ function evaluateDeal({
   const shipping = extractNumericShipping(item);
   const total = roundMoney(price + shipping);
 
-  const classified = typeof engine?.classifyItem === "function"
-    ? engine.classifyItem(item, queryContext)
-    : {};
+  const classified =
+    engine && typeof engine.classifyItem === "function"
+      ? engine.classifyItem(item, queryContext)
+      : {};
 
   const repairCost = roundMoney(classified?.repairCost || 0);
 
-  const adjusted = typeof engine?.adjustListingPricing === "function"
-    ? engine.adjustListingPricing({
-        queryContext,
-        item,
-        pricingModel,
-        classifiedItem: classified,
-      })
-    : {
-        estimatedResale: roundMoney(pricingModel?.estimatedResale || 0),
-        bundleValueBonus: 0,
-        warningFlags: [],
-        warningScorePenalty: 0,
-        bundleSignals: classified?.bundleSignals || {},
-        bundleType: classified?.bundleType || "standard",
-      };
+  const adjusted =
+    engine && typeof engine.adjustListingPricing === "function"
+      ? engine.adjustListingPricing({
+          queryContext,
+          item,
+          pricingModel,
+          classifiedItem: classified,
+        })
+      : {
+          estimatedResale: roundMoney(pricingModel?.estimatedResale || 0),
+          bundleValueBonus: 0,
+          warningFlags: [],
+          warningScorePenalty: 0,
+          bundleSignals: classified?.bundleSignals || {},
+          bundleType: classified?.bundleType || "standard",
+        };
 
   const estimatedResale = roundMoney(
     adjusted?.estimatedResale ?? pricingModel?.estimatedResale ?? 0
@@ -573,7 +623,7 @@ function sortDealsForFindDeals(deals = [], queryContext = {}) {
 
 function applyBundlePreferenceFallback(deals = [], queryContext = {}) {
   if (!queryContext?.wantsBundle) {
-    return deals;
+    return sortDealsForFindDeals(deals, queryContext);
   }
 
   const bundleDeals = deals.filter((deal) => deal?.bundleType === "bundle");
@@ -618,9 +668,9 @@ app.post("/api/search-ebay", async (req, res) => {
       return res.status(400).json({ error: "Search query required." });
     }
 
-    const engine = detectEngineForQuery(query);
+    const engine = resolveEngineForQuery(query);
     const queryContext =
-      typeof engine?.classifyQuery === "function"
+      engine && typeof engine.classifyQuery === "function"
         ? engine.classifyQuery(query)
         : { rawQuery: query, normalizedQuery: normalizeText(query) };
 
@@ -640,7 +690,7 @@ app.post("/api/search-ebay", async (req, res) => {
       itemMatchesFreeShipping(item, freeShippingOnly)
     );
 
-    if (typeof engine?.matchesItem === "function") {
+    if (engine && typeof engine.matchesItem === "function") {
       filtered = filtered.filter((item) => engine.matchesItem(item, queryContext));
     }
 
@@ -668,9 +718,9 @@ app.post("/api/auto-comps", async (req, res) => {
     }
 
     const searchQuery = [product, condition].filter(Boolean).join(" ").trim();
-    const engine = detectEngineForQuery(searchQuery);
+    const engine = resolveEngineForQuery(searchQuery);
     const queryContext =
-      typeof engine?.classifyQuery === "function"
+      engine && typeof engine.classifyQuery === "function"
         ? engine.classifyQuery(searchQuery)
         : { rawQuery: searchQuery, normalizedQuery: normalizeText(searchQuery) };
 
@@ -686,7 +736,7 @@ app.post("/api/auto-comps", async (req, res) => {
       filtered = filtered.filter((item) => itemMatchesCondition(item, condition));
     }
 
-    if (typeof engine?.matchesItem === "function") {
+    if (engine && typeof engine.matchesItem === "function") {
       filtered = filtered.filter((item) => engine.matchesItem(item, queryContext));
     }
 
@@ -724,9 +774,9 @@ app.post("/api/find-deals", async (req, res) => {
       return res.status(400).json({ error: "Search query required." });
     }
 
-    const engine = detectEngineForQuery(query);
+    const engine = resolveEngineForQuery(query);
     const queryContext =
-      typeof engine?.classifyQuery === "function"
+      engine && typeof engine.classifyQuery === "function"
         ? engine.classifyQuery(query)
         : { rawQuery: query, normalizedQuery: normalizeText(query) };
 
@@ -757,13 +807,13 @@ app.post("/api/find-deals", async (req, res) => {
       cleanMarket = cleanMarket.filter((item) => itemMatchesCondition(item, condition));
     }
 
-    if (typeof engine?.matchesItem === "function") {
+    if (engine && typeof engine.matchesItem === "function") {
       cleanListings = cleanListings.filter((item) => engine.matchesItem(item, queryContext));
       cleanMarket = cleanMarket.filter((item) => engine.matchesItem(item, queryContext));
     }
 
     const pricingModel =
-      typeof engine?.buildPricingModel === "function"
+      engine && typeof engine.buildPricingModel === "function"
         ? engine.buildPricingModel({
             queryContext,
             marketItems: cleanMarket,
