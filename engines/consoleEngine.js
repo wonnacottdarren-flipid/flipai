@@ -9,7 +9,7 @@ import {
 } from "./baseEngine.js";
 
 const CONSOLE_FAMILIES = [
-  ["ps5_disc", ["ps5 disc", "playstation 5 disc", "ps5 standard", "playstation 5 standard", "standard edition", "disc edition", "disk edition", "cfi 1116a", "cfi 1216a"]],
+  ["ps5_disc", ["ps5 disc", "ps5 disk", "playstation 5 disc", "playstation 5 disk", "ps5 standard", "playstation 5 standard", "standard edition", "disc edition", "disk edition", "cfi 1116a", "cfi 1216a"]],
   ["ps5_digital", ["ps5 digital", "playstation 5 digital", "digital edition", "cfi 1116b", "cfi 1216b"]],
   ["xbox_series_x", ["xbox series x", "series x"]],
   ["xbox_series_s", ["xbox series s", "series s"]],
@@ -30,7 +30,9 @@ function normalizeConsoleText(value) {
     .replace(/\bsony ps5\b/g, "ps5")
     .replace(/\bps5 slim\b/g, "ps5")
     .replace(/\bplaystation5 slim\b/g, "playstation5")
-    .replace(/\bdisk edition\b/g, "disc edition");
+    .replace(/\bdisk edition\b/g, "disc edition")
+    .replace(/\bblu ray\b/g, "bluray")
+    .replace(/\bblu-ray\b/g, "bluray");
 }
 
 function getCombinedItemText(item) {
@@ -422,22 +424,56 @@ function estimateConsoleRepairCost(queryContext, conditionState, text) {
   return 0;
 }
 
+function detectConsoleType(text = "") {
+  const t = normalizeConsoleText(text);
+
+  const isDigital =
+    hasAny(t, [
+      "digital",
+      "digital edition",
+      "discless",
+      "no disc",
+      "no disk",
+      "cfi 1116b",
+      "cfi 1216b",
+    ]);
+
+  const isDisc =
+    hasAny(t, [
+      "disc",
+      "disk",
+      "disc edition",
+      "disk edition",
+      "bluray",
+      "blu ray",
+      "blu-ray",
+      "standard edition",
+      "cfi 1116a",
+      "cfi 1216a",
+    ]);
+
+  if (isDigital && !isDisc) return "digital";
+  if (isDisc && !isDigital) return "disc";
+  return "unknown";
+}
+
 function matchesConsoleFamily(text, queryContext) {
   const t = normalizeConsoleText(text);
   const family = String(queryContext?.family || "");
+  const consoleType = detectConsoleType(t);
 
   if (!family) return true;
 
   if (family === "ps5_disc") {
     const hasPs5 = t.includes("ps5") || t.includes("playstation5");
-    const saysDigital = t.includes("digital") || t.includes("digital edition");
-    return hasPs5 && !saysDigital;
+    if (!hasPs5) return false;
+    return consoleType !== "digital";
   }
 
   if (family === "ps5_digital") {
     const hasPs5 = t.includes("ps5") || t.includes("playstation5");
-    const saysDigital = t.includes("digital") || t.includes("digital edition");
-    return hasPs5 && saysDigital;
+    if (!hasPs5) return false;
+    return consoleType !== "disc";
   }
 
   if (family === "xbox_series_x") {
@@ -480,7 +516,7 @@ function estimateBundleValueBonus(queryContext, bundleSignals, text) {
 
   let bonus = 0;
 
-  if (family.startsWith("ps5")) {
+  if (family.startsWith("ps5") || t.includes("ps5") || t.includes("playstation5")) {
     bonus += extraControllerCount * 35;
     bonus += Math.min(includedGamesCount, 6) * 12;
     if (hasBox) bonus += 8;
@@ -580,22 +616,22 @@ function calculateWarningPenalty(flags = []) {
 
 function getDiscDigitalPricingBias(queryContext, text) {
   const family = String(queryContext?.family || "");
-  const t = normalizeConsoleText(text);
+  const consoleType = detectConsoleType(text);
 
   if (family === "ps5_disc") {
-    if (hasAny(t, ["disc edition", "disk edition", "standard edition", "cfi 1116a", "cfi 1216a"])) {
-      return 15;
-    }
-    return 8;
+    if (consoleType === "disc") return 18;
+    if (consoleType === "unknown") return 8;
+    return -18;
   }
 
   if (family === "ps5_digital") {
-    if (hasAny(t, ["digital edition", "cfi 1116b", "cfi 1216b"])) {
-      return -8;
-    }
-    return -5;
+    if (consoleType === "digital") return -10;
+    if (consoleType === "unknown") return -4;
+    return 10;
   }
 
+  if (consoleType === "disc") return 8;
+  if (consoleType === "digital") return -6;
   return 0;
 }
 
@@ -618,6 +654,7 @@ function scoreConsoleCandidate(item, queryContext) {
   const itemBrand = detectConsoleBrand(text);
   const bundleSignals = detectBundleSignals(text, queryContext.family || "");
   const bundleType = bundleSignals.bundleType;
+  const consoleType = detectConsoleType(text);
 
   if (queryContext.brand) {
     if (itemBrand === queryContext.brand) score += 1.2;
@@ -643,12 +680,16 @@ function scoreConsoleCandidate(item, queryContext) {
   if (bundleSignals.hasAccessories) score += 0.25;
   if (bundleSignals.explicitBundleWords) score += 0.35;
 
-  if (queryContext.family === "ps5_disc" && hasAny(text, ["disc edition", "disk edition", "standard edition"])) {
+  if (queryContext.family === "ps5_disc" && consoleType === "disc") {
     score += 1;
   }
 
-  if (queryContext.family === "ps5_digital" && hasAny(text, ["digital edition"])) {
+  if (queryContext.family === "ps5_digital" && consoleType === "digital") {
     score += 1;
+  }
+
+  if (queryContext.family === "ps5_disc" && consoleType === "unknown") {
+    score += 0.2;
   }
 
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
@@ -673,8 +714,8 @@ function enrichConsoleCompPool(queryContext, items = []) {
         adjustedTotal: roundMoney(
           extractTotalPrice(item) -
             bundleValueBonus +
-            Math.min(warningPenalty, 12) +
-            discDigitalBias * -1
+            Math.min(warningPenalty, 12) -
+            discDigitalBias
         ),
         score: scoreConsoleCandidate(item, queryContext),
         conditionState: classifyConsoleConditionState(text),
@@ -752,10 +793,10 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   if (exactMarket.length >= 5) conservativeMultiplier = 0.96;
 
   if (queryContext.family === "ps5_disc") {
-    baseline = roundMoney(baseline + 12);
+    baseline = roundMoney(baseline + 18);
     pricingMode = "PS5 disc median";
   } else if (queryContext.family === "ps5_digital") {
-    baseline = roundMoney(Math.max(0, baseline - 8));
+    baseline = roundMoney(Math.max(0, baseline - 10));
     pricingMode = "PS5 digital median";
   } else if (queryContext.family === "xbox_series_x") {
     pricingMode = "Series X median";
