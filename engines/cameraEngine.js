@@ -13,10 +13,12 @@ const CAMERA_FAMILIES = [
     "sony_a6400_body",
     [
       "sony a6400",
+      "sony alpha a6400",
       "alpha a6400",
-      "ilce 6400",
       "ilce-6400",
+      "ilce 6400",
       "a6400 body",
+      "a6400 camera",
     ],
   ],
   [
@@ -25,20 +27,22 @@ const CAMERA_FAMILIES = [
       "canon eos 250d",
       "eos 250d",
       "canon 250d",
+      "250d body",
       "rebel sl3",
       "sl3",
-      "250d body",
+      "250d camera",
     ],
   ],
   [
     "gopro_hero_11",
     [
       "gopro hero 11",
+      "gopro hero11",
       "go pro hero 11",
-      "hero11",
-      "hero 11 black",
       "gopro 11",
-      "go pro 11",
+      "hero 11 black",
+      "hero11 black",
+      "hero11",
     ],
   ],
 ];
@@ -48,8 +52,8 @@ const CAMERA_CATEGORY_TERMS = [
   "cameras",
   "dslr cameras",
   "mirrorless cameras",
-  "camcorders",
   "action cameras",
+  "camcorders",
 ];
 
 const ACCESSORY_CATEGORY_TERMS = [
@@ -161,7 +165,6 @@ const NON_CAMERA_TERMS = [
 
 const LENS_TERMS = [
   "lens only",
-  "with lens",
   "kit lens",
   "18-55mm",
   "18 55mm",
@@ -171,9 +174,9 @@ const LENS_TERMS = [
   "24 70mm",
   "70-200mm",
   "70 200mm",
-  "50mm",
-  "35mm",
-  "85mm",
+  "50mm lens",
+  "35mm lens",
+  "85mm lens",
   "f/1.8",
   "f1.8",
   "f/2.8",
@@ -185,6 +188,10 @@ const LENS_TERMS = [
   "e-mount lens",
   "e mount lens",
   "lens bundle",
+  "sigma lens",
+  "tamron lens",
+  "sony lens",
+  "canon lens",
 ];
 
 const MINOR_WARNING_TERMS = [
@@ -223,9 +230,8 @@ function hasAny(text, phrases = []) {
 function normalizeCameraText(value) {
   return normalizeText(String(value || ""))
     .replace(/\bgo\s*pro\b/g, "gopro")
-    .replace(/\bhero\s*11\b/g, "hero11")
     .replace(/\bhero\s*11\s*black\b/g, "hero11 black")
-    .replace(/\balpha\b/g, "alpha")
+    .replace(/\bhero\s*11\b/g, "hero11")
     .replace(/\bilce\s*6400\b/g, "ilce-6400")
     .replace(/\b18\s*-\s*55mm\b/g, "18-55mm")
     .replace(/\b16\s*-\s*50mm\b/g, "16-50mm")
@@ -258,19 +264,22 @@ function getCombinedItemText(item) {
 function getCategoryText(item) {
   const categories = Array.isArray(item?.categories) ? item.categories : [];
   return normalizeCameraText(
-    categories
-      .map((category) => category?.categoryName)
-      .filter(Boolean)
-      .join(" ")
+    categories.map((category) => category?.categoryName).filter(Boolean).join(" ")
   );
 }
 
 function detectCameraBrand(text) {
   const t = normalizeCameraText(text);
 
-  if (t.includes("sony") || t.includes("alpha") || t.includes("ilce-6400")) return "sony";
-  if (t.includes("canon") || t.includes("eos 250d") || t.includes("rebel sl3")) return "canon";
-  if (t.includes("gopro") || t.includes("hero11")) return "gopro";
+  if (t.includes("sony") || t.includes("alpha") || t.includes("a6400") || t.includes("ilce-6400")) {
+    return "sony";
+  }
+  if (t.includes("canon") || t.includes("eos 250d") || t.includes("250d") || t.includes("rebel sl3") || t.includes("sl3")) {
+    return "canon";
+  }
+  if (t.includes("gopro") || t.includes("hero11")) {
+    return "gopro";
+  }
 
   return "";
 }
@@ -285,113 +294,23 @@ function parseCameraFamily(text) {
   }
 
   if (t.includes("a6400") || t.includes("ilce-6400")) return "sony_a6400_body";
-  if (t.includes("250d") || t.includes("rebel sl3")) return "canon_250d_body";
-  if (t.includes("hero11") || t.includes("gopro 11")) return "gopro_hero_11";
+  if (t.includes("250d") || t.includes("rebel sl3") || t.includes("sl3")) return "canon_250d_body";
+  if (t.includes("gopro") && t.includes("11")) return "gopro_hero_11";
+  if (t.includes("hero11")) return "gopro_hero_11";
 
   return "";
 }
 
 function isCameraCategory(item) {
-  const categoryText = getCategoryText(item);
-  return hasAny(categoryText, CAMERA_CATEGORY_TERMS);
+  return hasAny(getCategoryText(item), CAMERA_CATEGORY_TERMS);
 }
 
 function isAccessoryCategory(item) {
-  const categoryText = getCategoryText(item);
-  return hasAny(categoryText, ACCESSORY_CATEGORY_TERMS);
+  return hasAny(getCategoryText(item), ACCESSORY_CATEGORY_TERMS);
 }
 
 function isNonCameraCategory(item) {
-  const categoryText = getCategoryText(item);
-  return hasAny(categoryText, NON_CAMERA_CATEGORY_TERMS);
-}
-
-function hasStrongCameraSignals(text, family = "") {
-  const t = normalizeCameraText(text);
-
-  if (family === "sony_a6400_body") {
-    return hasAny(t, [
-      "sony a6400",
-      "alpha a6400",
-      "ilce-6400",
-      "a6400 body",
-      "camera body",
-      "mirrorless",
-    ]);
-  }
-
-  if (family === "canon_250d_body") {
-    return hasAny(t, [
-      "canon eos 250d",
-      "eos 250d",
-      "rebel sl3",
-      "250d body",
-      "camera body",
-      "dslr",
-    ]);
-  }
-
-  if (family === "gopro_hero_11") {
-    return hasAny(t, [
-      "gopro hero11",
-      "gopro 11",
-      "hero11",
-      "hero11 black",
-      "action camera",
-      "camera",
-    ]);
-  }
-
-  return hasAny(t, ["camera", "camera body", "mirrorless", "dslr", "action camera"]);
-}
-
-function looksLikeMainCameraTitle(text, family = "") {
-  const t = normalizeCameraText(text);
-
-  if (family === "sony_a6400_body") {
-    if (
-      hasAny(t, [
-        "sony a6400",
-        "alpha a6400",
-        "ilce-6400",
-      ]) &&
-      !isLensOnlyTitle(t) &&
-      !isObviousAccessoryTitle(t)
-    ) {
-      return true;
-    }
-  }
-
-  if (family === "canon_250d_body") {
-    if (
-      hasAny(t, [
-        "canon eos 250d",
-        "eos 250d",
-        "canon 250d",
-        "rebel sl3",
-      ]) &&
-      !isLensOnlyTitle(t) &&
-      !isObviousAccessoryTitle(t)
-    ) {
-      return true;
-    }
-  }
-
-  if (family === "gopro_hero_11") {
-    if (
-      hasAny(t, [
-        "gopro hero11",
-        "gopro 11",
-        "hero11",
-        "hero11 black",
-      ]) &&
-      !isObviousAccessoryTitle(t)
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+  return hasAny(getCategoryText(item), NON_CAMERA_CATEGORY_TERMS);
 }
 
 function isLensOnlyTitle(titleText) {
@@ -417,9 +336,9 @@ function isLensOnlyTitle(titleText) {
       "16-50mm",
       "24-70mm",
       "70-200mm",
-      "50mm",
-      "35mm",
-      "85mm",
+      "50mm lens",
+      "35mm lens",
+      "85mm lens",
       "f/1.8",
       "f1.8",
       "f/2.8",
@@ -440,6 +359,79 @@ function isObviousAccessoryTitle(titleText) {
   if (hasAny(t, ACCESSORY_TERMS)) return true;
   if (hasAny(t, NON_CAMERA_TERMS)) return true;
   if (isLensOnlyTitle(t)) return true;
+
+  return false;
+}
+
+function hasStrongCameraSignals(text, family = "") {
+  const t = normalizeCameraText(text);
+
+  if (family === "sony_a6400_body") {
+    return hasAny(t, [
+      "sony a6400",
+      "alpha a6400",
+      "ilce-6400",
+      "a6400",
+      "camera body",
+      "mirrorless",
+      "body only",
+      "camera only",
+    ]);
+  }
+
+  if (family === "canon_250d_body") {
+    return hasAny(t, [
+      "canon eos 250d",
+      "eos 250d",
+      "canon 250d",
+      "250d",
+      "rebel sl3",
+      "sl3",
+      "camera body",
+      "dslr",
+      "body only",
+      "camera only",
+    ]);
+  }
+
+  if (family === "gopro_hero_11") {
+    return hasAny(t, [
+      "gopro",
+      "hero11",
+      "hero11 black",
+      "action camera",
+      "camera",
+    ]);
+  }
+
+  return hasAny(t, ["camera", "camera body", "mirrorless", "dslr", "action camera"]);
+}
+
+function looksLikeMainCameraTitle(text, family = "") {
+  const t = normalizeCameraText(text);
+
+  if (family === "sony_a6400_body") {
+    return (
+      hasAny(t, ["sony a6400", "alpha a6400", "ilce-6400", "a6400"]) &&
+      !isLensOnlyTitle(t) &&
+      !isObviousAccessoryTitle(t)
+    );
+  }
+
+  if (family === "canon_250d_body") {
+    return (
+      hasAny(t, ["canon eos 250d", "eos 250d", "canon 250d", "rebel sl3", "250d", "sl3"]) &&
+      !isLensOnlyTitle(t) &&
+      !isObviousAccessoryTitle(t)
+    );
+  }
+
+  if (family === "gopro_hero_11") {
+    return (
+      hasAny(t, ["gopro hero11", "gopro 11", "hero11", "hero11 black", "gopro"]) &&
+      !isObviousAccessoryTitle(t)
+    );
+  }
 
   return false;
 }
@@ -476,14 +468,13 @@ function isClearlyNonCamera(item, text, family = "") {
   if (hasAny(titleText, NON_CAMERA_TERMS)) return true;
 
   if (family !== "gopro_hero_11" && isLensOnlyTitle(titleText)) return true;
-  if (hasAny(titleText, LENS_TERMS) && !titleText.includes("body")) return true;
+  if (hasAny(titleText, LENS_TERMS) && !titleText.includes("body") && !titleText.includes("camera")) return true;
 
   return false;
 }
 
 function isSeverelyBadCamera(text) {
-  const t = normalizeCameraText(text);
-  return hasAny(t, HARD_REJECT_TERMS);
+  return hasAny(normalizeCameraText(text), HARD_REJECT_TERMS);
 }
 
 function classifyCameraConditionState(text) {
@@ -503,6 +494,7 @@ function classifyCameraConditionState(text) {
       "missing charger",
       "no charger",
       "read description",
+      "read caption",
     ])
   ) {
     return "minor_fault";
@@ -565,7 +557,25 @@ function detectIncludedExtras(text, family = "") {
     "accessory kit",
   ]);
 
-  const hasLens = family !== "gopro_hero_11" && hasAny(t, LENS_TERMS);
+  const hasLens =
+    family !== "gopro_hero_11" &&
+    (
+      hasAny(t, [
+        "with lens",
+        "kit lens",
+        "18-55mm",
+        "16-50mm",
+        "24-70mm",
+        "70-200mm",
+        "50mm lens",
+        "35mm lens",
+        "85mm lens",
+      ]) ||
+      (
+        hasAny(t, ["ef-s", "ef s", "rf-s", "rf s", "e mount", "e-mount"]) &&
+        t.includes("lens")
+      )
+    );
 
   let bundleType = "standard";
   if (includesBox) bundleType = "boxed";
@@ -618,7 +628,7 @@ function matchesCameraFamily(text, queryContext, item) {
   }
 
   if (family === "canon_250d_body") {
-    if (!hasAny(t, ["canon eos 250d", "eos 250d", "canon 250d", "rebel sl3", "250d"])) return false;
+    if (!hasAny(t, ["canon eos 250d", "eos 250d", "canon 250d", "rebel sl3", "250d", "sl3"])) return false;
     if (isClearlyNonCamera(item, titleText || t, family)) return false;
     if (isHardAccessoryListing(titleText || t, item, family)) return false;
     if (isLensOnlyTitle(titleText)) return false;
@@ -626,7 +636,7 @@ function matchesCameraFamily(text, queryContext, item) {
   }
 
   if (family === "gopro_hero_11") {
-    if (!hasAny(t, ["gopro hero11", "gopro 11", "hero11", "hero11 black"])) return false;
+    if (!hasAny(t, ["gopro hero11", "gopro 11", "hero11", "hero11 black", "gopro"])) return false;
     if (isClearlyNonCamera(item, titleText || t, family)) return false;
     if (isHardAccessoryListing(titleText || t, item, family)) return false;
     return true;
@@ -747,7 +757,11 @@ function getMatchDebug(item, queryContext) {
     return { matched: false, reason: `brand_mismatch_${itemBrand || "unknown"}` };
   }
   if (!familyMatch) {
-    return { matched: false, reason: `family_mismatch_${queryContext.family || "none"}` };
+    return {
+      matched: false,
+      reason: `family_mismatch_${queryContext.family || "none"}`,
+      title: titleText,
+    };
   }
 
   return {
@@ -1005,6 +1019,7 @@ export const cameraEngine = {
       text.includes("a6400") ||
       text.includes("250d") ||
       text.includes("rebel sl3") ||
+      text.includes("sl3") ||
       text.includes("gopro") ||
       text.includes("hero11") ||
       text.includes("camera")
