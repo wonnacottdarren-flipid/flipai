@@ -9,7 +9,7 @@ import {
 } from "./baseEngine.js";
 
 /* =========================
-   CAMERA DETECTION
+   DETECT CAMERA QUERY
 ========================= */
 
 function isCameraQuery(text) {
@@ -19,11 +19,11 @@ function isCameraQuery(text) {
     t.includes("sony") ||
     t.includes("canon") ||
     t.includes("nikon") ||
+    t.includes("camera") ||
     t.includes("a6400") ||
     t.includes("a6000") ||
     t.includes("a6500") ||
-    t.includes("a6600") ||
-    t.includes("camera")
+    t.includes("a6600")
   );
 }
 
@@ -43,47 +43,7 @@ function parseCameraFamily(text) {
 }
 
 /* =========================
-   ACCESSORY FILTER (FIXED)
-========================= */
-
-function isAccessoryListing(text) {
-  const t = normalizeText(text);
-
-  // HARD rejects
-  if (
-    t.includes("lens only") ||
-    t.includes("camera bag") ||
-    t.includes("strap") ||
-    t.includes("battery") ||
-    t.includes("charger") ||
-    t.includes("tripod") ||
-    t.includes("gimbal") ||
-    t.includes("memory card") ||
-    t.includes("sd card")
-  ) {
-    return true;
-  }
-
-  // 🔥 FIX: allow body only
-  if (t.includes("body only")) {
-    return false;
-  }
-
-  // Allow bundles (camera + lens)
-  if (t.includes("camera") && t.includes("lens")) {
-    return false;
-  }
-
-  // If just lens → reject
-  if (t.includes("lens")) {
-    return true;
-  }
-
-  return false;
-}
-
-/* =========================
-   MATCH LOGIC
+   MATCH LOGIC (LOOSE FIX)
 ========================= */
 
 function matchesCamera(item, queryContext) {
@@ -100,12 +60,21 @@ function matchesCamera(item, queryContext) {
 
   if (!text) return false;
 
-  if (isAccessoryListing(text)) return false;
-
-  const family = queryContext.family;
-
-  if (family && !text.includes(family.replace("sony_", "").replace("_", ""))) {
+  // 🔥 ONLY block obvious junk
+  if (
+    text.includes("lens only") ||
+    text.includes("battery") ||
+    text.includes("charger") ||
+    text.includes("tripod") ||
+    text.includes("bag only") ||
+    text.includes("strap")
+  ) {
     return false;
+  }
+
+  // Only enforce model match (light)
+  if (queryContext.family === "sony_a6400") {
+    if (!text.includes("a6400")) return false;
   }
 
   return true;
@@ -195,6 +164,7 @@ export const cameraEngine = {
   matchesItem(item, queryContext) {
     const result = matchesCamera(item, queryContext);
 
+    // 🔍 DEBUG LOG (VERY IMPORTANT)
     console.log("CAMERA DEBUG:", {
       title: item?.title,
       matched: result,
