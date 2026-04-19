@@ -762,6 +762,22 @@ function applyBundlePreferenceFallback(deals = [], queryContext = {}) {
   return sortDealsForFindDeals(deals, queryContext);
 }
 
+function filterDealsForOutput(deals = [], includeTightDeals = false) {
+  return deals.filter((item) => {
+    const verdict = String(item?.scanner?.verdict || "").toUpperCase();
+
+    if (verdict === "GOOD DEAL" || verdict === "OK DEAL") {
+      return true;
+    }
+
+    if (includeTightDeals && verdict === "MARGINAL") {
+      return true;
+    }
+
+    return false;
+  });
+}
+
 app.get("/api/me", (req, res) => {
   try {
     const user = getUserFromCookie(req);
@@ -901,6 +917,7 @@ app.post("/api/find-deals", async (req, res) => {
       limit = 30,
       topN = 8,
       freeShippingOnly = false,
+      includeTightDeals = false,
     } = req.body || {};
 
     if (!query) {
@@ -965,16 +982,7 @@ app.post("/api/find-deals", async (req, res) => {
       })
     );
 
-    deals = deals.filter((item) => {
-      const verdict = String(item?.scanner?.verdict || "").toUpperCase();
-      const score = Number(item?.dealScore || item?.scanner?.score || 0);
-
-      if (verdict === "AVOID" && score <= 0) {
-        return false;
-      }
-
-      return true;
-    });
+    deals = filterDealsForOutput(deals, Boolean(includeTightDeals));
 
     const preferredDeals = applyBundlePreferenceFallback(deals, queryContext);
     const finalDeals = preferredDeals
@@ -988,6 +996,7 @@ app.post("/api/find-deals", async (req, res) => {
       ok: true,
       searchQuery: fetchedListings.searchQuery,
       searchVariants: fetchedListings.searchVariants,
+      includeTightDeals: Boolean(includeTightDeals),
       deals: finalDeals,
       totalFetched: Array.isArray(fetchedListings.items) ? fetchedListings.items.length : 0,
       totalMatched: preferredDeals.length,
