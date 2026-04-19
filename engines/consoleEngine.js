@@ -715,7 +715,7 @@ function estimateConsoleRepairCost(queryContext, conditionState, text) {
       return 25;
     }
 
-    return 12;
+    return 10;
   }
 
   return 0;
@@ -753,10 +753,7 @@ function detectPs5Variant(text = "") {
   if (mentionsDisc && !mentionsDigital) return "disc";
 
   if (t.includes("digital") && !t.includes("disc drive")) return "digital";
-
-  if (t.includes("disc drive") || t.includes("disc version") || t.includes("disc edition")) {
-    return "disc";
-  }
+  if (t.includes("disc drive") || t.includes("disc version") || t.includes("disc edition")) return "disc";
 
   return "unknown";
 }
@@ -860,10 +857,7 @@ function estimateBundleValueBonus(queryContext, bundleSignals, text) {
     bonus += Math.min(includedGamesCount, 6) * 12;
     if (hasBox) bonus += 8;
     if (hasAccessories) bonus += 10;
-
-    if (PS5_GAME_TERMS.some((term) => t.includes(term))) {
-      bonus += 8;
-    }
+    if (PS5_GAME_TERMS.some((term) => t.includes(term))) bonus += 8;
   } else if (family.startsWith("xbox_series")) {
     bonus += extraControllerCount * 30;
     bonus += Math.min(includedGamesCount, 6) * 10;
@@ -908,20 +902,20 @@ function calculateWarningPenalty(flags = []) {
   let penalty = 0;
 
   for (const flag of flags) {
-    if (flag === "Read description carefully") penalty += 8;
-    else if (flag === "Seller may have important notes in caption") penalty += 6;
-    else if (flag === "No returns accepted") penalty += 9;
-    else if (flag === "Untested listing") penalty += 10;
-    else if (flag === "No controller included") penalty += 10;
-    else if (flag === "Console-only listing") penalty += 6;
-    else if (flag === "No box included") penalty += 2;
-    else if (flag === "Condition may reduce resale appeal") penalty += 5;
-    else if (flag === "Visible cosmetic wear mentioned") penalty += 4;
-    else if (flag === "Specialist buyer wording") penalty += 5;
-    else if (flag === "Disc drive issue mentioned") penalty += 18;
-    else if (flag === "HDMI issue mentioned") penalty += 16;
-    else if (flag === "Overheating risk mentioned") penalty += 14;
-    else if (flag === "Bundle intent was searched, but extras look weak") penalty += 5;
+    if (flag === "Read description carefully") penalty += 6;
+    else if (flag === "Seller may have important notes in caption") penalty += 4;
+    else if (flag === "No returns accepted") penalty += 6;
+    else if (flag === "Untested listing") penalty += 7;
+    else if (flag === "No controller included") penalty += 7;
+    else if (flag === "Console-only listing") penalty += 4;
+    else if (flag === "No box included") penalty += 1;
+    else if (flag === "Condition may reduce resale appeal") penalty += 4;
+    else if (flag === "Visible cosmetic wear mentioned") penalty += 3;
+    else if (flag === "Specialist buyer wording") penalty += 4;
+    else if (flag === "Disc drive issue mentioned") penalty += 14;
+    else if (flag === "HDMI issue mentioned") penalty += 13;
+    else if (flag === "Overheating risk mentioned") penalty += 12;
+    else if (flag === "Bundle intent was searched, but extras look weak") penalty += 4;
   }
 
   return penalty;
@@ -932,18 +926,18 @@ function getDiscDigitalPricingBias(queryContext, text) {
   const consoleType = detectConsoleType(text, family);
 
   if (family === "ps5_disc") {
-    if (consoleType === "disc") return 18;
-    if (consoleType === "unknown") return 6;
-    return -25;
+    if (consoleType === "disc") return 14;
+    if (consoleType === "unknown") return 8;
+    return -20;
   }
 
   if (family === "ps5_digital") {
-    if (consoleType === "digital") return -10;
-    return 16;
+    if (consoleType === "digital") return -8;
+    return 14;
   }
 
-  if (consoleType === "disc") return 8;
-  if (consoleType === "digital") return -6;
+  if (consoleType === "disc") return 7;
+  if (consoleType === "digital") return -5;
   return 0;
 }
 
@@ -975,33 +969,33 @@ function scoreConsoleCandidate(item, queryContext) {
   }
 
   if (matchesConsoleFamily(text, queryContext, item)) {
-    score += 5.2;
+    score += 4.9;
   } else {
     return -10;
   }
 
-  if (isConsoleCategory(item)) score += 1.2;
-  if (conditionState === "clean_working") score += 1.4;
-  if (conditionState === "minor_fault") score -= 2;
+  if (isConsoleCategory(item)) score += 1.3;
+  if (conditionState === "clean_working") score += 1.5;
+  if (conditionState === "minor_fault") score -= 1.5;
   if (conditionState === "faulty_or_parts") score -= 8;
 
-  if (bundleType === "bundle") score += 1.2;
+  if (bundleType === "bundle") score += 1.25;
   if (bundleType === "boxed") score += 0.45;
-  if (bundleType === "console_only") score -= 1.2;
+  if (bundleType === "console_only") score -= 0.8;
 
   score += Math.min(bundleSignals.extraControllerCount, 2) * 0.55;
-  score += Math.min(bundleSignals.includedGamesCount, 4) * 0.18;
+  score += Math.min(bundleSignals.includedGamesCount, 4) * 0.2;
   if (bundleSignals.hasAccessories) score += 0.2;
-  if (bundleSignals.explicitBundleWords) score += 0.35;
+  if (bundleSignals.explicitBundleWords) score += 0.3;
 
-  if (queryContext.family === "ps5_disc" && consoleType === "disc") score += 1.1;
-  if (queryContext.family === "ps5_disc" && consoleType === "unknown") score += 0.45;
-  if (queryContext.family === "ps5_digital" && consoleType === "digital") score += 1.4;
+  if (queryContext.family === "ps5_disc" && consoleType === "disc") score += 0.9;
+  if (queryContext.family === "ps5_disc" && consoleType === "unknown") score += 0.7;
+  if (queryContext.family === "ps5_digital" && consoleType === "digital") score += 1.2;
 
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
   const warningPenalty = calculateWarningPenalty(warningFlags);
 
-  return score - warningPenalty * 0.08;
+  return score - warningPenalty * 0.06;
 }
 
 function enrichConsoleCompPool(queryContext, items = []) {
@@ -1020,7 +1014,7 @@ function enrichConsoleCompPool(queryContext, items = []) {
         adjustedTotal: roundMoney(
           extractTotalPrice(item) -
             bundleValueBonus +
-            Math.min(warningPenalty, 12) -
+            Math.min(warningPenalty, 10) -
             discDigitalBias
         ),
         score: scoreConsoleCandidate(item, queryContext),
@@ -1053,27 +1047,27 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     ? listingPool.filter((entry) => entry.conditionState === desiredConditionState)
     : listingPool;
 
-  const exactMarket = marketConditionPool.filter((entry) => entry.score >= 6);
+  const exactMarket = marketConditionPool.filter((entry) => entry.score >= 5.1);
   const usableMarket =
     exactMarket.length >= 3
       ? exactMarket
-      : marketConditionPool.filter((entry) => entry.score >= 3);
+      : marketConditionPool.filter((entry) => entry.score >= 2.2);
 
-  const exactListings = listingConditionPool.filter((entry) => entry.score >= 6);
+  const exactListings = listingConditionPool.filter((entry) => entry.score >= 5.1);
   const usableListings =
     exactListings.length >= 2
       ? exactListings
-      : listingConditionPool.filter((entry) => entry.score >= 3);
+      : listingConditionPool.filter((entry) => entry.score >= 2.2);
 
   let marketTotals = removePriceOutliers(
     (usableMarket.length ? usableMarket : marketConditionPool)
-      .slice(0, 24)
+      .slice(0, 28)
       .map((entry) => entry.adjustedTotal)
   );
 
   let listingTotals = removePriceOutliers(
     (usableListings.length ? usableListings : listingConditionPool)
-      .slice(0, 16)
+      .slice(0, 18)
       .map((entry) => entry.adjustedTotal)
   );
 
@@ -1095,14 +1089,14 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   if (!marketMedian && listingMedian) pricingMode = "Console listings fallback";
   if (!marketMedian && !listingMedian && marketLow) pricingMode = "Console low-band fallback";
 
-  let conservativeMultiplier = 0.95;
-  if (exactMarket.length >= 5) conservativeMultiplier = 0.96;
+  let conservativeMultiplier = 0.955;
+  if (exactMarket.length >= 5) conservativeMultiplier = 0.965;
 
   if (queryContext.family === "ps5_disc") {
-    baseline = roundMoney(baseline + 12);
+    baseline = roundMoney(baseline + 18);
     pricingMode = "PS5 disc median";
   } else if (queryContext.family === "ps5_digital") {
-    baseline = roundMoney(Math.max(0, baseline - 10));
+    baseline = roundMoney(Math.max(0, baseline - 6));
     pricingMode = "PS5 digital median";
   } else if (queryContext.family === "xbox_series_x") {
     pricingMode = "Series X median";
