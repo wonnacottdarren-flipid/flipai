@@ -347,6 +347,27 @@ function resolveEngineForQuery(query) {
   }
 }
 
+function getEngineSearchQuery(engine, rawQuery) {
+  const query = String(rawQuery || "").trim();
+
+  if (!engine) return query;
+
+  if (typeof engine.buildSearchQuery === "function") {
+    const built = String(engine.buildSearchQuery(query) || "").trim();
+    if (built) return built;
+  }
+
+  if (typeof engine.expandSearchVariants === "function") {
+    const variants = engine.expandSearchVariants(query);
+    if (Array.isArray(variants) && variants.length > 0) {
+      const first = String(variants[0] || "").trim();
+      if (first) return first;
+    }
+  }
+
+  return query;
+}
+
 function buildDealReasonBreakdown({
   title,
   pricingMode,
@@ -674,8 +695,10 @@ app.post("/api/search-ebay", async (req, res) => {
         ? engine.classifyQuery(query)
         : { rawQuery: query, normalizedQuery: normalizeText(query) };
 
+    const searchQuery = getEngineSearchQuery(engine, query);
+
     const items = await searchEbayListings({
-      query,
+      query: searchQuery,
       maxPrice: filterPriceMax,
       condition,
       freeShippingOnly,
@@ -696,6 +719,7 @@ app.post("/api/search-ebay", async (req, res) => {
 
     return res.json({
       ok: true,
+      searchQuery,
       items: filtered,
     });
   } catch (err) {
@@ -717,12 +741,14 @@ app.post("/api/auto-comps", async (req, res) => {
       return res.status(400).json({ error: "Product is required." });
     }
 
-    const searchQuery = [product, condition].filter(Boolean).join(" ").trim();
-    const engine = resolveEngineForQuery(searchQuery);
+    const rawSearchQuery = [product, condition].filter(Boolean).join(" ").trim();
+    const engine = resolveEngineForQuery(rawSearchQuery);
     const queryContext =
       engine && typeof engine.classifyQuery === "function"
-        ? engine.classifyQuery(searchQuery)
-        : { rawQuery: searchQuery, normalizedQuery: normalizeText(searchQuery) };
+        ? engine.classifyQuery(rawSearchQuery)
+        : { rawQuery: rawSearchQuery, normalizedQuery: normalizeText(rawSearchQuery) };
+
+    const searchQuery = getEngineSearchQuery(engine, rawSearchQuery);
 
     const marketItems = await searchEbayMarketPool({
       query: searchQuery,
@@ -780,8 +806,10 @@ app.post("/api/find-deals", async (req, res) => {
         ? engine.classifyQuery(query)
         : { rawQuery: query, normalizedQuery: normalizeText(query) };
 
+    const searchQuery = getEngineSearchQuery(engine, query);
+
     const listings = await searchEbayListings({
-      query,
+      query: searchQuery,
       maxPrice: filterPriceMax,
       condition,
       freeShippingOnly,
@@ -789,7 +817,7 @@ app.post("/api/find-deals", async (req, res) => {
     });
 
     const market = await searchEbayMarketPool({
-      query,
+      query: searchQuery,
       condition,
       limit: 50,
     });
@@ -851,6 +879,7 @@ app.post("/api/find-deals", async (req, res) => {
 
     return res.json({
       ok: true,
+      searchQuery,
       deals: finalDeals,
       totalFetched: Array.isArray(listings) ? listings.length : 0,
       totalMatched: preferredDeals.length,
