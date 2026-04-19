@@ -170,15 +170,28 @@ function hasAny(text, phrases = []) {
 
 function normalizeCameraText(value) {
   return normalizeText(String(value || ""))
+    .replace(/α/g, "alpha ")
+    .replace(/\bilce[\s-]?6400\b/g, "ilce-6400")
+    .replace(/\bilce[\s-]?6000\b/g, "ilce-6000")
+    .replace(/\bilce[\s-]?6100\b/g, "ilce-6100")
+    .replace(/\bilce[\s-]?6300\b/g, "ilce-6300")
+    .replace(/\bilce[\s-]?6500\b/g, "ilce-6500")
+    .replace(/\bilce[\s-]?6600\b/g, "ilce-6600")
+    .replace(/\ba\s*6400\b/g, "a6400")
+    .replace(/\ba\s*6000\b/g, "a6000")
+    .replace(/\ba\s*6100\b/g, "a6100")
+    .replace(/\ba\s*6300\b/g, "a6300")
+    .replace(/\ba\s*6500\b/g, "a6500")
+    .replace(/\ba\s*6600\b/g, "a6600")
+    .replace(/\balpha\s*6400\b/g, "alpha a6400")
+    .replace(/\balpha\s*6000\b/g, "alpha a6000")
+    .replace(/\balpha\s*6100\b/g, "alpha a6100")
+    .replace(/\balpha\s*6300\b/g, "alpha a6300")
+    .replace(/\balpha\s*6500\b/g, "alpha a6500")
+    .replace(/\balpha\s*6600\b/g, "alpha a6600")
     .replace(/\bgo\s*pro\b/g, "gopro")
     .replace(/\bhero\s*11\s*black\b/g, "hero11 black")
     .replace(/\bhero\s*11\b/g, "hero11")
-    .replace(/\bilce\s*6400\b/g, "ilce-6400")
-    .replace(/\bilce\s*6000\b/g, "ilce-6000")
-    .replace(/\bilce\s*6100\b/g, "ilce-6100")
-    .replace(/\bilce\s*6300\b/g, "ilce-6300")
-    .replace(/\bilce\s*6500\b/g, "ilce-6500")
-    .replace(/\bilce\s*6600\b/g, "ilce-6600")
     .replace(/\b18\s*-\s*55mm\b/g, "18-55mm")
     .replace(/\b16\s*-\s*50mm\b/g, "16-50mm")
     .replace(/\b24\s*-\s*70mm\b/g, "24-70mm")
@@ -231,7 +244,10 @@ function hasExactSonyA6400Signal(text) {
     t.includes("a6400") ||
     t.includes("alpha a6400") ||
     t.includes("sony a6400") ||
-    t.includes("ilce-6400")
+    t.includes("sony alpha a6400") ||
+    t.includes("ilce-6400") ||
+    t.includes("6400 body") ||
+    t.includes("6400 camera")
   );
 }
 
@@ -764,13 +780,13 @@ function scoreCameraCandidate(item, queryContext) {
   }
 
   if (matchesCameraFamily(text, queryContext, item)) {
-    score += 5.2;
+    score += 5.0;
   } else {
     return -10;
   }
 
-  if (isCameraCategory(item)) score += 1.1;
-  if (looksLikeMainCameraTitle(titleText, queryContext.family || "")) score += 1.2;
+  if (isCameraCategory(item)) score += 1.0;
+  if (looksLikeMainCameraTitle(titleText, queryContext.family || "")) score += 1.0;
   if (conditionState === "clean_working") score += 1.5;
   if (conditionState === "minor_fault") score -= 1.5;
   if (conditionState === "faulty_or_parts") score -= 8;
@@ -840,13 +856,13 @@ function buildCameraPricingModel(queryContext, marketItems = [], listingItems = 
   const usableMarket =
     exactMarket.length >= 3
       ? exactMarket
-      : marketConditionPool.filter((entry) => entry.score >= 1.0);
+      : marketConditionPool.filter((entry) => entry.score >= 0.8);
 
   const exactListings = listingConditionPool.filter((entry) => entry.score >= 5.0);
   const usableListings =
     exactListings.length >= 2
       ? exactListings
-      : listingConditionPool.filter((entry) => entry.score >= 1.0);
+      : listingConditionPool.filter((entry) => entry.score >= 0.8);
 
   let marketTotals = removePriceOutliers(
     (usableMarket.length ? usableMarket : marketConditionPool)
@@ -982,6 +998,7 @@ export const cameraEngine = {
 
     return (
       text.includes("a6400") ||
+      text.includes("6400") ||
       text.includes("250d") ||
       text.includes("rebel sl3") ||
       text.includes("sl3") ||
@@ -1033,9 +1050,12 @@ export const cameraEngine = {
       return [
         "sony a6400",
         "sony a6400 body",
+        "sony alpha 6400",
         "alpha a6400",
         "ilce-6400",
+        "ilce6400",
         "a6400 camera body",
+        "6400 body only",
       ];
     }
 
