@@ -287,16 +287,29 @@ function detectCameraBrand(text) {
 function parseCameraFamily(text) {
   const t = normalizeCameraText(text);
 
-  for (const [family, patterns] of CAMERA_FAMILIES) {
-    if (patterns.some((pattern) => t.includes(normalizeCameraText(pattern)))) {
-      return family;
-    }
+  if (
+    t.includes("a6400") ||
+    t.includes("alpha a6400") ||
+    t.includes("ilce-6400")
+  ) {
+    return "sony_a6400_body";
   }
 
-  if (t.includes("a6400") || t.includes("ilce-6400")) return "sony_a6400_body";
-  if (t.includes("250d") || t.includes("rebel sl3") || t.includes("sl3")) return "canon_250d_body";
-  if (t.includes("gopro") && t.includes("11")) return "gopro_hero_11";
-  if (t.includes("hero11")) return "gopro_hero_11";
+  if (
+    t.includes("250d") ||
+    t.includes("eos 250d") ||
+    t.includes("rebel sl3") ||
+    t.includes("sl3")
+  ) {
+    return "canon_250d_body";
+  }
+
+  if (
+    (t.includes("gopro") && t.includes("11")) ||
+    t.includes("hero11")
+  ) {
+    return "gopro_hero_11";
+  }
 
   return "";
 }
