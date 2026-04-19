@@ -175,6 +175,8 @@ function normalizeCameraText(value) {
     .replace(/\bhero\s*11\b/g, "hero11")
     .replace(/\bilce\s*6400\b/g, "ilce-6400")
     .replace(/\bilce\s*6000\b/g, "ilce-6000")
+    .replace(/\bilce\s*6100\b/g, "ilce-6100")
+    .replace(/\bilce\s*6300\b/g, "ilce-6300")
     .replace(/\bilce\s*6500\b/g, "ilce-6500")
     .replace(/\bilce\s*6600\b/g, "ilce-6600")
     .replace(/\b18\s*-\s*55mm\b/g, "18-55mm")
@@ -222,10 +224,75 @@ function detectCameraBrand(text) {
   return "";
 }
 
+function hasExactSonyA6400Signal(text) {
+  const t = normalizeCameraText(text);
+
+  return (
+    t.includes("a6400") ||
+    t.includes("alpha a6400") ||
+    t.includes("sony a6400") ||
+    t.includes("ilce-6400")
+  );
+}
+
+function hasWrongSonyAlphaModel(text) {
+  const t = normalizeCameraText(text);
+
+  return hasAny(t, [
+    "a700",
+    "alpha a700",
+    "sony a700",
+    "ilca-77",
+    "ilca-68",
+    "a58",
+    "a57",
+    "a55",
+    "a5000",
+    "sony a5000",
+    "a5100",
+    "sony a5100",
+    "a6000",
+    "alpha a6000",
+    "sony a6000",
+    "ilce-6000",
+    "a6100",
+    "alpha a6100",
+    "sony a6100",
+    "ilce-6100",
+    "a6300",
+    "alpha a6300",
+    "sony a6300",
+    "ilce-6300",
+    "a6500",
+    "alpha a6500",
+    "sony a6500",
+    "ilce-6500",
+    "a6600",
+    "alpha a6600",
+    "sony a6600",
+    "ilce-6600",
+    "a6700",
+    "alpha a6700",
+    "sony a6700",
+    "a7ii",
+    "a7 ii",
+    "a7iii",
+    "a7 iii",
+    "a7iv",
+    "a7 iv",
+    "a7r",
+    "a7s",
+    "a9",
+    "nex-",
+  ]);
+}
+
 function parseCameraFamily(text) {
   const t = normalizeCameraText(text);
 
-  if (hasExactSonyA6400Signal(t)) return "sony_a6400_body";
+  if (hasExactSonyA6400Signal(t) && !hasWrongSonyAlphaModel(t)) {
+    return "sony_a6400_body";
+  }
   if (t.includes("250d") || t.includes("eos 250d") || t.includes("rebel sl3") || t.includes("sl3")) {
     return "canon_250d_body";
   }
@@ -295,60 +362,6 @@ function isObviousAccessoryTitle(titleText) {
   if (looksLikeLensOnlyTitle(t)) return true;
 
   return false;
-}
-
-function hasExactSonyA6400Signal(text) {
-  const t = normalizeCameraText(text);
-
-  return (
-    t.includes("a6400") ||
-    t.includes("alpha a6400") ||
-    t.includes("sony a6400") ||
-    t.includes("ilce-6400")
-  );
-}
-
-function hasWrongSonyAlphaModel(text) {
-  const t = normalizeCameraText(text);
-
-  return hasAny(t, [
-    "a700",
-    "alpha a700",
-    "sony a700",
-    "a6000",
-    "alpha a6000",
-    "sony a6000",
-    "ilce-6000",
-    "a6100",
-    "alpha a6100",
-    "sony a6100",
-    "a6300",
-    "alpha a6300",
-    "sony a6300",
-    "a6500",
-    "alpha a6500",
-    "sony a6500",
-    "ilce-6500",
-    "a6600",
-    "alpha a6600",
-    "sony a6600",
-    "ilce-6600",
-    "a6700",
-    "alpha a6700",
-    "sony a6700",
-    "a7 ",
-    "a7ii",
-    "a7 ii",
-    "a7iii",
-    "a7 iii",
-    "a7iv",
-    "a7 iv",
-    "a7r",
-    "a7s",
-    "a5100",
-    "a5000",
-    "nex-",
-  ]);
 }
 
 function looksLikeSonyA6400MainTitle(titleText) {
@@ -668,6 +681,7 @@ function getFamilyPricingBias(queryContext, text) {
 
   if (family === "sony_a6400_body") {
     if (t.includes("body")) return 12;
+    if (t.includes("camera")) return 10;
     return 8;
   }
 
@@ -750,13 +764,13 @@ function scoreCameraCandidate(item, queryContext) {
   }
 
   if (matchesCameraFamily(text, queryContext, item)) {
-    score += 5.4;
+    score += 5.2;
   } else {
     return -10;
   }
 
-  if (isCameraCategory(item)) score += 1.2;
-  if (looksLikeMainCameraTitle(titleText, queryContext.family || "")) score += 1.4;
+  if (isCameraCategory(item)) score += 1.1;
+  if (looksLikeMainCameraTitle(titleText, queryContext.family || "")) score += 1.2;
   if (conditionState === "clean_working") score += 1.5;
   if (conditionState === "minor_fault") score -= 1.5;
   if (conditionState === "faulty_or_parts") score -= 8;
@@ -767,7 +781,7 @@ function scoreCameraCandidate(item, queryContext) {
   const warningFlags = buildCameraWarningFlags(text, queryContext, extras);
   const warningPenalty = calculateWarningPenalty(warningFlags);
 
-  return score - warningPenalty * 0.045;
+  return score - warningPenalty * 0.04;
 }
 
 function enrichCameraCompPool(queryContext, items = []) {
