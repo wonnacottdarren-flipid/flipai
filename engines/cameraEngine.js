@@ -1083,7 +1083,16 @@ export const cameraEngine = {
   },
 
   matchesItem(item, queryContext) {
-    return getMatchDebug(item, queryContext).matched;
+    const debug = getMatchDebug(item, queryContext);
+
+    console.log("CAMERA DEBUG:", {
+      title: item?.title,
+      matched: debug?.matched,
+      reason: debug?.reason,
+      family: queryContext?.family,
+    });
+
+    return debug.matched;
   },
 
   buildPricingModel({ queryContext, marketItems = [], listingItems = [] }) {
