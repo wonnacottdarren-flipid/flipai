@@ -1095,28 +1095,45 @@ export const consoleEngine = {
     const rawQuery = String(query || "").trim();
     const ctx = this.classifyQuery(rawQuery);
 
-    if (ctx.family === "ps5_disc" || ctx.family === "ps5_digital") {
-      return ["ps5"];
+    if (ctx.family === "ps5_disc") {
+      return [
+        "ps5",
+        "playstation 5",
+        "ps5 console",
+        "sony ps5",
+        "playstation 5 console",
+        "ps5 bundle",
+      ];
+    }
+
+    if (ctx.family === "ps5_digital") {
+      return [
+        "ps5",
+        "ps5 digital",
+        "playstation 5 digital",
+        "digital edition ps5",
+        "ps5 digital console",
+      ];
     }
 
     if (ctx.family === "xbox_series_x") {
-      return ["xbox series x"];
+      return ["xbox series x", "series x", "xbox series x console"];
     }
 
     if (ctx.family === "xbox_series_s") {
-      return ["xbox series s"];
+      return ["xbox series s", "series s", "xbox series s console"];
     }
 
     if (ctx.family === "switch_oled") {
-      return ["nintendo switch oled"];
+      return ["nintendo switch oled", "switch oled"];
     }
 
     if (ctx.family === "switch_lite") {
-      return ["nintendo switch lite"];
+      return ["nintendo switch lite", "switch lite"];
     }
 
     if (ctx.family === "switch_v2") {
-      return ["nintendo switch"];
+      return ["nintendo switch", "switch console"];
     }
 
     return [rawQuery].filter(Boolean);
