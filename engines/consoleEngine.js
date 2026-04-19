@@ -18,6 +18,165 @@ const CONSOLE_FAMILIES = [
   ["switch_v2", ["nintendo switch", "switch console"]],
 ];
 
+const HARD_ACCESSORY_TERMS = [
+  "controller only",
+  "dualsense only",
+  "dualshock only",
+  "joy con only",
+  "joy-con only",
+  "remote only",
+  "headset only",
+  "charger only",
+  "charging dock",
+  "charging stand",
+  "dock only",
+  "dock station",
+  "vertical stand",
+  "base stand",
+  "stand only",
+  "faceplate",
+  "face plate",
+  "shell only",
+  "replacement shell",
+  "replacement housing",
+  "cover only",
+  "skin only",
+  "case only",
+  "carry case",
+  "thumb grips",
+  "thumb grip",
+  "media remote",
+  "remote control",
+  "headset",
+  "charger",
+  "power cable only",
+  "cable only",
+  "hdmi cable",
+  "fan only",
+  "cooling fan",
+  "mount only",
+  "disc drive only",
+  "disc reader only",
+  "replacement part",
+  "replacement parts",
+  "portal",
+  "playstation portal",
+  "psvr",
+  "vr2",
+  "playstation vr",
+  "empty box",
+  "box only",
+  "manual only",
+  "cover plate",
+  "side plate",
+];
+
+const ACCESSORY_CATEGORY_TERMS = [
+  "controllers attachments",
+  "controllers and attachments",
+  "video game accessories",
+  "accessories",
+  "headsets",
+  "chargers docks",
+  "chargers and docks",
+  "replacement parts tools",
+  "replacement parts and tools",
+  "bags skins travel",
+  "bags skins and travel",
+];
+
+const HARD_REJECT_TERMS = [
+  "for parts",
+  "for spares",
+  "spares or repairs",
+  "spares repairs",
+  "parts only",
+  "faulty",
+  "broken",
+  "not working",
+  "no power",
+  "wont turn on",
+  "will not turn on",
+  "repair required",
+  "needs repair",
+  "water damaged",
+  "motherboard fault",
+  "blue light of death",
+  "console banned",
+  "banned",
+  "account locked",
+  "motherboard only",
+  "shell only",
+  "empty box",
+  "box only",
+  "digital code",
+  "download code",
+  "game code",
+];
+
+const MINOR_WARNING_TERMS = [
+  ["read description", "Read description carefully"],
+  ["read desc", "Read description carefully"],
+  ["see description", "Read description carefully"],
+  ["read caption", "Seller may have important notes in caption"],
+  ["see caption", "Seller may have important notes in caption"],
+  ["no returns", "No returns accepted"],
+  ["untested", "Untested listing"],
+  ["poor condition", "Condition may reduce resale appeal"],
+  ["heavy wear", "Condition may reduce resale appeal"],
+  ["bad condition", "Condition may reduce resale appeal"],
+  ["fair condition", "Condition may reduce resale appeal"],
+  ["worn", "Condition may reduce resale appeal"],
+  ["scratches", "Visible cosmetic wear mentioned"],
+  ["scratched", "Visible cosmetic wear mentioned"],
+  ["cosmetic marks", "Visible cosmetic wear mentioned"],
+  ["cosmetic wear", "Visible cosmetic wear mentioned"],
+  ["missing controller", "No controller included"],
+  ["no controller", "No controller included"],
+  ["without controller", "No controller included"],
+  ["console only", "Console-only listing"],
+  ["unit only", "Console-only listing"],
+  ["tablet only", "Console-only listing"],
+  ["unboxed", "No box included"],
+  ["no box", "No box included"],
+  ["without box", "No box included"],
+  ["low firmware", "Specialist buyer wording"],
+  ["jailbreak", "Specialist buyer wording"],
+  ["modded", "Specialist buyer wording"],
+  ["modded firmware", "Specialist buyer wording"],
+  ["doesnt read discs", "Disc drive issue mentioned"],
+  ["doesn't read discs", "Disc drive issue mentioned"],
+  ["wont read discs", "Disc drive issue mentioned"],
+  ["won't read discs", "Disc drive issue mentioned"],
+  ["hdmi issue", "HDMI issue mentioned"],
+  ["hdmi fault", "HDMI issue mentioned"],
+  ["overheating", "Overheating risk mentioned"],
+];
+
+const PS5_GAME_TERMS = [
+  "fifa",
+  "fc 24",
+  "fc24",
+  "fc 25",
+  "fc25",
+  "cod",
+  "call of duty",
+  "spiderman",
+  "spider man",
+  "spider-man",
+  "gow",
+  "god of war",
+  "gran turismo",
+  "gt7",
+  "gta",
+  "horizon",
+  "last of us",
+  "minecraft",
+  "elden ring",
+  "ratchet",
+  "returnal",
+];
+
 function hasAny(text, phrases = []) {
   return phrases.some((phrase) => text.includes(phrase));
 }
@@ -31,8 +190,11 @@ function normalizeConsoleText(value) {
     .replace(/\bps5 slim\b/g, "ps5")
     .replace(/\bplaystation5 slim\b/g, "playstation5")
     .replace(/\bdisk edition\b/g, "disc edition")
+    .replace(/\bdisk\b/g, "disc")
     .replace(/\bblu ray\b/g, "bluray")
-    .replace(/\bblu-ray\b/g, "bluray");
+    .replace(/\bblu-ray\b/g, "bluray")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getCombinedItemText(item) {
@@ -43,6 +205,8 @@ function getCombinedItemText(item) {
       item?.condition,
       item?.conditionDisplayName,
       item?.itemCondition,
+      item?.shortDescription,
+      item?.description,
     ]
       .filter(Boolean)
       .join(" ")
@@ -78,116 +242,127 @@ function parseConsoleFamily(text) {
     }
   }
 
+  if (t.includes("ps5") || t.includes("playstation5")) {
+    if (t.includes("digital")) return "ps5_digital";
+    return "ps5_disc";
+  }
+
   return "";
 }
 
-function isBareAccessoryTitle(text) {
+function isAccessoryCategory(item) {
+  const categoryText = getCategoryText(item);
+  return hasAny(categoryText, ACCESSORY_CATEGORY_TERMS);
+}
+
+function hasStrongConsoleUnitSignal(text) {
   const t = normalizeConsoleText(text);
 
-  const hasConsoleWords =
-    t.includes("ps5") ||
-    t.includes("playstation5") ||
-    t.includes("xbox series x") ||
-    t.includes("xbox series s") ||
-    t.includes("switch") ||
-    t.includes("console");
-
-  const hasControllerAccessoryWords = hasAny(t, [
-    "dualsense",
-    "dualshock",
-    "dual shock",
-    "joy con",
-    "joy-con",
-    "media remote",
-    "headset",
-    "charger",
-    "charging dock",
-    "dock station",
-    "hdmi cable",
-    "faceplate",
-    "face plate",
-    "shell only",
-    "replacement shell",
-    "replacement housing",
-    "cover only",
-    "skin only",
-    "case only",
-    "thumb grips",
-    "remote only",
-    "disc drive only",
-    "disc reader only",
-    "mount only",
-    "fan only",
-  ]);
-
-  const explicitAccessoryOnly = hasAny(t, [
-    "controller only",
-    "dualsense only",
-    "dualshock only",
-    "joy con only",
-    "joy-con only",
-    "headset only",
-    "dock only",
-    "charger only",
-    "power cable only",
-    "cable only",
-    "stand only",
-    "vertical stand",
-    "base stand",
-    "empty box",
-    "box only",
-    "manual only",
-    "console stand",
-  ]);
-
-  if (explicitAccessoryOnly) return true;
-
-  if (hasControllerAccessoryWords && !hasConsoleWords) {
-    return true;
+  if (t.includes("ps5") || t.includes("playstation5")) {
+    return hasAny(t, [
+      "console",
+      "gaming console",
+      "main unit",
+      "system",
+      "complete",
+      "bundle",
+      "digital edition",
+      "disc edition",
+      "standard edition",
+      "with controller",
+      "controller included",
+      "boxed",
+      "original box",
+      "complete in box",
+    ]);
   }
 
-  if (
-    t.includes("controller") &&
-    !t.includes("console") &&
-    !t.includes("ps5") &&
-    !t.includes("playstation5") &&
-    !t.includes("xbox") &&
-    !t.includes("switch")
-  ) {
-    return true;
+  if (t.includes("xbox")) {
+    return hasAny(t, [
+      "console",
+      "gaming console",
+      "main unit",
+      "system",
+      "complete",
+      "bundle",
+      "boxed",
+      "original box",
+      "complete in box",
+    ]);
+  }
+
+  if (t.includes("switch") || t.includes("nintendo")) {
+    return hasAny(t, [
+      "console",
+      "tablet",
+      "unit",
+      "system",
+      "bundle",
+      "boxed",
+      "complete in box",
+      "joy cons",
+      "joy-cons",
+    ]);
   }
 
   return false;
 }
 
-function isAccessoryCategory(item) {
-  const categoryText = getCategoryText(item);
+function isHardAccessoryListing(text, item) {
+  const t = normalizeConsoleText(text);
 
-  return hasAny(categoryText, [
-    "controllers attachments",
-    "controllers and attachments",
-    "video game accessories",
-    "accessories",
-    "headsets",
-    "chargers docks",
-    "chargers and docks",
-    "replacement parts tools",
-    "replacement parts and tools",
-    "bags skins travel",
-    "bags skins and travel",
-  ]);
-}
+  if (isAccessoryCategory(item)) return true;
 
-function isConsoleAccessoryOnly(itemOrText) {
-  if (typeof itemOrText === "string") {
-    return isBareAccessoryTitle(itemOrText);
+  if (hasAny(t, HARD_ACCESSORY_TERMS)) {
+    if (!hasStrongConsoleUnitSignal(t)) {
+      return true;
+    }
+
+    const ultraAccessoryOnly = hasAny(t, [
+      "faceplate",
+      "face plate",
+      "shell only",
+      "replacement shell",
+      "replacement housing",
+      "cover only",
+      "skin only",
+      "case only",
+      "carry case",
+      "media remote",
+      "remote only",
+      "headset",
+      "charger",
+      "charging dock",
+      "charging stand",
+      "dock only",
+      "vertical stand",
+      "base stand",
+      "stand only",
+      "hdmi cable",
+      "disc drive only",
+      "disc reader only",
+      "fan only",
+      "cooling fan",
+      "playstation portal",
+      "portal",
+      "psvr",
+      "vr2",
+      "playstation vr",
+      "empty box",
+      "box only",
+      "manual only",
+    ]);
+
+    if (ultraAccessoryOnly) return true;
   }
 
-  const item = itemOrText || {};
-  const text = getCombinedItemText(item);
-
-  if (isBareAccessoryTitle(text)) return true;
-  if (isAccessoryCategory(item)) return true;
+  if (
+    t.includes("controller") &&
+    !hasStrongConsoleUnitSignal(t) &&
+    !t.includes("console")
+  ) {
+    return true;
+  }
 
   return false;
 }
@@ -200,6 +375,7 @@ function isSeverelyBadConsole(text) {
     "for spares",
     "spares or repairs",
     "spares repairs",
+    "parts only",
     "faulty",
     "broken",
     "not working",
@@ -217,6 +393,7 @@ function isSeverelyBadConsole(text) {
     "motherboard fault",
     "blue light of death",
     "overheating issue",
+    "motherboard only",
   ]);
 }
 
@@ -229,6 +406,7 @@ function classifyConsoleConditionState(text) {
       "for spares",
       "spares or repairs",
       "spares repairs",
+      "parts only",
       "faulty",
       "broken",
       "not working",
@@ -266,6 +444,14 @@ function classifyConsoleConditionState(text) {
       "unboxed",
       "read caption",
       "read description",
+      "no returns",
+      "untested",
+      "doesnt read discs",
+      "doesn't read discs",
+      "wont read discs",
+      "won't read discs",
+      "hdmi issue",
+      "overheating",
     ])
   ) {
     return "minor_fault";
@@ -328,7 +514,11 @@ function detectIncludedGamesCount(text) {
   if (hasAny(t, ["4 games", "four games"])) return 4;
   if (hasAny(t, ["3 games", "three games"])) return 3;
   if (hasAny(t, ["2 games", "two games"])) return 2;
-  if (hasAny(t, ["with game", "with games", "game included", "games included"])) return 1;
+  if (hasAny(t, ["with game", "with games", "game included", "games included", "includes game", "includes games"])) return 1;
+
+  const matchedNamedGames = PS5_GAME_TERMS.filter((term) => t.includes(term));
+  if (matchedNamedGames.length) return Math.min(matchedNamedGames.length, 3);
+
   return 0;
 }
 
@@ -365,6 +555,9 @@ function detectBundleSignals(text, family) {
       "with controller",
       "with 2 controllers",
       "with two controllers",
+      "extra controller",
+      "second controller",
+      "spare controller",
     ]) ? 1 : 0;
 
   let bundleType = "standard";
@@ -418,14 +611,54 @@ function estimateConsoleRepairCost(queryContext, conditionState, text) {
       return 15;
     }
 
+    if (hasAny(t, ["hdmi issue", "doesnt read discs", "doesn't read discs", "wont read discs", "won't read discs"])) {
+      return 25;
+    }
+
     return 12;
   }
 
   return 0;
 }
 
-function detectConsoleType(text = "") {
+function detectPs5Variant(text = "") {
   const t = normalizeConsoleText(text);
+
+  const digitalSignals = [
+    "digital edition",
+    "digital console",
+    "all digital",
+    "cfi 1116b",
+    "cfi 1216b",
+  ];
+
+  const discSignals = [
+    "disc edition",
+    "disc version",
+    "disc drive",
+    "standard edition",
+    "cfi 1116a",
+    "cfi 1216a",
+    "bluray",
+  ];
+
+  const mentionsDigital = hasAny(t, digitalSignals);
+  const mentionsDisc = hasAny(t, discSignals);
+
+  if (mentionsDigital && !mentionsDisc) return "digital";
+  if (mentionsDisc && !mentionsDigital) return "disc";
+
+  if (t.includes("digital") && !t.includes("disc drive")) return "digital";
+
+  return "disc";
+}
+
+function detectConsoleType(text = "", family = "") {
+  const t = normalizeConsoleText(text);
+
+  if (family.startsWith("ps5") || t.includes("ps5") || t.includes("playstation5")) {
+    return detectPs5Variant(t);
+  }
 
   const isDigital =
     hasAny(t, [
@@ -433,7 +666,6 @@ function detectConsoleType(text = "") {
       "digital edition",
       "discless",
       "no disc",
-      "no disk",
       "cfi 1116b",
       "cfi 1216b",
     ]);
@@ -441,12 +673,8 @@ function detectConsoleType(text = "") {
   const isDisc =
     hasAny(t, [
       "disc",
-      "disk",
       "disc edition",
-      "disk edition",
       "bluray",
-      "blu ray",
-      "blu-ray",
       "standard edition",
       "cfi 1116a",
       "cfi 1216a",
@@ -460,20 +688,20 @@ function detectConsoleType(text = "") {
 function matchesConsoleFamily(text, queryContext) {
   const t = normalizeConsoleText(text);
   const family = String(queryContext?.family || "");
-  const consoleType = detectConsoleType(t);
+  const consoleType = detectConsoleType(t, family);
 
   if (!family) return true;
 
   if (family === "ps5_disc") {
     const hasPs5 = t.includes("ps5") || t.includes("playstation5");
     if (!hasPs5) return false;
-    return consoleType !== "digital";
+    return consoleType === "disc";
   }
 
   if (family === "ps5_digital") {
     const hasPs5 = t.includes("ps5") || t.includes("playstation5");
     if (!hasPs5) return false;
-    return consoleType !== "disc";
+    return consoleType === "digital";
   }
 
   if (family === "xbox_series_x") {
@@ -522,7 +750,7 @@ function estimateBundleValueBonus(queryContext, bundleSignals, text) {
     if (hasBox) bonus += 8;
     if (hasAccessories) bonus += 10;
 
-    if (hasAny(t, ["fifa", "fc 24", "fc24", "cod", "call of duty", "spiderman", "spider man", "gow", "god of war", "gran turismo", "gta"])) {
+    if (PS5_GAME_TERMS.some((term) => t.includes(term))) {
       bonus += 10;
     }
   } else if (family.startsWith("xbox_series")) {
@@ -549,40 +777,10 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
   const t = normalizeConsoleText(text);
   const flags = [];
 
-  if (hasAny(t, ["read description", "read desc", "see description"])) {
-    flags.push("Read description carefully");
-  }
-
-  if (hasAny(t, ["read caption", "see caption"])) {
-    flags.push("Seller may have important notes in caption");
-  }
-
-  if (hasAny(t, ["no controller", "missing controller", "without controller"])) {
-    flags.push("No controller included");
-  }
-
-  if (hasAny(t, ["console only", "unit only", "tablet only"])) {
-    flags.push("Console-only listing");
-  }
-
-  if (hasAny(t, ["unboxed", "no box", "without box"])) {
-    flags.push("No box included");
-  }
-
-  if (hasAny(t, ["poor condition", "heavy wear", "bad condition", "fair condition", "worn"])) {
-    flags.push("Condition may reduce resale appeal");
-  }
-
-  if (hasAny(t, ["scratches", "scratched", "cosmetic marks", "cosmetic wear"])) {
-    flags.push("Visible cosmetic wear mentioned");
-  }
-
-  if (hasAny(t, ["upcoming giveaway", "giveaway", "for giveaway"])) {
-    flags.push("Listing wording looks unusual");
-  }
-
-  if (hasAny(t, ["low firmware", "jailbreak", "modded", "modded firmware"])) {
-    flags.push("Specialist buyer wording");
+  for (const [needle, flag] of MINOR_WARNING_TERMS) {
+    if (t.includes(needle) && !flags.includes(flag)) {
+      flags.push(flag);
+    }
   }
 
   if (
@@ -601,13 +799,17 @@ function calculateWarningPenalty(flags = []) {
   for (const flag of flags) {
     if (flag === "Read description carefully") penalty += 8;
     else if (flag === "Seller may have important notes in caption") penalty += 6;
+    else if (flag === "No returns accepted") penalty += 9;
+    else if (flag === "Untested listing") penalty += 10;
     else if (flag === "No controller included") penalty += 10;
     else if (flag === "Console-only listing") penalty += 6;
     else if (flag === "No box included") penalty += 2;
     else if (flag === "Condition may reduce resale appeal") penalty += 5;
     else if (flag === "Visible cosmetic wear mentioned") penalty += 4;
-    else if (flag === "Listing wording looks unusual") penalty += 7;
-    else if (flag === "Specialist buyer wording") penalty += 4;
+    else if (flag === "Specialist buyer wording") penalty += 5;
+    else if (flag === "Disc drive issue mentioned") penalty += 18;
+    else if (flag === "HDMI issue mentioned") penalty += 16;
+    else if (flag === "Overheating risk mentioned") penalty += 14;
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 6;
   }
 
@@ -616,17 +818,15 @@ function calculateWarningPenalty(flags = []) {
 
 function getDiscDigitalPricingBias(queryContext, text) {
   const family = String(queryContext?.family || "");
-  const consoleType = detectConsoleType(text);
+  const consoleType = detectConsoleType(text, family);
 
   if (family === "ps5_disc") {
     if (consoleType === "disc") return 18;
-    if (consoleType === "unknown") return 8;
     return -18;
   }
 
   if (family === "ps5_digital") {
     if (consoleType === "digital") return -10;
-    if (consoleType === "unknown") return -4;
     return 10;
   }
 
@@ -639,7 +839,8 @@ function scoreConsoleCandidate(item, queryContext) {
   const text = getCombinedItemText(item);
 
   if (!text) return -10;
-  if (isConsoleAccessoryOnly(item)) return -10;
+  if (isHardAccessoryListing(text, item)) return -10;
+  if (!hasStrongConsoleUnitSignal(text)) return -10;
   if (isSeverelyBadConsole(text) && !shouldAllowDamagedConsoles(queryContext)) return -10;
 
   const conditionState = classifyConsoleConditionState(text);
@@ -654,7 +855,7 @@ function scoreConsoleCandidate(item, queryContext) {
   const itemBrand = detectConsoleBrand(text);
   const bundleSignals = detectBundleSignals(text, queryContext.family || "");
   const bundleType = bundleSignals.bundleType;
-  const consoleType = detectConsoleType(text);
+  const consoleType = detectConsoleType(text, queryContext.family || "");
 
   if (queryContext.brand) {
     if (itemBrand === queryContext.brand) score += 1.2;
@@ -662,7 +863,7 @@ function scoreConsoleCandidate(item, queryContext) {
   }
 
   if (matchesConsoleFamily(text, queryContext)) {
-    score += 5;
+    score += 5.5;
   } else {
     return -10;
   }
@@ -680,17 +881,8 @@ function scoreConsoleCandidate(item, queryContext) {
   if (bundleSignals.hasAccessories) score += 0.25;
   if (bundleSignals.explicitBundleWords) score += 0.35;
 
-  if (queryContext.family === "ps5_disc" && consoleType === "disc") {
-    score += 1;
-  }
-
-  if (queryContext.family === "ps5_digital" && consoleType === "digital") {
-    score += 1;
-  }
-
-  if (queryContext.family === "ps5_disc" && consoleType === "unknown") {
-    score += 0.2;
-  }
+  if (queryContext.family === "ps5_disc" && consoleType === "disc") score += 1;
+  if (queryContext.family === "ps5_digital" && consoleType === "digital") score += 1;
 
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
   const warningPenalty = calculateWarningPenalty(warningFlags);
@@ -890,7 +1082,10 @@ export const consoleEngine = {
       normalizedQuery.includes("games") ||
       normalizedQuery.includes("job lot") ||
       normalizedQuery.includes("comes with") ||
-      normalizedQuery.includes("includes");
+      normalizedQuery.includes("includes") ||
+      normalizedQuery.includes("extra controller") ||
+      normalizedQuery.includes("2 controllers") ||
+      normalizedQuery.includes("two controllers");
 
     return {
       rawQuery,
@@ -902,87 +1097,73 @@ export const consoleEngine = {
     };
   },
 
-  expandSearchVariants(query = "") {
-    const rawQuery = String(query || "").trim();
-    const ctx = this.classifyQuery(rawQuery);
-    const variants = [rawQuery];
+  buildSearchQuery(query = "") {
+    const ctx = this.classifyQuery(query);
 
-    if (ctx.family === "ps5_disc") {
-      variants.push("ps5");
-      variants.push("ps 5");
-      variants.push("ps5 console");
-      variants.push("sony ps5");
-      variants.push("playstation 5");
-      variants.push("playstation5");
-      variants.push("playstation 5 console");
-      variants.push("playstation5 console");
-      variants.push("playstation 5 standard");
-      variants.push("ps5 standard");
-      variants.push("disc edition");
-      variants.push("disk edition");
-      variants.push("standard edition");
-      variants.push("ps5 bundle");
-      variants.push("ps5 with games");
-      variants.push("ps5 2 controllers");
-      variants.push("ps5 with controller");
-    }
-
-    if (ctx.family === "ps5_digital") {
-      variants.push("ps5 digital");
-      variants.push("playstation 5 digital");
-      variants.push("playstation5 digital");
-      variants.push("digital edition");
-      variants.push("ps5 digital bundle");
-      variants.push("ps5 digital with games");
+    if (ctx.family === "ps5_disc" || ctx.family === "ps5_digital") {
+      return "ps5";
     }
 
     if (ctx.family === "xbox_series_x") {
-      variants.push("xbox series x");
-      variants.push("series x");
-      variants.push("xbox x console");
-      variants.push("xbox series x bundle");
-      variants.push("xbox series x with games");
+      return "xbox series x";
     }
 
     if (ctx.family === "xbox_series_s") {
-      variants.push("xbox series s");
-      variants.push("series s");
-      variants.push("xbox s console");
-      variants.push("xbox series s bundle");
-      variants.push("xbox series s with games");
+      return "xbox series s";
     }
 
     if (ctx.family === "switch_oled") {
-      variants.push("switch oled");
-      variants.push("nintendo switch oled");
-      variants.push("oled model");
-      variants.push("switch oled bundle");
-      variants.push("switch oled with games");
+      return "nintendo switch oled";
     }
 
     if (ctx.family === "switch_lite") {
-      variants.push("switch lite");
-      variants.push("nintendo switch lite");
-      variants.push("switch lite bundle");
-      variants.push("switch lite with games");
+      return "nintendo switch lite";
     }
 
     if (ctx.family === "switch_v2") {
-      variants.push("nintendo switch");
-      variants.push("switch console");
-      variants.push("switch v2");
-      variants.push("switch bundle");
-      variants.push("switch with games");
+      return "nintendo switch";
     }
 
-    return [...new Set(variants.filter(Boolean))];
+    return String(query || "").trim();
+  },
+
+  expandSearchVariants(query = "") {
+    const rawQuery = String(query || "").trim();
+    const ctx = this.classifyQuery(rawQuery);
+
+    if (ctx.family === "ps5_disc" || ctx.family === "ps5_digital") {
+      return ["ps5"];
+    }
+
+    if (ctx.family === "xbox_series_x") {
+      return ["xbox series x"];
+    }
+
+    if (ctx.family === "xbox_series_s") {
+      return ["xbox series s"];
+    }
+
+    if (ctx.family === "switch_oled") {
+      return ["nintendo switch oled"];
+    }
+
+    if (ctx.family === "switch_lite") {
+      return ["nintendo switch lite"];
+    }
+
+    if (ctx.family === "switch_v2") {
+      return ["nintendo switch"];
+    }
+
+    return [rawQuery].filter(Boolean);
   },
 
   matchesItem(item, queryContext) {
     const text = getCombinedItemText(item);
 
     if (!text) return false;
-    if (isConsoleAccessoryOnly(item)) return false;
+    if (isHardAccessoryListing(text, item)) return false;
+    if (!hasStrongConsoleUnitSignal(text)) return false;
     if (isSeverelyBadConsole(text) && !queryContext.allowDamaged) return false;
 
     const conditionState = classifyConsoleConditionState(text);
@@ -1005,7 +1186,8 @@ export const consoleEngine = {
         bundleSignals.bundleType === "bundle" ||
         bundleSignals.extraControllerCount > 0 ||
         bundleSignals.includedGamesCount > 0 ||
-        bundleSignals.explicitBundleWords;
+        bundleSignals.explicitBundleWords ||
+        bundleSignals.hasAccessories;
 
       if (!isRealBundle) {
         return false;
