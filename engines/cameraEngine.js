@@ -287,27 +287,15 @@ function detectCameraBrand(text) {
 function parseCameraFamily(text) {
   const t = normalizeCameraText(text);
 
-  if (
-    t.includes("a6400") ||
-    t.includes("alpha a6400") ||
-    t.includes("ilce-6400")
-  ) {
+  if (t.includes("a6400") || t.includes("alpha a6400") || t.includes("ilce-6400")) {
     return "sony_a6400_body";
   }
 
-  if (
-    t.includes("250d") ||
-    t.includes("eos 250d") ||
-    t.includes("rebel sl3") ||
-    t.includes("sl3")
-  ) {
+  if (t.includes("250d") || t.includes("eos 250d") || t.includes("rebel sl3") || t.includes("sl3")) {
     return "canon_250d_body";
   }
 
-  if (
-    (t.includes("gopro") && t.includes("11")) ||
-    t.includes("hero11")
-  ) {
+  if ((t.includes("gopro") && t.includes("11")) || t.includes("hero11")) {
     return "gopro_hero_11";
   }
 
@@ -326,7 +314,7 @@ function isNonCameraCategory(item) {
   return hasAny(getCategoryText(item), NON_CAMERA_CATEGORY_TERMS);
 }
 
-function isLensOnlyTitle(titleText) {
+function looksLikeLensOnlyTitle(titleText) {
   const t = normalizeCameraText(titleText);
 
   if (
@@ -371,82 +359,41 @@ function isObviousAccessoryTitle(titleText) {
 
   if (hasAny(t, ACCESSORY_TERMS)) return true;
   if (hasAny(t, NON_CAMERA_TERMS)) return true;
-  if (isLensOnlyTitle(t)) return true;
+  if (looksLikeLensOnlyTitle(t)) return true;
 
   return false;
 }
 
-function hasStrongCameraSignals(text, family = "") {
-  const t = normalizeCameraText(text);
-
-  if (family === "sony_a6400_body") {
-    return hasAny(t, [
-      "sony a6400",
-      "alpha a6400",
-      "ilce-6400",
-      "a6400",
-      "camera body",
-      "mirrorless",
-      "body only",
-      "camera only",
-    ]);
-  }
-
-  if (family === "canon_250d_body") {
-    return hasAny(t, [
-      "canon eos 250d",
-      "eos 250d",
-      "canon 250d",
-      "250d",
-      "rebel sl3",
-      "sl3",
-      "camera body",
-      "dslr",
-      "body only",
-      "camera only",
-    ]);
-  }
-
-  if (family === "gopro_hero_11") {
-    return hasAny(t, [
-      "gopro",
-      "hero11",
-      "hero11 black",
-      "action camera",
-      "camera",
-    ]);
-  }
-
-  return hasAny(t, ["camera", "camera body", "mirrorless", "dslr", "action camera"]);
+function looksLikeSonyA6400MainTitle(titleText) {
+  const t = normalizeCameraText(titleText);
+  if (!hasAny(t, ["a6400", "alpha a6400", "ilce-6400"])) return false;
+  if (looksLikeLensOnlyTitle(t)) return false;
+  if (isObviousAccessoryTitle(t)) return false;
+  return true;
 }
 
-function looksLikeMainCameraTitle(text, family = "") {
-  const t = normalizeCameraText(text);
+function looksLikeCanon250DMainTitle(titleText) {
+  const t = normalizeCameraText(titleText);
+  if (!hasAny(t, ["250d", "eos 250d", "rebel sl3", "sl3"])) return false;
+  if (looksLikeLensOnlyTitle(t)) return false;
+  if (isObviousAccessoryTitle(t)) return false;
+  return true;
+}
 
-  if (family === "sony_a6400_body") {
-    return (
-      hasAny(t, ["sony a6400", "alpha a6400", "ilce-6400", "a6400"]) &&
-      !isLensOnlyTitle(t) &&
-      !isObviousAccessoryTitle(t)
-    );
-  }
+function looksLikeGoPro11MainTitle(titleText) {
+  const t = normalizeCameraText(titleText);
+  if (!hasAny(t, ["gopro", "hero11", "hero11 black", "gopro 11"])) return false;
+  if (isObviousAccessoryTitle(t)) return false;
+  return true;
+}
 
-  if (family === "canon_250d_body") {
-    return (
-      hasAny(t, ["canon eos 250d", "eos 250d", "canon 250d", "rebel sl3", "250d", "sl3"]) &&
-      !isLensOnlyTitle(t) &&
-      !isObviousAccessoryTitle(t)
-    );
-  }
+function looksLikeMainCameraTitle(titleText, family = "") {
+  if (family === "sony_a6400_body") return looksLikeSonyA6400MainTitle(titleText);
+  if (family === "canon_250d_body") return looksLikeCanon250DMainTitle(titleText);
+  if (family === "gopro_hero_11") return looksLikeGoPro11MainTitle(titleText);
 
-  if (family === "gopro_hero_11") {
-    return (
-      hasAny(t, ["gopro hero11", "gopro 11", "hero11", "hero11 black", "gopro"]) &&
-      !isObviousAccessoryTitle(t)
-    );
-  }
-
-  return false;
+  const t = normalizeCameraText(titleText);
+  return t.includes("camera") && !isObviousAccessoryTitle(t) && !looksLikeLensOnlyTitle(t);
 }
 
 function isHardAccessoryListing(text, item, family = "") {
@@ -456,13 +403,14 @@ function isHardAccessoryListing(text, item, family = "") {
   if (looksLikeMainCameraTitle(titleText, family)) return false;
   if (isObviousAccessoryTitle(titleText)) return true;
 
-  if (isAccessoryCategory(item) && !hasStrongCameraSignals(titleText, family)) {
-    return true;
+  if (isAccessoryCategory(item)) {
+    if (!looksLikeMainCameraTitle(titleText, family)) return true;
   }
 
   if (
     hasAny(combinedText, ACCESSORY_TERMS) &&
-    !hasStrongCameraSignals(titleText, family) &&
+    !titleText.includes("camera") &&
+    !titleText.includes("body") &&
     !looksLikeMainCameraTitle(titleText, family)
   ) {
     return true;
@@ -472,15 +420,13 @@ function isHardAccessoryListing(text, item, family = "") {
 }
 
 function isClearlyNonCamera(item, text, family = "") {
-  const combinedText = normalizeCameraText(text);
   const titleText = getTitleText(item);
 
   if (looksLikeMainCameraTitle(titleText, family)) return false;
-
-  if (isNonCameraCategory(item) && !hasStrongCameraSignals(titleText, family)) return true;
+  if (isNonCameraCategory(item)) return true;
   if (hasAny(titleText, NON_CAMERA_TERMS)) return true;
 
-  if (family !== "gopro_hero_11" && isLensOnlyTitle(titleText)) return true;
+  if (family !== "gopro_hero_11" && looksLikeLensOnlyTitle(titleText)) return true;
   if (hasAny(titleText, LENS_TERMS) && !titleText.includes("body") && !titleText.includes("camera")) return true;
 
   return false;
@@ -633,23 +579,23 @@ function matchesCameraFamily(text, queryContext, item) {
   if (!family) return true;
 
   if (family === "sony_a6400_body") {
-    if (!hasAny(t, ["sony a6400", "alpha a6400", "ilce-6400", "a6400"])) return false;
+    if (!hasAny(t, ["a6400", "alpha a6400", "ilce-6400"])) return false;
     if (isClearlyNonCamera(item, titleText || t, family)) return false;
     if (isHardAccessoryListing(titleText || t, item, family)) return false;
-    if (isLensOnlyTitle(titleText)) return false;
+    if (looksLikeLensOnlyTitle(titleText)) return false;
     return true;
   }
 
   if (family === "canon_250d_body") {
-    if (!hasAny(t, ["canon eos 250d", "eos 250d", "canon 250d", "rebel sl3", "250d", "sl3"])) return false;
+    if (!hasAny(t, ["250d", "eos 250d", "rebel sl3", "sl3"])) return false;
     if (isClearlyNonCamera(item, titleText || t, family)) return false;
     if (isHardAccessoryListing(titleText || t, item, family)) return false;
-    if (isLensOnlyTitle(titleText)) return false;
+    if (looksLikeLensOnlyTitle(titleText)) return false;
     return true;
   }
 
   if (family === "gopro_hero_11") {
-    if (!hasAny(t, ["gopro hero11", "gopro 11", "hero11", "hero11 black", "gopro"])) return false;
+    if (!hasAny(t, ["gopro", "hero11", "hero11 black", "gopro 11"])) return false;
     if (isClearlyNonCamera(item, titleText || t, family)) return false;
     if (isHardAccessoryListing(titleText || t, item, family)) return false;
     return true;
@@ -758,16 +704,16 @@ function getMatchDebug(item, queryContext) {
   const familyMatch = matchesCameraFamily(text, queryContext, item);
 
   if (!text) return { matched: false, reason: "empty_text" };
-  if (isHardAccessoryListing(text, item, queryContext.family || "")) return { matched: false, reason: "accessory_listing" };
-  if (isClearlyNonCamera(item, text, queryContext.family || "")) return { matched: false, reason: "non_camera_listing" };
+  if (isHardAccessoryListing(text, item, queryContext.family || "")) return { matched: false, reason: "accessory_listing", title: titleText };
+  if (isClearlyNonCamera(item, text, queryContext.family || "")) return { matched: false, reason: "non_camera_listing", title: titleText };
   if (isSeverelyBadCamera(text) && !queryContext.allowDamaged) {
-    return { matched: false, reason: "severely_bad_camera_blocked" };
+    return { matched: false, reason: "severely_bad_camera_blocked", title: titleText };
   }
   if (!queryContext.allowDamaged && isDamagedCameraConditionState(conditionState)) {
-    return { matched: false, reason: `condition_blocked_${conditionState}` };
+    return { matched: false, reason: `condition_blocked_${conditionState}`, title: titleText };
   }
   if (queryContext.brand && itemBrand !== queryContext.brand) {
-    return { matched: false, reason: `brand_mismatch_${itemBrand || "unknown"}` };
+    return { matched: false, reason: `brand_mismatch_${itemBrand || "unknown"}`, title: titleText };
   }
   if (!familyMatch) {
     return {
@@ -812,13 +758,13 @@ function scoreCameraCandidate(item, queryContext) {
   }
 
   if (matchesCameraFamily(text, queryContext, item)) {
-    score += 5.0;
+    score += 5.4;
   } else {
     return -10;
   }
 
   if (isCameraCategory(item)) score += 1.2;
-  if (looksLikeMainCameraTitle(titleText, queryContext.family || "")) score += 1.1;
+  if (looksLikeMainCameraTitle(titleText, queryContext.family || "")) score += 1.4;
   if (conditionState === "clean_working") score += 1.5;
   if (conditionState === "minor_fault") score -= 1.5;
   if (conditionState === "faulty_or_parts") score -= 8;
@@ -829,7 +775,7 @@ function scoreCameraCandidate(item, queryContext) {
   const warningFlags = buildCameraWarningFlags(text, queryContext, extras);
   const warningPenalty = calculateWarningPenalty(warningFlags);
 
-  return score - warningPenalty * 0.05;
+  return score - warningPenalty * 0.045;
 }
 
 function enrichCameraCompPool(queryContext, items = []) {
@@ -888,13 +834,13 @@ function buildCameraPricingModel(queryContext, marketItems = [], listingItems = 
   const usableMarket =
     exactMarket.length >= 3
       ? exactMarket
-      : marketConditionPool.filter((entry) => entry.score >= 1.2);
+      : marketConditionPool.filter((entry) => entry.score >= 1.0);
 
   const exactListings = listingConditionPool.filter((entry) => entry.score >= 5.0);
   const usableListings =
     exactListings.length >= 2
       ? exactListings
-      : listingConditionPool.filter((entry) => entry.score >= 1.2);
+      : listingConditionPool.filter((entry) => entry.score >= 1.0);
 
   let marketTotals = removePriceOutliers(
     (usableMarket.length ? usableMarket : marketConditionPool)
