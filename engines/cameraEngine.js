@@ -703,7 +703,7 @@ function getMatchDebug(item, queryContext) {
   const itemBrand = detectCameraBrand(text);
   const familyMatch = matchesCameraFamily(text, queryContext, item);
 
-  if (!text) return { matched: false, reason: "empty_text" };
+  if (!text) return { matched: false, reason: "empty_text", title: titleText };
   if (isHardAccessoryListing(text, item, queryContext.family || "")) return { matched: false, reason: "accessory_listing", title: titleText };
   if (isClearlyNonCamera(item, text, queryContext.family || "")) return { matched: false, reason: "non_camera_listing", title: titleText };
   if (isSeverelyBadCamera(text) && !queryContext.allowDamaged) {
@@ -1057,7 +1057,15 @@ export const cameraEngine = {
   },
 
   matchesItem(item, queryContext) {
-    return getMatchDebug(item, queryContext).matched;
+    const debug = getMatchDebug(item, queryContext);
+
+    console.log("CAMERA DEBUG:", {
+      title: item?.title,
+      matched: debug?.matched,
+      reason: debug?.reason,
+    });
+
+    return debug.matched;
   },
 
   buildPricingModel({ queryContext, marketItems = [], listingItems = [] }) {
