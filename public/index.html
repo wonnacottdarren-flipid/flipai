@@ -1393,6 +1393,7 @@
     const showTightDealsCheckbox = document.getElementById("showTightDeals");
 
     window.__lastFinderResponse = null;
+    window.__lastFinderQueryRan = false;
 
     function getPayload() {
       return {
@@ -1430,7 +1431,8 @@
         filterPriceMax: Number(document.getElementById("dealMaxPrice").value || 0),
         limit: 30,
         topN: 8,
-        freeShippingOnly: document.getElementById("freeShippingOnly").value === "true"
+        freeShippingOnly: document.getElementById("freeShippingOnly").value === "true",
+        includeTightDeals: showTightDealsCheckbox.checked
       };
     }
 
@@ -1828,56 +1830,6 @@
       `;
     }
 
-    function shouldShowFinderDeal(deal) {
-      const label = String(deal.finderLabel || "").toLowerCase();
-      if (label.includes("buy")) return true;
-      if (label.includes("offer")) return true;
-      if (showTightDealsCheckbox.checked && label.includes("tight")) return true;
-      return false;
-    }
-
-    function getFinderVisibilityMeta(rawDeals = []) {
-      const counts = {
-        total: 0,
-        visible: 0,
-        hiddenTight: 0,
-        hiddenOther: 0
-      };
-
-      for (const deal of rawDeals) {
-        counts.total += 1;
-
-        if (shouldShowFinderDeal(deal)) {
-          counts.visible += 1;
-          continue;
-        }
-
-        const label = String(deal.finderLabel || "").toLowerCase();
-        if (label.includes("tight")) {
-          counts.hiddenTight += 1;
-        } else {
-          counts.hiddenOther += 1;
-        }
-      }
-
-      return counts;
-    }
-
-    function renderFinderHiddenNote(meta) {
-      if (!meta || meta.hiddenTight <= 0 || showTightDealsCheckbox.checked) {
-        return "";
-      }
-
-      const noun = meta.hiddenTight === 1 ? "deal is" : "deals are";
-
-      return `
-        <div class="finder-hidden-note">
-          <strong>${meta.hiddenTight} Tight ${noun} hidden</strong> by the current filter.
-          Tick <strong>Reveal Tight deals</strong> to show borderline opportunities instead of only Buy and Offer results.
-        </div>
-      `;
-    }
-
     window.useDealForAnalysis = useDealForAnalysis;
 
     function renderDealResults(data) {
@@ -2021,6 +1973,26 @@
       };
     }
 
+    function buildFinderEmptyMessage(source) {
+      const includeTightDeals = Boolean(source?.includeTightDeals);
+
+      if (includeTightDeals) {
+        return `
+          <div class="deal-empty">
+            No Buy, Offer, or Tight deals were found for this search.
+            Try raising your max price, broadening the search term, or switching product.
+          </div>
+        `;
+      }
+
+      return `
+        <div class="finder-hidden-note">
+          <strong>No Buy or Offer deals found.</strong>
+          Try increasing max price or switch on <strong>Reveal Tight deals</strong> to show borderline opportunities.
+        </div>
+      `;
+    }
+
     function renderFinderResults(data) {
       if (data) {
         window.__lastFinderResponse = data;
@@ -2028,29 +2000,15 @@
 
       const source = data || window.__lastFinderResponse || {};
       const rawDeals = (source.deals || []).map(mapFinderDeal);
-      const visibilityMeta = getFinderVisibilityMeta(rawDeals);
-      const deals = rawDeals.filter(shouldShowFinderDeal);
-      window.__lastFoundDeals = deals;
+      window.__lastFoundDeals = rawDeals;
 
-      if (!deals.length) {
-        const hiddenNote = renderFinderHiddenNote(visibilityMeta);
-
-        const message = showTightDealsCheckbox.checked
-          ? "No ranked deals found for that search. Try widening the max price or using a broader search term."
-          : visibilityMeta.hiddenTight > 0
-            ? "No Buy or Offer deals are visible right now."
-            : "No Buy or Offer deals found right now. Switch on “Reveal Tight deals” to see borderline opportunities.";
-
-        finderResultsEl.innerHTML = `
-          ${hiddenNote}
-          <div class="deal-empty">${escapeHtml(message)}</div>
-        `;
+      if (!rawDeals.length) {
+        finderResultsEl.innerHTML = buildFinderEmptyMessage(source);
         return;
       }
 
       finderResultsEl.innerHTML =
-        renderFinderHiddenNote(visibilityMeta) +
-        deals
+        rawDeals
           .map((deal, index) => {
             return `
               <div class="deal-card" style="${
@@ -2341,8 +2299,14 @@
           throw new Error(data.error || "Could not find deals.");
         }
 
+        window.__lastFinderQueryRan = true;
+
+        const tightModeText = data.includeTightDeals
+          ? "including Tight deals"
+          : "Buy and Offer only";
+
         setFinderStatus(
-          `Deal finder complete. Fetched ${Number(data.totalFetched || 0)} listings and ranked ${Number(data.totalMatched || 0)} exact matches.`,
+          `Deal finder complete. Fetched ${Number(data.totalFetched || 0)} listings and ranked ${Number(data.totalMatched || 0)} exact matches (${tightModeText}).`,
           "success"
         );
         renderFinderResults(data);
@@ -2367,6 +2331,7 @@
       window.__lastDeals = [];
       window.__lastFoundDeals = [];
       window.__lastFinderResponse = null;
+      window.__lastFinderQueryRan = false;
       showTightDealsCheckbox.checked = false;
     }
 
@@ -2508,6 +2473,7 @@
         window.__lastDeals = [];
         window.__lastFoundDeals = [];
         window.__lastFinderResponse = null;
+        window.__lastFinderQueryRan = false;
         showTightDealsCheckbox.checked = false;
         await loadUser();
       } catch (err) {
@@ -2585,7 +2551,15 @@
     starterBtn.addEventListener("click", () => window.startCheckout("starter"));
     proBtn.addEventListener("click", () => window.startCheckout("pro"));
     billingBtn.addEventListener("click", openBillingPortal);
-    showTightDealsCheckbox.addEventListener("change", () => renderFinderResults());
+
+    showTightDealsCheckbox.addEventListener("change", async () => {
+      if (window.__lastFinderQueryRan) {
+        await findBestDeals();
+        return;
+      }
+
+      renderFinderResults();
+    });
 
     loadUser();
   </script>
