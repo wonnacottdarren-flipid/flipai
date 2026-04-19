@@ -9,13 +9,75 @@ import {
 } from "./baseEngine.js";
 
 const CONSOLE_FAMILIES = [
-  ["ps5_disc", ["ps5 disc", "ps5 disk", "playstation 5 disc", "playstation 5 disk", "ps5 standard", "playstation 5 standard", "standard edition", "disc edition", "disk edition", "cfi 1116a", "cfi 1216a"]],
-  ["ps5_digital", ["ps5 digital", "playstation 5 digital", "digital edition", "cfi 1116b", "cfi 1216b"]],
+  [
+    "ps5_disc",
+    [
+      "ps5 disc",
+      "ps5 disk",
+      "playstation 5 disc",
+      "playstation 5 disk",
+      "ps5 standard",
+      "playstation 5 standard",
+      "standard edition",
+      "disc edition",
+      "disk edition",
+      "cfi 1116a",
+      "cfi 1216a",
+      "cfi-1116a",
+      "cfi-1216a",
+    ],
+  ],
+  [
+    "ps5_digital",
+    [
+      "ps5 digital",
+      "playstation 5 digital",
+      "digital edition",
+      "digital console",
+      "cfi 1116b",
+      "cfi 1216b",
+      "cfi-1116b",
+      "cfi-1216b",
+    ],
+  ],
   ["xbox_series_x", ["xbox series x", "series x"]],
   ["xbox_series_s", ["xbox series s", "series s"]],
   ["switch_oled", ["switch oled", "nintendo switch oled", "oled model"]],
   ["switch_lite", ["switch lite", "nintendo switch lite"]],
   ["switch_v2", ["nintendo switch", "switch console"]],
+];
+
+const CONSOLE_CATEGORY_TERMS = [
+  "video game consoles",
+  "consoles",
+  "home consoles",
+  "game consoles",
+];
+
+const ACCESSORY_CATEGORY_TERMS = [
+  "controllers attachments",
+  "controllers and attachments",
+  "video game accessories",
+  "accessories",
+  "headsets",
+  "chargers docks",
+  "chargers and docks",
+  "replacement parts tools",
+  "replacement parts and tools",
+  "bags skins travel",
+  "bags skins and travel",
+];
+
+const NON_CONSOLE_CATEGORY_TERMS = [
+  "video game merchandise",
+  "merchandise",
+  "video games",
+  "strategy guides cheats",
+  "strategy guides & cheats",
+  "soundtracks",
+  "books, comics & magazines",
+  "action figures",
+  "toys to life products",
 ];
 
 const ACCESSORY_TERMS = [
@@ -75,20 +137,6 @@ const ACCESSORY_TERMS = [
   "shell cover",
 ];
 
-const ACCESSORY_CATEGORY_TERMS = [
-  "controllers attachments",
-  "controllers and attachments",
-  "video game accessories",
-  "accessories",
-  "headsets",
-  "chargers docks",
-  "chargers and docks",
-  "replacement parts tools",
-  "replacement parts and tools",
-  "bags skins travel",
-  "bags skins and travel",
-];
-
 const NON_CONSOLE_TERMS = [
   "collector’s edition",
   "collector's edition",
@@ -132,18 +180,8 @@ const NON_CONSOLE_TERMS = [
   "voucher",
   "gift card",
   "season pass",
-];
-
-const NON_CONSOLE_CATEGORY_TERMS = [
-  "video games",
-  "video game merchandise",
-  "merchandise",
-  "strategy guides cheats",
-  "strategy guides & cheats",
-  "soundtracks",
-  "toys to life products",
-  "action figures",
-  "books, comics & magazines",
+  "wall art",
+  "canvas print",
 ];
 
 const HARD_REJECT_TERMS = [
@@ -170,9 +208,32 @@ const HARD_REJECT_TERMS = [
   "shell only",
   "empty box",
   "box only",
-  "digital code",
-  "download code",
-  "game code",
+];
+
+const PS5_GAME_TERMS = [
+  "fifa",
+  "fc 24",
+  "fc24",
+  "fc 25",
+  "fc25",
+  "cod",
+  "call of duty",
+  "spiderman",
+  "spider man",
+  "spider-man",
+  "gow",
+  "god of war",
+  "gran turismo",
+  "gt7",
+  "gta",
+  "horizon",
+  "last of us",
+  "minecraft",
+  "elden ring",
+  "ratchet",
+  "returnal",
+  "ea sports fc",
+  "astro bot",
 ];
 
 const MINOR_WARNING_TERMS = [
@@ -212,30 +273,6 @@ const MINOR_WARNING_TERMS = [
   ["hdmi issue", "HDMI issue mentioned"],
   ["hdmi fault", "HDMI issue mentioned"],
   ["overheating", "Overheating risk mentioned"],
-];
-
-const PS5_GAME_TERMS = [
-  "fifa",
-  "fc 24",
-  "fc24",
-  "fc 25",
-  "fc25",
-  "cod",
-  "call of duty",
-  "spiderman",
-  "spider man",
-  "spider-man",
-  "gow",
-  "god of war",
-  "gran turismo",
-  "gt7",
-  "gta",
-  "horizon",
-  "last of us",
-  "minecraft",
-  "elden ring",
-  "ratchet",
-  "returnal",
 ];
 
 function hasAny(text, phrases = []) {
@@ -316,6 +353,11 @@ function isPs5Like(text) {
   return t.includes("ps5") || t.includes("playstation5");
 }
 
+function isConsoleCategory(item) {
+  const categoryText = getCategoryText(item);
+  return hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
+}
+
 function isAccessoryCategory(item) {
   const categoryText = getCategoryText(item);
   return hasAny(categoryText, ACCESSORY_CATEGORY_TERMS);
@@ -338,7 +380,8 @@ function isHardAccessoryListing(text, item) {
       !t.includes("2 controllers") &&
       !t.includes("two controllers") &&
       !t.includes("extra controller") &&
-      !t.includes("second controller")
+      !t.includes("second controller") &&
+      !t.includes("console")
     ) {
       return true;
     }
@@ -397,13 +440,8 @@ function isHardAccessoryListing(text, item) {
 function isClearlyNonConsole(item, text) {
   const t = normalizeConsoleText(text);
 
-  if (isNonConsoleCategory(item)) {
-    return true;
-  }
-
-  if (hasAny(t, NON_CONSOLE_TERMS)) {
-    return true;
-  }
+  if (isNonConsoleCategory(item)) return true;
+  if (hasAny(t, NON_CONSOLE_TERMS)) return true;
 
   if (
     isPs5Like(t) &&
@@ -561,6 +599,7 @@ function detectExtraControllerCount(text) {
   if (hasAny(t, ["4 controllers", "four controllers"])) return 3;
   if (hasAny(t, ["3 controllers", "three controllers"])) return 2;
   if (hasAny(t, ["2 controllers", "two controllers", "extra controller", "second controller", "spare controller"])) return 1;
+
   return 0;
 }
 
@@ -577,7 +616,9 @@ function detectIncludedGamesCount(text) {
   if (hasAny(t, ["with game", "with games", "game included", "games included", "includes game", "includes games"])) return 1;
 
   const matchedNamedGames = PS5_GAME_TERMS.filter((term) => t.includes(term));
-  if (matchedNamedGames.length) return Math.min(matchedNamedGames.length, 3);
+  if (matchedNamedGames.length) {
+    return Math.min(matchedNamedGames.length, 3);
+  }
 
   return 0;
 }
@@ -587,38 +628,37 @@ function detectBundleSignals(text, family) {
   const extraControllerCount = detectExtraControllerCount(t);
   const includedGamesCount = detectIncludedGamesCount(t);
 
-  const hasBox =
-    hasAny(t, ["boxed", "box included", "original box", "complete in box"]) ? 1 : 0;
+  const hasBox = hasAny(t, ["boxed", "box included", "original box", "complete in box"]) ? 1 : 0;
 
-  const hasAccessories =
-    hasAny(t, [
-      "with headset",
-      "with charging station",
-      "with dock",
-      "with camera",
-      "with media remote",
-      "with accessories",
-      "extras included",
-      "with extra accessories",
-    ]) ? 1 : 0;
+  const hasAccessories = hasAny(t, [
+    "with headset",
+    "with charging station",
+    "with dock",
+    "with camera",
+    "with media remote",
+    "with accessories",
+    "extras included",
+    "with extra accessories",
+    "plus headset",
+    "plus accessories",
+  ]) ? 1 : 0;
 
-  const explicitBundleWords =
-    hasAny(t, [
-      "bundle",
-      "job lot",
-      "comes with",
-      "includes",
-      "included",
-      "plus games",
-      "plus controller",
-      "with games",
-      "with controller",
-      "with 2 controllers",
-      "with two controllers",
-      "extra controller",
-      "second controller",
-      "spare controller",
-    ]) ? 1 : 0;
+  const explicitBundleWords = hasAny(t, [
+    "bundle",
+    "job lot",
+    "comes with",
+    "includes",
+    "included",
+    "plus games",
+    "plus controller",
+    "with games",
+    "with controller",
+    "with 2 controllers",
+    "with two controllers",
+    "extra controller",
+    "second controller",
+    "spare controller",
+  ]) ? 1 : 0;
 
   let bundleType = "standard";
 
@@ -688,17 +728,21 @@ function detectPs5Variant(text = "") {
     "digital edition",
     "digital console",
     "all digital",
+    "digital model",
     "cfi 1116b",
     "cfi 1216b",
+    "cfi-1116b",
+    "cfi-1216b",
   ];
 
   const discSignals = [
     "disc edition",
     "disc version",
-    "disc drive",
     "standard edition",
     "cfi 1116a",
     "cfi 1216a",
+    "cfi-1116a",
+    "cfi-1216a",
     "bluray",
   ];
 
@@ -710,7 +754,11 @@ function detectPs5Variant(text = "") {
 
   if (t.includes("digital") && !t.includes("disc drive")) return "digital";
 
-  return "disc";
+  if (t.includes("disc drive") || t.includes("disc version") || t.includes("disc edition")) {
+    return "disc";
+  }
+
+  return "unknown";
 }
 
 function detectConsoleType(text = "", family = "") {
@@ -720,32 +768,34 @@ function detectConsoleType(text = "", family = "") {
     return detectPs5Variant(t);
   }
 
-  const isDigital =
-    hasAny(t, [
-      "digital",
-      "digital edition",
-      "discless",
-      "no disc",
-      "cfi 1116b",
-      "cfi 1216b",
-    ]);
+  const isDigital = hasAny(t, [
+    "digital",
+    "digital edition",
+    "discless",
+    "no disc",
+    "cfi 1116b",
+    "cfi 1216b",
+    "cfi-1116b",
+    "cfi-1216b",
+  ]);
 
-  const isDisc =
-    hasAny(t, [
-      "disc",
-      "disc edition",
-      "bluray",
-      "standard edition",
-      "cfi 1116a",
-      "cfi 1216a",
-    ]);
+  const isDisc = hasAny(t, [
+    "disc",
+    "disc edition",
+    "bluray",
+    "standard edition",
+    "cfi 1116a",
+    "cfi 1216a",
+    "cfi-1116a",
+    "cfi-1216a",
+  ]);
 
   if (isDigital && !isDisc) return "digital";
   if (isDisc && !isDigital) return "disc";
   return "unknown";
 }
 
-function matchesConsoleFamily(text, queryContext) {
+function matchesConsoleFamily(text, queryContext, item) {
   const t = normalizeConsoleText(text);
   const family = String(queryContext?.family || "");
   const consoleType = detectConsoleType(t, family);
@@ -754,11 +804,14 @@ function matchesConsoleFamily(text, queryContext) {
 
   if (family === "ps5_disc") {
     if (!isPs5Like(t)) return false;
-    return consoleType !== "digital";
+    if (isClearlyNonConsole(item, t)) return false;
+    if (consoleType === "digital") return false;
+    return true;
   }
 
   if (family === "ps5_digital") {
     if (!isPs5Like(t)) return false;
+    if (isClearlyNonConsole(item, t)) return false;
     return consoleType === "digital";
   }
 
@@ -809,7 +862,7 @@ function estimateBundleValueBonus(queryContext, bundleSignals, text) {
     if (hasAccessories) bonus += 10;
 
     if (PS5_GAME_TERMS.some((term) => t.includes(term))) {
-      bonus += 10;
+      bonus += 8;
     }
   } else if (family.startsWith("xbox_series")) {
     bonus += extraControllerCount * 30;
@@ -868,7 +921,7 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "Disc drive issue mentioned") penalty += 18;
     else if (flag === "HDMI issue mentioned") penalty += 16;
     else if (flag === "Overheating risk mentioned") penalty += 14;
-    else if (flag === "Bundle intent was searched, but extras look weak") penalty += 6;
+    else if (flag === "Bundle intent was searched, but extras look weak") penalty += 5;
   }
 
   return penalty;
@@ -880,12 +933,13 @@ function getDiscDigitalPricingBias(queryContext, text) {
 
   if (family === "ps5_disc") {
     if (consoleType === "disc") return 18;
-    return -18;
+    if (consoleType === "unknown") return 6;
+    return -25;
   }
 
   if (family === "ps5_digital") {
     if (consoleType === "digital") return -10;
-    return 10;
+    return 16;
   }
 
   if (consoleType === "disc") return 8;
@@ -908,39 +962,41 @@ function scoreConsoleCandidate(item, queryContext) {
     return -10;
   }
 
-  let score = 0;
-
   const itemBrand = detectConsoleBrand(text);
   const bundleSignals = detectBundleSignals(text, queryContext.family || "");
   const bundleType = bundleSignals.bundleType;
   const consoleType = detectConsoleType(text, queryContext.family || "");
+
+  let score = 0;
 
   if (queryContext.brand) {
     if (itemBrand === queryContext.brand) score += 1.2;
     else return -10;
   }
 
-  if (matchesConsoleFamily(text, queryContext)) {
-    score += 5.5;
+  if (matchesConsoleFamily(text, queryContext, item)) {
+    score += 5.2;
   } else {
     return -10;
   }
 
-  if (conditionState === "clean_working") score += 1.5;
+  if (isConsoleCategory(item)) score += 1.2;
+  if (conditionState === "clean_working") score += 1.4;
   if (conditionState === "minor_fault") score -= 2;
   if (conditionState === "faulty_or_parts") score -= 8;
 
-  if (bundleType === "bundle") score += 1.3;
-  if (bundleType === "boxed") score += 0.5;
-  if (bundleType === "console_only") score -= 1.5;
+  if (bundleType === "bundle") score += 1.2;
+  if (bundleType === "boxed") score += 0.45;
+  if (bundleType === "console_only") score -= 1.2;
 
-  score += Math.min(bundleSignals.extraControllerCount, 2) * 0.6;
-  score += Math.min(bundleSignals.includedGamesCount, 4) * 0.2;
-  if (bundleSignals.hasAccessories) score += 0.25;
+  score += Math.min(bundleSignals.extraControllerCount, 2) * 0.55;
+  score += Math.min(bundleSignals.includedGamesCount, 4) * 0.18;
+  if (bundleSignals.hasAccessories) score += 0.2;
   if (bundleSignals.explicitBundleWords) score += 0.35;
 
-  if (queryContext.family === "ps5_disc" && consoleType === "disc") score += 1;
-  if (queryContext.family === "ps5_digital" && consoleType === "digital") score += 1;
+  if (queryContext.family === "ps5_disc" && consoleType === "disc") score += 1.1;
+  if (queryContext.family === "ps5_disc" && consoleType === "unknown") score += 0.45;
+  if (queryContext.family === "ps5_digital" && consoleType === "digital") score += 1.4;
 
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
   const warningPenalty = calculateWarningPenalty(warningFlags);
@@ -997,17 +1053,17 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     ? listingPool.filter((entry) => entry.conditionState === desiredConditionState)
     : listingPool;
 
-  const exactMarket = marketConditionPool.filter((entry) => entry.score >= 5.5);
+  const exactMarket = marketConditionPool.filter((entry) => entry.score >= 6);
   const usableMarket =
     exactMarket.length >= 3
       ? exactMarket
-      : marketConditionPool.filter((entry) => entry.score >= 2.5);
+      : marketConditionPool.filter((entry) => entry.score >= 3);
 
-  const exactListings = listingConditionPool.filter((entry) => entry.score >= 5.5);
+  const exactListings = listingConditionPool.filter((entry) => entry.score >= 6);
   const usableListings =
     exactListings.length >= 2
       ? exactListings
-      : listingConditionPool.filter((entry) => entry.score >= 2.5);
+      : listingConditionPool.filter((entry) => entry.score >= 3);
 
   let marketTotals = removePriceOutliers(
     (usableMarket.length ? usableMarket : marketConditionPool)
@@ -1043,7 +1099,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   if (exactMarket.length >= 5) conservativeMultiplier = 0.96;
 
   if (queryContext.family === "ps5_disc") {
-    baseline = roundMoney(baseline + 18);
+    baseline = roundMoney(baseline + 12);
     pricingMode = "PS5 disc median";
   } else if (queryContext.family === "ps5_digital") {
     baseline = roundMoney(Math.max(0, baseline - 10));
@@ -1196,6 +1252,8 @@ export const consoleEngine = {
         "ps5 console",
         "sony ps5",
         "playstation 5 console",
+        "ps5 disc",
+        "ps5 standard",
         "ps5 bundle",
       ];
     }
@@ -1250,7 +1308,7 @@ export const consoleEngine = {
     const itemBrand = detectConsoleBrand(text);
     if (queryContext.brand && itemBrand !== queryContext.brand) return false;
 
-    if (!matchesConsoleFamily(text, queryContext)) {
+    if (!matchesConsoleFamily(text, queryContext, item)) {
       return false;
     }
 
