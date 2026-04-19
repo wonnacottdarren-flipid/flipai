@@ -2,11 +2,13 @@ import { baseEngine } from "./baseEngine.js";
 import { dysonEngine } from "./dysonEngine.js";
 import { phoneEngine } from "./phoneEngine.js";
 import { consoleEngine } from "./consoleEngine.js";
+import { cameraEngine } from "./cameraEngine.js";
 
 const engines = [
   dysonEngine,
   phoneEngine,
   consoleEngine,
+  cameraEngine,
 ];
 
 export function detectEngineForQuery(query = "") {
@@ -23,7 +25,14 @@ export function getEngineForQuery(query = "") {
   return detectEngineForQuery(query);
 }
 
-export { engines, baseEngine, dysonEngine, phoneEngine, consoleEngine };
+export {
+  engines,
+  baseEngine,
+  dysonEngine,
+  phoneEngine,
+  consoleEngine,
+  cameraEngine,
+};
 
 export default {
   detectEngineForQuery,
@@ -33,4 +42,5 @@ export default {
   dysonEngine,
   phoneEngine,
   consoleEngine,
+  cameraEngine,
 };
