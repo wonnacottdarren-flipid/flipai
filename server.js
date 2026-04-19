@@ -960,12 +960,8 @@ app.post("/api/find-deals", async (req, res) => {
     }
 
     if (engine && typeof engine.matchesItem === "function") {
-      if (engine.id !== "camera") {
-        cleanListings = cleanListings.filter((item) => engine.matchesItem(item, queryContext));
-        cleanMarket = cleanMarket.filter((item) => engine.matchesItem(item, queryContext));
-      } else {
-        console.log("📸 Camera engine: skipping strict filtering in /api/find-deals");
-      }
+      cleanListings = cleanListings.filter((item) => engine.matchesItem(item, queryContext));
+      cleanMarket = cleanMarket.filter((item) => engine.matchesItem(item, queryContext));
     }
 
     const pricingModel =
