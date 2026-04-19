@@ -18,7 +18,7 @@ const CONSOLE_FAMILIES = [
   ["switch_v2", ["nintendo switch", "switch console"]],
 ];
 
-const HARD_ACCESSORY_TERMS = [
+const ACCESSORY_TERMS = [
   "controller only",
   "dualsense only",
   "dualshock only",
@@ -69,6 +69,10 @@ const HARD_ACCESSORY_TERMS = [
   "manual only",
   "cover plate",
   "side plate",
+  "charger dock",
+  "cooler",
+  "cooling stand",
+  "shell cover",
 ];
 
 const ACCESSORY_CATEGORY_TERMS = [
@@ -250,130 +254,14 @@ function parseConsoleFamily(text) {
   return "";
 }
 
-function isAccessoryCategory(item) {
-  const categoryText = getCategoryText(item);
-  return hasAny(categoryText, ACCESSORY_CATEGORY_TERMS);
-}
-
 function isPs5Like(text) {
   const t = normalizeConsoleText(text);
   return t.includes("ps5") || t.includes("playstation5");
 }
 
-function hasStrongConsoleUnitSignal(text) {
-  const t = normalizeConsoleText(text);
-
-  if (isPs5Like(t)) {
-    return hasAny(t, [
-      "console",
-      "gaming console",
-      "main unit",
-      "system",
-      "complete",
-      "bundle",
-      "digital edition",
-      "disc edition",
-      "standard edition",
-      "with controller",
-      "controller included",
-      "boxed",
-      "original box",
-      "complete in box",
-      "bluray",
-      "white",
-      "with game",
-      "with games",
-      "includes game",
-      "includes games",
-      "extra controller",
-      "2 controllers",
-      "two controllers",
-    ]);
-  }
-
-  if (t.includes("xbox")) {
-    return hasAny(t, [
-      "console",
-      "gaming console",
-      "main unit",
-      "system",
-      "complete",
-      "bundle",
-      "boxed",
-      "original box",
-      "complete in box",
-    ]);
-  }
-
-  if (t.includes("switch") || t.includes("nintendo")) {
-    return hasAny(t, [
-      "console",
-      "tablet",
-      "unit",
-      "system",
-      "bundle",
-      "boxed",
-      "complete in box",
-      "joy cons",
-      "joy-cons",
-    ]);
-  }
-
-  return false;
-}
-
-function isLikelyPs5ConsoleTitle(text) {
-  const t = normalizeConsoleText(text);
-
-  if (!isPs5Like(t)) return false;
-  if (isHardAccessoryPhrase(t)) return false;
-  if (hasAny(t, HARD_REJECT_TERMS)) return false;
-
-  if (hasStrongConsoleUnitSignal(t)) return true;
-
-  // Allow plain real-world PS5 titles that are commonly short on eBay.
-  if (
-    hasAny(t, [
-      "ps5",
-      "playstation5",
-    ]) &&
-    !hasAny(t, [
-      "controller",
-      "dualsense",
-      "media remote",
-      "remote",
-      "headset",
-      "charger",
-      "dock",
-      "stand",
-      "faceplate",
-      "face plate",
-      "shell",
-      "cover",
-      "skin",
-      "case",
-      "fan",
-      "portal",
-      "psvr",
-      "vr2",
-      "playstation vr",
-      "disc drive only",
-      "disc reader only",
-      "empty box",
-      "box only",
-      "manual only",
-      "cable only",
-    ])
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-function isHardAccessoryPhrase(text) {
-  const t = normalizeConsoleText(text);
-  return hasAny(t, HARD_ACCESSORY_TERMS);
+function isAccessoryCategory(item) {
+  const categoryText = getCategoryText(item);
+  return hasAny(categoryText, ACCESSORY_CATEGORY_TERMS);
 }
 
 function isHardAccessoryListing(text, item) {
@@ -381,9 +269,51 @@ function isHardAccessoryListing(text, item) {
 
   if (isAccessoryCategory(item)) return true;
 
-  if (isHardAccessoryPhrase(t)) {
-    // If it clearly says it is a separate accessory, reject.
-    return true;
+  if (hasAny(t, ACCESSORY_TERMS)) {
+    if (
+      !t.includes("with controller") &&
+      !t.includes("controller included") &&
+      !t.includes("2 controllers") &&
+      !t.includes("two controllers") &&
+      !t.includes("extra controller") &&
+      !t.includes("second controller")
+    ) {
+      return true;
+    }
+
+    if (
+      hasAny(t, [
+        "faceplate",
+        "face plate",
+        "remote only",
+        "media remote",
+        "headset",
+        "charger",
+        "charging dock",
+        "charging stand",
+        "dock only",
+        "vertical stand",
+        "base stand",
+        "stand only",
+        "hdmi cable",
+        "disc drive only",
+        "disc reader only",
+        "fan only",
+        "cooling fan",
+        "playstation portal",
+        "portal",
+        "psvr",
+        "vr2",
+        "playstation vr",
+        "empty box",
+        "box only",
+        "manual only",
+        "case only",
+        "carry case",
+      ])
+    ) {
+      return true;
+    }
   }
 
   if (
@@ -392,30 +322,9 @@ function isHardAccessoryListing(text, item) {
     !t.includes("controller included") &&
     !t.includes("2 controllers") &&
     !t.includes("two controllers") &&
-    !hasStrongConsoleUnitSignal(t)
-  ) {
-    return true;
-  }
-
-  if (
-    isPs5Like(t) &&
-    !isLikelyPs5ConsoleTitle(t) &&
-    hasAny(t, [
-      "controller",
-      "dualsense",
-      "remote",
-      "headset",
-      "charger",
-      "dock",
-      "stand",
-      "faceplate",
-      "cover",
-      "skin",
-      "case",
-      "fan",
-      "portal",
-      "vr",
-    ])
+    !t.includes("extra controller") &&
+    !t.includes("second controller") &&
+    !t.includes("console")
   ) {
     return true;
   }
@@ -686,7 +595,6 @@ function detectPs5Variant(text = "") {
     "all digital",
     "cfi 1116b",
     "cfi 1216b",
-    "digital",
   ];
 
   const discSignals = [
@@ -697,8 +605,6 @@ function detectPs5Variant(text = "") {
     "cfi 1116a",
     "cfi 1216a",
     "bluray",
-    "blu ray",
-    "blu-ray",
   ];
 
   const mentionsDigital = hasAny(t, digitalSignals);
@@ -709,7 +615,6 @@ function detectPs5Variant(text = "") {
 
   if (t.includes("digital") && !t.includes("disc drive")) return "digital";
 
-  // Important fix: default PS5 console to disc unless clearly digital.
   return "disc";
 }
 
@@ -754,13 +659,13 @@ function matchesConsoleFamily(text, queryContext) {
 
   if (family === "ps5_disc") {
     if (!isPs5Like(t)) return false;
-    if (!isLikelyPs5ConsoleTitle(t)) return false;
+    if (isHardAccessoryListing(t, {})) return false;
     return consoleType !== "digital";
   }
 
   if (family === "ps5_digital") {
     if (!isPs5Like(t)) return false;
-    if (!isLikelyPs5ConsoleTitle(t)) return false;
+    if (isHardAccessoryListing(t, {})) return false;
     return consoleType === "digital";
   }
 
@@ -900,8 +805,6 @@ function scoreConsoleCandidate(item, queryContext) {
 
   if (!text) return -10;
   if (isHardAccessoryListing(text, item)) return -10;
-  if (isPs5Like(text) && !isLikelyPs5ConsoleTitle(text)) return -10;
-  if (!isPs5Like(text) && !hasStrongConsoleUnitSignal(text)) return -10;
   if (isSeverelyBadConsole(text) && !shouldAllowDamagedConsoles(queryContext)) return -10;
 
   const conditionState = classifyConsoleConditionState(text);
@@ -1224,8 +1127,6 @@ export const consoleEngine = {
 
     if (!text) return false;
     if (isHardAccessoryListing(text, item)) return false;
-    if (isPs5Like(text) && !isLikelyPs5ConsoleTitle(text)) return false;
-    if (!isPs5Like(text) && !hasStrongConsoleUnitSignal(text)) return false;
     if (isSeverelyBadConsole(text) && !queryContext.allowDamaged) return false;
 
     const conditionState = classifyConsoleConditionState(text);
