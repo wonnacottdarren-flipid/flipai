@@ -368,6 +368,113 @@ function getEngineSearchQuery(engine, rawQuery) {
   return query;
 }
 
+function getEngineSearchVariants(engine, rawQuery) {
+  const query = String(rawQuery || "").trim();
+
+  if (!engine) return [query].filter(Boolean);
+
+  if (typeof engine.expandSearchVariants === "function") {
+    const variants = engine.expandSearchVariants(query);
+    if (Array.isArray(variants) && variants.length) {
+      return [...new Set(variants.map((v) => String(v || "").trim()).filter(Boolean))];
+    }
+  }
+
+  const single = getEngineSearchQuery(engine, query);
+  return [single].filter(Boolean);
+}
+
+function dedupeItems(items = []) {
+  const seen = new Set();
+  const out = [];
+
+  for (const item of Array.isArray(items) ? items : []) {
+    const key =
+      item?.itemId ||
+      item?.legacyItemId ||
+      item?.itemWebUrl ||
+      item?.viewItemURL ||
+      item?.url ||
+      `${extractItemTitle(item)}::${extractTotalPrice(item)}`;
+
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+
+  return out;
+}
+
+async function fetchListingsAcrossVariants({
+  engine,
+  query,
+  condition = "",
+  filterPriceMax = 0,
+  freeShippingOnly = false,
+  limit = 30,
+}) {
+  const variants = getEngineSearchVariants(engine, query);
+  const resultsPerVariant = Math.max(limit, 30);
+  const cap = Math.max(limit * 3, 90);
+
+  let merged = [];
+
+  for (const variant of variants) {
+    const items = await searchEbayListings({
+      query: variant,
+      maxPrice: filterPriceMax,
+      condition,
+      freeShippingOnly,
+      limit: resultsPerVariant,
+    }).catch(() => []);
+
+    merged = dedupeItems([...merged, ...(Array.isArray(items) ? items : [])]);
+
+    if (merged.length >= cap) {
+      break;
+    }
+  }
+
+  return {
+    searchQuery: variants[0] || String(query || "").trim(),
+    searchVariants: variants,
+    items: merged.slice(0, cap),
+  };
+}
+
+async function fetchMarketAcrossVariants({
+  engine,
+  query,
+  condition = "",
+  limit = 50,
+}) {
+  const variants = getEngineSearchVariants(engine, query);
+  const resultsPerVariant = Math.max(limit, 40);
+  const cap = Math.max(limit * 2, 80);
+
+  let merged = [];
+
+  for (const variant of variants) {
+    const items = await searchEbayMarketPool({
+      query: variant,
+      condition,
+      limit: resultsPerVariant,
+    }).catch(() => []);
+
+    merged = dedupeItems([...merged, ...(Array.isArray(items) ? items : [])]);
+
+    if (merged.length >= cap) {
+      break;
+    }
+  }
+
+  return {
+    searchQuery: variants[0] || String(query || "").trim(),
+    searchVariants: variants,
+    items: merged.slice(0, cap),
+  };
+}
+
 function buildDealReasonBreakdown({
   title,
   pricingMode,
@@ -695,17 +802,16 @@ app.post("/api/search-ebay", async (req, res) => {
         ? engine.classifyQuery(query)
         : { rawQuery: query, normalizedQuery: normalizeText(query) };
 
-    const searchQuery = getEngineSearchQuery(engine, query);
-
-    const items = await searchEbayListings({
-      query: searchQuery,
-      maxPrice: filterPriceMax,
+    const fetched = await fetchListingsAcrossVariants({
+      engine,
+      query,
       condition,
+      filterPriceMax,
       freeShippingOnly,
       limit,
     });
 
-    let filtered = Array.isArray(items) ? items : [];
+    let filtered = Array.isArray(fetched.items) ? fetched.items : [];
 
     filtered = filtered.filter((item) => itemMatchesCondition(item, condition));
     filtered = filtered.filter((item) => itemMatchesPrice(item, filterPriceMax));
@@ -719,8 +825,9 @@ app.post("/api/search-ebay", async (req, res) => {
 
     return res.json({
       ok: true,
-      searchQuery,
-      items: filtered,
+      searchQuery: fetched.searchQuery,
+      searchVariants: fetched.searchVariants,
+      items: filtered.slice(0, Number(limit || 8)),
     });
   } catch (err) {
     console.error(err);
@@ -748,15 +855,14 @@ app.post("/api/auto-comps", async (req, res) => {
         ? engine.classifyQuery(rawSearchQuery)
         : { rawQuery: rawSearchQuery, normalizedQuery: normalizeText(rawSearchQuery) };
 
-    const searchQuery = getEngineSearchQuery(engine, rawSearchQuery);
-
-    const marketItems = await searchEbayMarketPool({
-      query: searchQuery,
+    const fetched = await fetchMarketAcrossVariants({
+      engine,
+      query: rawSearchQuery,
       condition,
       limit: 24,
     });
 
-    let filtered = Array.isArray(marketItems) ? marketItems : [];
+    let filtered = Array.isArray(fetched.items) ? fetched.items : [];
 
     if (condition.trim()) {
       filtered = filtered.filter((item) => itemMatchesCondition(item, condition));
@@ -770,7 +876,8 @@ app.post("/api/auto-comps", async (req, res) => {
 
     return res.json({
       ok: true,
-      searchQuery,
+      searchQuery: fetched.searchQuery,
+      searchVariants: fetched.searchVariants,
       autoComps,
       itemsUsed: filtered.length,
     });
@@ -806,24 +913,24 @@ app.post("/api/find-deals", async (req, res) => {
         ? engine.classifyQuery(query)
         : { rawQuery: query, normalizedQuery: normalizeText(query) };
 
-    const searchQuery = getEngineSearchQuery(engine, query);
-
-    const listings = await searchEbayListings({
-      query: searchQuery,
-      maxPrice: filterPriceMax,
+    const fetchedListings = await fetchListingsAcrossVariants({
+      engine,
+      query,
       condition,
+      filterPriceMax,
       freeShippingOnly,
-      limit,
+      limit: Math.max(Number(limit || 30), 30),
     });
 
-    const market = await searchEbayMarketPool({
-      query: searchQuery,
+    const fetchedMarket = await fetchMarketAcrossVariants({
+      engine,
+      query,
       condition,
       limit: 50,
     });
 
-    let cleanListings = Array.isArray(listings) ? listings : [];
-    let cleanMarket = Array.isArray(market) ? market : [];
+    let cleanListings = Array.isArray(fetchedListings.items) ? fetchedListings.items : [];
+    let cleanMarket = Array.isArray(fetchedMarket.items) ? fetchedMarket.items : [];
 
     cleanListings = cleanListings.filter((item) => itemMatchesCondition(item, condition));
     cleanListings = cleanListings.filter((item) => itemMatchesPrice(item, filterPriceMax));
@@ -879,9 +986,10 @@ app.post("/api/find-deals", async (req, res) => {
 
     return res.json({
       ok: true,
-      searchQuery,
+      searchQuery: fetchedListings.searchQuery,
+      searchVariants: fetchedListings.searchVariants,
       deals: finalDeals,
-      totalFetched: Array.isArray(listings) ? listings.length : 0,
+      totalFetched: Array.isArray(fetchedListings.items) ? fetchedListings.items.length : 0,
       totalMatched: preferredDeals.length,
     });
   } catch (err) {
