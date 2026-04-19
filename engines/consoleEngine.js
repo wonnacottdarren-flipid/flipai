@@ -294,6 +294,7 @@ function normalizeConsoleText(value) {
     .replace(/\bplaystation\s*5\b/g, "playstation5")
     .replace(/\bplaystation 5\b/g, "playstation5")
     .replace(/\bsony ps5\b/g, "ps5")
+    .replace(/\bplaystation 5 console\b/g, "playstation5 console")
     .replace(/\bdisk edition\b/g, "disc edition")
     .replace(/\bdisk\b/g, "disc")
     .replace(/\bblu ray\b/g, "bluray")
@@ -389,6 +390,7 @@ function hasStrongConsoleSignals(text) {
     "disc edition",
     "digital edition",
     "standard edition",
+    "standard console",
     "slim",
     "cfi-",
     "cfi ",
@@ -420,9 +422,27 @@ function hasBundleAllowance(text) {
   ]);
 }
 
+function looksLikeMainConsoleTitle(text) {
+  const t = normalizeConsoleText(text);
+
+  if (!isPs5Like(t)) return false;
+  if (t.includes("console")) return true;
+  if (t.includes("standard edition")) return true;
+  if (t.includes("standard console")) return true;
+  if (t.includes("disc edition")) return true;
+  if (t.includes("digital edition")) return true;
+  if (t.includes("slim")) return true;
+  if (t.includes("cfi-") || t.includes("cfi ")) return true;
+  if (t.includes("1tb") || t.includes("825gb") || t.includes("825 gb")) return true;
+
+  return false;
+}
+
 function isHardAccessoryListing(text, item) {
   const t = normalizeConsoleText(text);
   const titleText = getTitleText(item);
+
+  if (looksLikeMainConsoleTitle(titleText)) return false;
 
   if (isAccessoryCategory(item) && !hasStrongConsoleSignals(titleText)) return true;
 
@@ -499,6 +519,8 @@ function isClearlyNonConsole(item, text) {
   const t = normalizeConsoleText(text);
   const titleText = getTitleText(item);
 
+  if (looksLikeMainConsoleTitle(titleText)) return false;
+
   if (isNonConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return true;
 
   if (hasAny(titleText, NON_CONSOLE_TERMS)) return true;
@@ -527,32 +549,7 @@ function isClearlyNonConsole(item, text) {
 
 function isSeverelyBadConsole(text) {
   const t = normalizeConsoleText(text);
-
-  return hasAny(t, [
-    "for parts",
-    "for spares",
-    "spares or repairs",
-    "spares repairs",
-    "parts only",
-    "faulty",
-    "broken",
-    "not working",
-    "no power",
-    "wont turn on",
-    "will not turn on",
-    "hdmi fault",
-    "no hdmi",
-    "repair required",
-    "needs repair",
-    "banned",
-    "account locked",
-    "console banned",
-    "water damaged",
-    "motherboard fault",
-    "blue light of death",
-    "overheating issue",
-    "motherboard only",
-  ]);
+  return hasAny(t, HARD_REJECT_TERMS) || hasAny(t, ["hdmi fault", "no hdmi", "overheating issue"]);
 }
 
 function classifyConsoleConditionState(text) {
@@ -876,17 +873,16 @@ function matchesConsoleFamily(text, queryContext, item) {
   if (family === "ps5_disc") {
     if (!isPs5Like(t)) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
+    if (isHardAccessoryListing(titleText || t, item)) return false;
     if (consoleType === "digital") return false;
 
-    // Important fix:
-    // real PS5 disc consoles often do NOT say "disc edition".
-    // If it is clearly a PS5 console and not explicitly digital, allow it through.
     return true;
   }
 
   if (family === "ps5_digital") {
     if (!isPs5Like(t)) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
+    if (isHardAccessoryListing(titleText || t, item)) return false;
     return consoleType === "digital";
   }
 
@@ -1166,40 +1162,50 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
 
   const desiredConditionState = allowDamaged ? null : "clean_working";
 
-  const marketConditionPool = desiredConditionState
+  let marketConditionPool = desiredConditionState
     ? marketPool.filter((entry) => entry.conditionState === desiredConditionState)
     : marketPool;
 
-  const listingConditionPool = desiredConditionState
+  let listingConditionPool = desiredConditionState
     ? listingPool.filter((entry) => entry.conditionState === desiredConditionState)
     : listingPool;
+
+  if (!marketConditionPool.length && marketPool.length) {
+    marketConditionPool = marketPool;
+  }
+
+  if (!listingConditionPool.length && listingPool.length) {
+    listingConditionPool = listingPool;
+  }
 
   const exactMarket = marketConditionPool.filter((entry) => entry.score >= 5.0);
   const usableMarket =
     exactMarket.length >= 3
       ? exactMarket
-      : marketConditionPool.filter((entry) => entry.score >= 2.1);
+      : marketConditionPool.filter((entry) => entry.score >= 1.6);
 
   const exactListings = listingConditionPool.filter((entry) => entry.score >= 5.0);
   const usableListings =
     exactListings.length >= 2
       ? exactListings
-      : listingConditionPool.filter((entry) => entry.score >= 2.1);
+      : listingConditionPool.filter((entry) => entry.score >= 1.6);
 
   let marketTotals = removePriceOutliers(
     (usableMarket.length ? usableMarket : marketConditionPool)
       .slice(0, 28)
       .map((entry) => entry.adjustedTotal)
+      .filter((value) => value > 0)
   );
 
   let listingTotals = removePriceOutliers(
     (usableListings.length ? usableListings : listingConditionPool)
       .slice(0, 18)
       .map((entry) => entry.adjustedTotal)
+      .filter((value) => value > 0)
   );
 
   if (marketTotals.length < 3 && listingTotals.length >= 2) {
-    marketTotals = removePriceOutliers([...marketTotals, ...listingTotals]);
+    marketTotals = removePriceOutliers([...marketTotals, ...listingTotals].filter((value) => value > 0));
   }
 
   if (listingTotals.length < 2 && marketTotals.length >= 2) {
@@ -1216,15 +1222,23 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   if (!marketMedian && listingMedian) pricingMode = "Console listings fallback";
   if (!marketMedian && !listingMedian && marketLow) pricingMode = "Console low-band fallback";
 
+  if (!baseline && queryContext.family === "ps5_disc") {
+    baseline = 405;
+    pricingMode = "PS5 disc hard fallback";
+  } else if (!baseline && queryContext.family === "ps5_digital") {
+    baseline = 330;
+    pricingMode = "PS5 digital hard fallback";
+  }
+
   let conservativeMultiplier = 0.955;
   if (exactMarket.length >= 5) conservativeMultiplier = 0.965;
 
   if (queryContext.family === "ps5_disc") {
     baseline = roundMoney(baseline + 18);
-    pricingMode = "PS5 disc median";
+    pricingMode = pricingMode.includes("fallback") ? pricingMode : "PS5 disc median";
   } else if (queryContext.family === "ps5_digital") {
     baseline = roundMoney(Math.max(0, baseline - 6));
-    pricingMode = "PS5 digital median";
+    pricingMode = pricingMode.includes("fallback") ? pricingMode : "PS5 digital median";
   } else if (queryContext.family === "xbox_series_x") {
     pricingMode = "Series X median";
   } else if (queryContext.family === "xbox_series_s") {
@@ -1245,6 +1259,10 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   if (exactListings.length >= 3) confidence += 3;
   if (queryContext.family) confidence += 2;
 
+  if (pricingMode === "PS5 disc hard fallback" || pricingMode === "PS5 digital hard fallback") {
+    confidence = Math.min(confidence, 46);
+  }
+
   confidence = Math.min(92, confidence);
 
   let confidenceLabel = "Low";
@@ -1263,6 +1281,8 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     debug: {
       marketPoolSize: marketPool.length,
       listingPoolSize: listingPool.length,
+      marketConditionPoolSize: marketConditionPool.length,
+      listingConditionPoolSize: listingConditionPool.length,
       exactMarketCount: exactMarket.length,
       usableMarketCount: usableMarket.length,
       exactListingsCount: exactListings.length,
