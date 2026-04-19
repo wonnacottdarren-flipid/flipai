@@ -89,6 +89,63 @@ const ACCESSORY_CATEGORY_TERMS = [
   "bags skins and travel",
 ];
 
+const NON_CONSOLE_TERMS = [
+  "collector’s edition",
+  "collector's edition",
+  "collectors edition",
+  "collector edition",
+  "game not included",
+  "no game",
+  "without game",
+  "disc only",
+  "game only",
+  "ps5 game",
+  "playstation 5 game",
+  "steelbook",
+  "steel book",
+  "art book",
+  "artbook",
+  "soundtrack",
+  "figurine",
+  "figure",
+  "statue",
+  "merchandise",
+  "merch",
+  "poster",
+  "novelty",
+  "keyring",
+  "keychain",
+  "mouse mat",
+  "mousepad",
+  "t shirt",
+  "t-shirt",
+  "hoodie",
+  "lamp",
+  "display stand",
+  "display piece",
+  "ornament",
+  "vinyl",
+  "sound track",
+  "dlc",
+  "download code",
+  "digital code",
+  "voucher",
+  "gift card",
+  "season pass",
+];
+
+const NON_CONSOLE_CATEGORY_TERMS = [
+  "video games",
+  "video game merchandise",
+  "merchandise",
+  "strategy guides cheats",
+  "strategy guides & cheats",
+  "soundtracks",
+  "toys to life products",
+  "action figures",
+  "books, comics & magazines",
+];
+
 const HARD_REJECT_TERMS = [
   "for parts",
   "for spares",
@@ -264,6 +321,11 @@ function isAccessoryCategory(item) {
   return hasAny(categoryText, ACCESSORY_CATEGORY_TERMS);
 }
 
+function isNonConsoleCategory(item) {
+  const categoryText = getCategoryText(item);
+  return hasAny(categoryText, NON_CONSOLE_CATEGORY_TERMS);
+}
+
 function isHardAccessoryListing(text, item) {
   const t = normalizeConsoleText(text);
 
@@ -325,6 +387,39 @@ function isHardAccessoryListing(text, item) {
     !t.includes("extra controller") &&
     !t.includes("second controller") &&
     !t.includes("console")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isClearlyNonConsole(item, text) {
+  const t = normalizeConsoleText(text);
+
+  if (isNonConsoleCategory(item)) {
+    return true;
+  }
+
+  if (hasAny(t, NON_CONSOLE_TERMS)) {
+    return true;
+  }
+
+  if (
+    isPs5Like(t) &&
+    hasAny(t, [
+      "collector’s edition",
+      "collector's edition",
+      "collectors edition",
+      "collector edition",
+      "steelbook",
+      "art book",
+      "soundtrack",
+      "no game",
+      "game not included",
+      "disc only",
+      "game only",
+    ])
   ) {
     return true;
   }
@@ -659,13 +754,11 @@ function matchesConsoleFamily(text, queryContext) {
 
   if (family === "ps5_disc") {
     if (!isPs5Like(t)) return false;
-    if (isHardAccessoryListing(t, {})) return false;
     return consoleType !== "digital";
   }
 
   if (family === "ps5_digital") {
     if (!isPs5Like(t)) return false;
-    if (isHardAccessoryListing(t, {})) return false;
     return consoleType === "digital";
   }
 
@@ -805,6 +898,7 @@ function scoreConsoleCandidate(item, queryContext) {
 
   if (!text) return -10;
   if (isHardAccessoryListing(text, item)) return -10;
+  if (isClearlyNonConsole(item, text)) return -10;
   if (isSeverelyBadConsole(text) && !shouldAllowDamagedConsoles(queryContext)) return -10;
 
   const conditionState = classifyConsoleConditionState(text);
@@ -1144,6 +1238,7 @@ export const consoleEngine = {
 
     if (!text) return false;
     if (isHardAccessoryListing(text, item)) return false;
+    if (isClearlyNonConsole(item, text)) return false;
     if (isSeverelyBadConsole(text) && !queryContext.allowDamaged) return false;
 
     const conditionState = classifyConsoleConditionState(text);
