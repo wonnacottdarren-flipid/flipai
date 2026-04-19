@@ -101,7 +101,7 @@ const HARD_REJECT_TERMS = [
   "body shell only",
 ];
 
-const ACCESSORY_TERMS = [
+const STRICT_ACCESSORY_ONLY_TERMS = [
   "charger only",
   "battery only",
   "strap only",
@@ -124,9 +124,6 @@ const ACCESSORY_TERMS = [
   "hot shoe cover",
   "usb cable only",
   "dummy battery",
-  "charger",
-  "battery charger",
-  "strap",
   "camera bag",
   "carry case",
   "tripod",
@@ -135,7 +132,6 @@ const ACCESSORY_TERMS = [
   "floaty",
   "housing",
   "protective housing",
-  "mount",
   "helmet mount",
   "chest mount",
   "bike mount",
@@ -143,6 +139,19 @@ const ACCESSORY_TERMS = [
   "bundle of accessories",
   "memory card",
   "sd card",
+  "box only",
+  "empty box",
+];
+
+const ACCESSORY_MENTION_TERMS = [
+  "charger",
+  "battery charger",
+  "strap",
+  "mount",
+  "battery",
+  "box included",
+  "boxed",
+  "original box",
 ];
 
 const NON_CAMERA_TERMS = [
@@ -357,7 +366,7 @@ function looksLikeLensOnlyTitle(titleText) {
 function isObviousAccessoryTitle(titleText) {
   const t = normalizeCameraText(titleText);
 
-  if (hasAny(t, ACCESSORY_TERMS)) return true;
+  if (hasAny(t, STRICT_ACCESSORY_ONLY_TERMS)) return true;
   if (hasAny(t, NON_CAMERA_TERMS)) return true;
   if (looksLikeLensOnlyTitle(t)) return true;
 
@@ -403,14 +412,22 @@ function isHardAccessoryListing(text, item, family = "") {
   if (looksLikeMainCameraTitle(titleText, family)) return false;
   if (isObviousAccessoryTitle(titleText)) return true;
 
+  // Important fix from debug:
+  // real body listings can mention charger/battery/strap/box.
+  // Do not reject those if the title clearly looks like the camera itself.
+  if (
+    hasAny(titleText, ACCESSORY_MENTION_TERMS) &&
+    looksLikeMainCameraTitle(titleText, family)
+  ) {
+    return false;
+  }
+
   if (isAccessoryCategory(item)) {
     if (!looksLikeMainCameraTitle(titleText, family)) return true;
   }
 
   if (
-    hasAny(combinedText, ACCESSORY_TERMS) &&
-    !titleText.includes("camera") &&
-    !titleText.includes("body") &&
+    hasAny(combinedText, STRICT_ACCESSORY_ONLY_TERMS) &&
     !looksLikeMainCameraTitle(titleText, family)
   ) {
     return true;
@@ -1057,15 +1074,7 @@ export const cameraEngine = {
   },
 
   matchesItem(item, queryContext) {
-    const debug = getMatchDebug(item, queryContext);
-
-    console.log("CAMERA DEBUG:", {
-      title: item?.title,
-      matched: debug?.matched,
-      reason: debug?.reason,
-    });
-
-    return debug.matched;
+    return getMatchDebug(item, queryContext).matched;
   },
 
   buildPricingModel({ queryContext, marketItems = [], listingItems = [] }) {
