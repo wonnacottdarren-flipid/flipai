@@ -470,83 +470,58 @@ function buildConsoleBundleVariants(query, baseVariants = []) {
 
   if (wantsPs5) {
     if (wantsDigital) {
+      add("ps5 digital");
+      add("playstation 5 digital");
+      add("ps5 digital console");
+      add("digital edition");
       add("ps5 digital bundle");
       add("ps5 digital with games");
-      add("ps5 digital with controller");
-      add("playstation 5 digital bundle");
-      add("playstation 5 digital with games");
-      add("playstation 5 digital with controller");
-      add("ps5 digital job lot");
+      add("ps5");
+      add("playstation 5");
     } else if (wantsDisc) {
+      add("ps5 disc");
+      add("ps5 disk");
+      add("playstation 5 disc");
+      add("playstation 5 disk");
+      add("ps5 standard");
+      add("playstation 5 standard");
+      add("disc edition");
+      add("disk edition");
+      add("standard edition");
+      add("ps5 console");
+      add("ps5");
+      add("playstation 5");
+      add("playstation 5 console");
       add("ps5 disc bundle");
       add("ps5 disc with games");
-      add("ps5 disc with controller");
-      add("ps5 disc 2 controllers");
-      add("playstation 5 disc bundle");
-      add("playstation 5 disc with games");
-      add("playstation 5 disc with controller");
-      add("playstation 5 standard bundle");
-      add("ps5 standard bundle");
-      add("ps5 disk edition bundle");
-      add("ps5 bundle with games");
-      add("ps5 bundle controller");
-      add("ps5 with extras");
-      add("ps5 job lot");
-    } else {
-      add("ps5 bundle");
-      add("ps5 with games");
       add("ps5 with controller");
-      add("ps5 2 controllers");
-      add("ps5 plus games");
-      add("ps5 inc games");
-      add("ps5 includes games");
-      add("ps5 extras");
-      add("ps5 with extras");
-      add("ps5 console bundle");
-      add("ps5 console with games");
-      add("playstation 5 bundle");
-      add("playstation 5 with games");
-      add("playstation 5 with controller");
-      add("playstation 5 job lot");
-      add("ps5 job lot");
+    } else {
+      add("ps5");
+      add("playstation 5");
+      add("ps5 console");
+      add("playstation 5 console");
     }
   }
 
   if (wantsSeriesX) {
-    add("xbox series x bundle");
-    add("xbox series x with games");
-    add("xbox series x with controller");
-    add("xbox series x 2 controllers");
-    add("xbox series x job lot");
-    add("series x bundle");
+    add("xbox series x");
+    add("series x");
   }
 
   if (wantsSeriesS) {
-    add("xbox series s bundle");
-    add("xbox series s with games");
-    add("xbox series s with controller");
-    add("xbox series s 2 controllers");
-    add("xbox series s job lot");
-    add("series s bundle");
+    add("xbox series s");
+    add("series s");
   }
 
   if (wantsSwitchOled) {
-    add("switch oled bundle");
-    add("switch oled with games");
-    add("switch oled with extras");
-    add("nintendo switch oled bundle");
-    add("nintendo switch oled with games");
+    add("switch oled");
+    add("nintendo switch oled");
   } else if (wantsSwitchLite) {
-    add("switch lite bundle");
-    add("switch lite with games");
-    add("nintendo switch lite bundle");
+    add("switch lite");
+    add("nintendo switch lite");
   } else if (wantsSwitch) {
-    add("switch bundle");
-    add("switch with games");
-    add("switch with extras");
-    add("nintendo switch bundle");
-    add("nintendo switch with games");
-    add("switch job lot");
+    add("nintendo switch");
+    add("switch console");
   }
 
   return [...new Set(variants.filter(Boolean))];
@@ -560,17 +535,32 @@ function buildSearchVariants(query) {
     return buildDysonSearchVariants(query);
   }
 
-  if (q.includes("ps5 disc") || q.includes("playstation 5 disc")) {
+  if (
+    q.includes("ps5 disc") ||
+    q.includes("ps5 disk") ||
+    q.includes("playstation 5 disc") ||
+    q.includes("playstation 5 disk")
+  ) {
+    variants.push("ps5 disc");
+    variants.push("ps5 disk");
     variants.push("playstation 5 disc");
+    variants.push("playstation 5 disk");
+    variants.push("ps5 standard");
+    variants.push("standard edition");
+    variants.push("disc edition");
+    variants.push("ps5 console");
     variants.push("playstation 5");
     variants.push("ps5");
   } else if (q.includes("ps5 digital") || q.includes("playstation 5 digital")) {
     variants.push("playstation 5 digital");
     variants.push("ps5 digital");
+    variants.push("digital edition");
     variants.push("playstation 5");
+    variants.push("ps5");
   } else if (q.includes("ps5") || q.includes("playstation 5")) {
     variants.push("playstation 5");
     variants.push("ps5");
+    variants.push("ps5 console");
   }
 
   if (q.includes("xbox series x")) {
@@ -589,7 +579,7 @@ function buildSearchVariants(query) {
 
   const deduped = [...new Set(variants.filter(Boolean))];
 
-  if (isConsoleBundleIntent(q)) {
+  if (isConsoleBundleIntent(q) || q.includes("ps5") || q.includes("playstation 5")) {
     return buildConsoleBundleVariants(query, deduped);
   }
 
@@ -700,6 +690,18 @@ function filterConsoleBundleIntent(query, items = []) {
   return filtered.length ? filtered : items;
 }
 
+function isConsoleDiscDigitalSearch(text) {
+  const q = normalizeText(text);
+  return (
+    q.includes("ps5 disc") ||
+    q.includes("ps5 disk") ||
+    q.includes("playstation 5 disc") ||
+    q.includes("playstation 5 disk") ||
+    q.includes("ps5 digital") ||
+    q.includes("playstation 5 digital")
+  );
+}
+
 async function searchWithFallbacks({
   query,
   maxPrice,
@@ -713,7 +715,14 @@ async function searchWithFallbacks({
   const searchText = normalizeText(query);
   let combined = [];
 
-  for (const variant of variants) {
+  const shouldSearchAllVariants =
+    isConsoleDiscDigitalSearch(searchText) ||
+    searchText.includes("ps5") ||
+    searchText.includes("playstation 5");
+
+  for (let i = 0; i < variants.length; i += 1) {
+    const variant = variants[i];
+
     const results = await browseSearch({
       query: variant,
       maxPrice,
@@ -725,7 +734,11 @@ async function searchWithFallbacks({
 
     combined = uniqueByItemId([...combined, ...results]);
 
-    if (combined.length >= limit * 3) {
+    if (!shouldSearchAllVariants && combined.length >= limit * 3) {
+      break;
+    }
+
+    if (shouldSearchAllVariants && i >= 5 && combined.length >= limit * 2) {
       break;
     }
   }
@@ -759,7 +772,9 @@ async function searchWithFallbacks({
   if (allowConditionFallback && condition) {
     let fallbackCombined = [...combined];
 
-    for (const variant of variants) {
+    for (let i = 0; i < variants.length; i += 1) {
+      const variant = variants[i];
+
       const results = await browseSearch({
         query: variant,
         maxPrice,
@@ -771,7 +786,11 @@ async function searchWithFallbacks({
 
       fallbackCombined = uniqueByItemId([...fallbackCombined, ...results]);
 
-      if (fallbackCombined.length >= limit * 3) {
+      if (!shouldSearchAllVariants && fallbackCombined.length >= limit * 3) {
+        break;
+      }
+
+      if (shouldSearchAllVariants && i >= 5 && fallbackCombined.length >= limit * 2) {
         break;
       }
     }
