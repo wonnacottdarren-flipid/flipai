@@ -452,6 +452,10 @@ function limitVariantsForFindDeals(variants = [], query = "") {
     return clean.slice(0, 4);
   }
 
+  if (normalizedQuery.includes("dyson") && normalizedQuery.includes("main body")) {
+    return clean.slice(0, 4);
+  }
+
   if (
     normalizedQuery.includes("ps5") ||
     normalizedQuery.includes("playstation 5") ||
@@ -1084,6 +1088,50 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
   });
 }
 
+function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
+  return deals.filter((item) => {
+    const label = String(item?.finderLabel || "").toLowerCase();
+    const compCount = Number(item?.scanner?.compCount || 0);
+    const confidence = Number(item?.scanner?.confidence || 0);
+    const warningCount = Array.isArray(item?.warningFlags) ? item.warningFlags.length : 0;
+    const score = Number(item?.dealScore || 0);
+    const estimatedProfit = Number(item?.scanner?.estimatedProfit || item?.estimatedProfit || 0);
+    const marginPercent = Number(item?.scanner?.marginPercent || item?.marginPercent || 0);
+    const offerProfit = Number(item?.offerProfit || item?.scanner?.offerProfit || 0);
+
+    if (label.includes("buy")) {
+      return (
+        estimatedProfit >= 18 &&
+        marginPercent >= 9 &&
+        score >= 55 &&
+        warningCount <= 2 &&
+        (compCount >= 2 || confidence >= 45)
+      );
+    }
+
+    if (label.includes("offer")) {
+      return (
+        offerProfit >= 15 &&
+        score >= 50 &&
+        warningCount <= 2 &&
+        (compCount >= 2 || confidence >= 45)
+      );
+    }
+
+    if (includeTightDeals && label.includes("tight")) {
+      return (
+        estimatedProfit >= 8 &&
+        marginPercent >= 5 &&
+        score >= 36 &&
+        warningCount <= 2 &&
+        (compCount >= 1 || confidence >= 35)
+      );
+    }
+
+    return false;
+  });
+}
+
 app.get("/api/me", (req, res) => {
   try {
     const user = getUserFromCookie(req);
@@ -1295,7 +1343,7 @@ app.post("/api/find-deals", async (req, res) => {
           })
         : createGenericPricingModel(cleanMarket);
 
-    let deals = cleanListings.map((item) =>
+    const evaluatedDeals = cleanListings.map((item) =>
       evaluateDeal({
         item,
         pricingModel,
@@ -1304,7 +1352,11 @@ app.post("/api/find-deals", async (req, res) => {
       })
     );
 
-    deals = filterDealsForOutput(deals, Boolean(includeTightDeals));
+    let deals = filterDealsForOutput(evaluatedDeals, Boolean(includeTightDeals));
+
+    if (!deals.length) {
+      deals = applyEmergencyDealFallback(evaluatedDeals, Boolean(includeTightDeals));
+    }
 
     const preferredDeals = applyBundlePreferenceFallback(deals, queryContext);
     const finalDeals = preferredDeals
