@@ -2,6 +2,9 @@ const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 const EBAY_BROWSE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
 const EBAY_SCOPE = "https://api.ebay.com/oauth/api_scope";
 
+const EBAY_REQUEST_TIMEOUT_MS = Number(process.env.EBAY_REQUEST_TIMEOUT_MS || 8000);
+const EBAY_TOKEN_TIMEOUT_MS = Number(process.env.EBAY_TOKEN_TIMEOUT_MS || 8000);
+
 let cachedToken = null;
 let cachedTokenExpiresAt = 0;
 
@@ -31,6 +34,48 @@ function normalizeText(value) {
 
 function hasAny(text, phrases = []) {
   return phrases.some((phrase) => text.includes(phrase));
+}
+
+function createAbortSignal(timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error("Request timeout")), timeoutMs);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+async function safeReadJson(res) {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      raw: text,
+    };
+  }
+}
+
+async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const { signal, clear } = createAbortSignal(timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal,
+    });
+
+    const data = await safeReadJson(res);
+    return { res, data };
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clear();
+  }
 }
 
 function isDysonMainUnitQuery(text) {
@@ -207,16 +252,18 @@ async function getEbayAccessToken() {
     scope: EBAY_SCOPE,
   });
 
-  const res = await fetch(EBAY_TOKEN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${buildBasicAuth(clientId, clientSecret)}`,
+  const { res, data } = await fetchJsonWithTimeout(
+    EBAY_TOKEN_URL,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${buildBasicAuth(clientId, clientSecret)}`,
+      },
+      body: body.toString(),
     },
-    body: body.toString(),
-  });
-
-  const data = await res.json();
+    EBAY_TOKEN_TIMEOUT_MS
+  );
 
   if (!res.ok) {
     throw new Error(
@@ -340,15 +387,17 @@ async function browseSearch({
     params.set("filter", filter);
   }
 
-  const res = await fetch(`${EBAY_BROWSE_URL}?${params.toString()}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-EBAY-C-MARKETPLACE-ID": marketplaceId,
-      Accept: "application/json",
+  const { res, data } = await fetchJsonWithTimeout(
+    `${EBAY_BROWSE_URL}?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-EBAY-C-MARKETPLACE-ID": marketplaceId,
+        Accept: "application/json",
+      },
     },
-  });
-
-  const data = await res.json();
+    EBAY_REQUEST_TIMEOUT_MS
+  );
 
   if (!res.ok) {
     throw new Error(data.errors?.[0]?.message || "Could not search eBay.");
@@ -702,6 +751,18 @@ function isConsoleDiscDigitalSearch(text) {
   );
 }
 
+async function safeBrowseSearch(args) {
+  try {
+    return await browseSearch(args);
+  } catch (err) {
+    console.warn("eBay browseSearch failed:", {
+      query: args?.query,
+      message: err?.message || String(err),
+    });
+    return [];
+  }
+}
+
 async function searchWithFallbacks({
   query,
   maxPrice,
@@ -723,7 +784,7 @@ async function searchWithFallbacks({
   for (let i = 0; i < variants.length; i += 1) {
     const variant = variants[i];
 
-    const results = await browseSearch({
+    const results = await safeBrowseSearch({
       query: variant,
       maxPrice,
       condition,
@@ -775,7 +836,7 @@ async function searchWithFallbacks({
     for (let i = 0; i < variants.length; i += 1) {
       const variant = variants[i];
 
-      const results = await browseSearch({
+      const results = await safeBrowseSearch({
         query: variant,
         maxPrice,
         condition: "",
