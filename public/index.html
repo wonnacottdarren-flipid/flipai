@@ -1865,9 +1865,9 @@
 
     function getDealTypeLabel(finderLabel) {
       const label = String(finderLabel || "").toLowerCase();
-      if (label.includes("offer")) return "Offer deal";
-      if (label.includes("tight")) return "Tight deal";
-      if (label.includes("buy")) return "Buy now deal";
+      if (label.includes("offer")) return "Offer target";
+      if (label.includes("tight")) return "Tight check";
+      if (label.includes("buy")) return "Strong buy";
       return "Deal";
     }
 
@@ -1890,6 +1890,28 @@
       if (value >= 40) return "strong";
       if (value >= 15) return "mid";
       return "weak";
+    }
+
+    function getReasonHeading(deal) {
+      const label = String(deal?.finderLabel || "").toLowerCase();
+      if (label.includes("buy")) return "Why this looks buyable";
+      if (label.includes("offer")) return "Why this may be worth an offer";
+      if (label.includes("tight")) return "Why this is only a tight check";
+      return "Why this ranks here";
+    }
+
+    function getPrimaryActionLabel(deal) {
+      const label = String(deal?.finderLabel || "").toLowerCase();
+      if (label.includes("buy")) return "Analyze this Buy";
+      if (label.includes("offer")) return "Review Offer Route";
+      if (label.includes("tight")) return "Check Before Buying";
+      return "Send to Analyzer";
+    }
+
+    function getListingActionLabel(deal) {
+      const label = String(deal?.finderLabel || "").toLowerCase();
+      if (label.includes("offer")) return "Open Listing to Negotiate";
+      return "Open Listing";
     }
 
     function renderEmptyStateCard(title, lines = [], bullets = []) {
@@ -2155,6 +2177,11 @@
         buyingOptions: Array.isArray(rawDeal.buyingOptions) ? rawDeal.buyingOptions : [],
         finderLabel: rawDeal.finderLabel || "",
         marginPercent: Number(scanner.marginPercent || 0),
+        compCount: Number(scanner.compCount || rawDeal.compCount || 0),
+        confidence: Number(scanner.confidence || rawDeal.confidence || 0),
+        confidenceLabel: scanner.confidenceLabel || rawDeal.confidenceLabel || "",
+        undervaluedAmount: Number(rawDeal.undervaluedAmount || 0),
+        undervaluedPercent: Number(rawDeal.undervaluedPercent || 0),
         offerOpportunityType: normalizeOfferType(
           rawDeal.offerOpportunityType ||
           bestOffer?.offerOpportunityType ||
@@ -2201,12 +2228,12 @@
     function buildDealSubtitle(deal) {
       const typeClass = getDealTypeClass(deal.finderLabel);
       if (typeClass === "offer") {
-        return "This listing looks most attractive if the seller accepts an offer at the right level.";
+        return "This is stronger as an offer play than a straight buy. Check the suggested route before committing.";
       }
       if (typeClass === "tight") {
-        return "This is a borderline opportunity. Margin looks tighter, so check comps and condition carefully.";
+        return "This is a borderline setup. Only worth pursuing if condition and comps still hold up after checking.";
       }
-      return "This looks viable at the current listed price based on FlipAI's current scoring.";
+      return "This currently looks strong enough to review as a potential buy at the listed price.";
     }
 
     function renderDealTypeBanner(finderLabel) {
@@ -2247,6 +2274,10 @@
         bullets.push(`${Number(deal.compCount || 0)} matching comps support this pricing estimate.`);
       }
 
+      if (deal.confidenceLabel) {
+        bullets.push(`Confidence is currently rated ${deal.confidenceLabel}.`);
+      }
+
       if (deal.offerOpportunityType) {
         bullets.push(`Best Offer gives a negotiation route, currently favouring ${normalizeOfferType(deal.offerOpportunityType)}.`);
       }
@@ -2267,7 +2298,7 @@
 
       return `
         <div class="deal-reasons">
-          <h4>Why this is a deal</h4>
+          <h4>${escapeHtml(getReasonHeading(deal))}</h4>
           <ul>
             ${bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}
           </ul>
@@ -2526,10 +2557,10 @@
                   ${renderBestOfferBox(deal.bestOffer, deal.offerOpportunityType)}
 
                   <div class="deal-actions">
-                    <button onclick="useDealForAnalysis(${index}, '__lastDeals')">Send to Analyzer</button>
+                    <button onclick="useDealForAnalysis(${index}, '__lastDeals')">${escapeHtml(getPrimaryActionLabel(deal))}</button>
                     ${
                       deal.url
-                        ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
+                        ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(getListingActionLabel(deal))}</a>`
                         : ""
                     }
                   </div>
@@ -2581,6 +2612,8 @@
         image: rawDeal.imageUrl || rawDeal.image?.imageUrl || "",
         marginPercent: Number(scanner.marginPercent || 0),
         compCount: Number(scanner.compCount || 0),
+        confidence: Number(scanner.confidence || 0),
+        confidenceLabel: scanner.confidenceLabel || "",
         offerOpportunityType: normalizeOfferType(
           rawDeal.offerOpportunityType ||
           bestOffer?.offerOpportunityType ||
@@ -2698,14 +2731,20 @@
                         <div class="label">
                           ${
                             getDealTypeClass(deal.finderLabel) === "offer"
-                              ? "Profit at current ask"
+                              ? "Profit at ask"
                               : "Estimated profit"
                           }
                         </div>
                         <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
                           ${currency(deal.estimatedProfit)}
                         </div>
-                        <div class="subvalue">Profit view right now</div>
+                        <div class="subvalue">
+                          ${
+                            getDealTypeClass(deal.finderLabel) === "offer"
+                              ? "Usually better if negotiated lower"
+                              : "Profit view right now"
+                          }
+                        </div>
                       </div>
 
                       <div class="deal-highlight secondary">
@@ -2762,10 +2801,10 @@
                     ${renderBestOfferBox(deal.bestOffer, deal.offerOpportunityType)}
 
                     <div class="deal-actions">
-                      <button onclick="useDealForAnalysis(${index}, '__lastFoundDeals')">Send to Analyzer</button>
+                      <button onclick="useDealForAnalysis(${index}, '__lastFoundDeals')">${escapeHtml(getPrimaryActionLabel(deal))}</button>
                       ${
                         deal.url
-                          ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
+                          ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(getListingActionLabel(deal))}</a>`
                           : ""
                       }
                     </div>
