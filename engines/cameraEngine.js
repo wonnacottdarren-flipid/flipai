@@ -33,9 +33,50 @@ const ACCESSORY_CATEGORY_TERMS = [
 const NON_CAMERA_CATEGORY_TERMS = [
   "camera manuals and guides",
   "instruction manuals",
+  "books",
   "books, comics & magazines",
   "camera drones",
   "binoculars & telescopes",
+  "digital camera parts",
+  "replacement parts & tools",
+];
+
+const BOOK_TERMS = [
+  "guide",
+  "manual",
+  "handbook",
+  "instruction book",
+  "photography book",
+  "book only",
+  "david busch",
+  "for dummies",
+  "field guide",
+];
+
+const PARTS_TERMS = [
+  "lcd",
+  "screen",
+  "display",
+  "backlight",
+  "replacement",
+  "repair part",
+  "repair parts",
+  "spare part",
+  "spare parts",
+  "flex cable",
+  "digitizer",
+  "touch panel",
+  "battery door",
+  "shutter button",
+  "mainboard",
+  "main board",
+  "motherboard",
+  "sensor unit",
+  "screen assembly",
+  "display assembly",
+  "camera part",
+  "camera parts",
+  "body shell",
 ];
 
 const HARD_REJECT_TERMS = [
@@ -376,6 +417,8 @@ function isObviousAccessoryTitle(titleText) {
 
   if (hasAny(t, STRICT_ACCESSORY_ONLY_TERMS)) return true;
   if (looksLikeLensOnlyTitle(t)) return true;
+  if (hasAny(t, BOOK_TERMS)) return true;
+  if (hasAny(t, PARTS_TERMS)) return true;
 
   return false;
 }
@@ -437,10 +480,16 @@ function isHardAccessoryListing(text, item, family = "") {
 }
 
 function isClearlyNonCamera(item, text, family = "") {
+  const t = normalizeCameraText(text);
   const titleText = getTitleText(item);
+  const categoryText = getCategoryText(item);
 
   if (looksLikeMainCameraTitle(titleText, family)) return false;
   if (isNonCameraCategory(item)) return true;
+  if (hasAny(titleText, BOOK_TERMS)) return true;
+  if (hasAny(titleText, PARTS_TERMS)) return true;
+  if (hasAny(categoryText, ["books", "digital camera parts", "replacement parts tools", "replacement parts & tools"])) return true;
+  if (hasAny(t, ["guide to digital photography", "guide to photography"])) return true;
 
   if (family !== "gopro_hero_11" && looksLikeLensOnlyTitle(titleText)) return true;
   if (hasAny(titleText, LENS_TERMS) && !titleText.includes("body") && !titleText.includes("camera")) return true;
@@ -1083,16 +1132,7 @@ export const cameraEngine = {
   },
 
   matchesItem(item, queryContext) {
-    const debug = getMatchDebug(item, queryContext);
-
-    console.log("CAMERA DEBUG:", {
-      title: item?.title,
-      matched: debug?.matched,
-      reason: debug?.reason,
-      family: queryContext?.family,
-    });
-
-    return debug.matched;
+    return getMatchDebug(item, queryContext).matched;
   },
 
   buildPricingModel({ queryContext, marketItems = [], listingItems = [] }) {
