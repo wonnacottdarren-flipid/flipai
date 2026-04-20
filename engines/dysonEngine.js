@@ -145,7 +145,6 @@ function isDysonUnitPartStyleListing(text) {
     "body unit part",
     "main body part",
     "housing body a unit part",
-    "part 970",
     "part no",
     "part number",
   ]);
@@ -189,22 +188,6 @@ function isLikelyValidDysonMainUnitListing(text) {
   if (isDysonAssemblyStyleListing(text)) return false;
   if (isDysonUnitPartStyleListing(text)) return false;
   return true;
-}
-
-function isAllowedPartsCategoryMainUnit(text, item) {
-  if (!isDysonPartsCategory(item)) {
-    return true;
-  }
-
-  if (!isLikelyValidDysonMainUnitListing(text)) {
-    return false;
-  }
-
-  if (isDysonHousingStyleListing(text)) return false;
-  if (isDysonAssemblyStyleListing(text)) return false;
-  if (isDysonUnitPartStyleListing(text)) return false;
-
-  return hasStrongWorkingSignals(text);
 }
 
 function matchesDysonVariant(searchText, item) {
@@ -253,7 +236,7 @@ function matchesDysonVariant(searchText, item) {
   if (wantsMainUnit) {
     if (titleHasOutsize) return false;
     if (!titleIsMainUnit) return false;
-    if (!isAllowedPartsCategoryMainUnit(titleText, item)) return false;
+    if (isDysonFaultyStyleListing(titleText)) return false;
     return true;
   }
 
@@ -266,10 +249,7 @@ function matchesDysonVariant(searchText, item) {
     return titleIsFullMachine;
   }
 
-  if (isDysonPartsCategory(item) && !isAllowedPartsCategoryMainUnit(titleText, item)) {
-    return false;
-  }
-
+  if (isDysonPartsCategory(item) && !titleIsMainUnit) return false;
   return true;
 }
 
@@ -327,7 +307,7 @@ function scoreDysonTitleAgainstQuery(searchText, item) {
   }
 
   if (hasStrongWorkingSignals(titleText)) {
-    score += 0.28;
+    score += 0.2;
   }
 
   if (isDysonHardAccessoryOnly(titleText)) {
@@ -351,11 +331,7 @@ function scoreDysonTitleAgainstQuery(searchText, item) {
   }
 
   if (isDysonFaultyStyleListing(titleText)) {
-    score -= 0.85;
-  }
-
-  if (isDysonPartsCategory(item) && !hasStrongWorkingSignals(titleText)) {
-    score -= 0.45;
+    score -= 1.2;
   }
 
   return score;
@@ -554,27 +530,22 @@ function getDysonListingWarnings(item, queryContext) {
 
   if (isDysonHousingStyleListing(titleText)) {
     warnings.push("Title suggests housing or shell style parts, not a clean resale-ready main unit.");
-    penalty += 40;
+    penalty += 55;
   }
 
   if (isDysonAssemblyStyleListing(titleText)) {
     warnings.push("Title suggests an assembly listing rather than a straightforward working main motor unit.");
-    penalty += 28;
+    penalty += 35;
   }
 
   if (isDysonUnitPartStyleListing(titleText)) {
-    warnings.push("Title reads like a part-number style component listing rather than a complete working main unit.");
-    penalty += 40;
+    warnings.push("Title reads like a part-number style component listing rather than a complete main unit.");
+    penalty += 55;
   }
 
   if (isDysonFaultyStyleListing(titleText)) {
     warnings.push("Fault wording detected in the title, so resale risk is much higher.");
-    penalty += 55;
-  }
-
-  if (isDysonPartsCategory(item) && !hasStrongWorkingSignals(titleText)) {
-    warnings.push("This is in a parts category without a strong tested-working signal.");
-    penalty += 20;
+    penalty += 80;
   }
 
   if (
@@ -582,8 +553,8 @@ function getDysonListingWarnings(item, queryContext) {
     isDysonPartsCategory(item) &&
     !hasStrongWorkingSignals(titleText)
   ) {
-    warnings.push("Main-unit search matched a parts-category listing without clear proof it is fully working.");
-    penalty += 15;
+    warnings.push("This is in a parts category and the title does not clearly confirm fully working condition.");
+    penalty += 12;
   }
 
   return {
@@ -662,23 +633,11 @@ export const dysonEngine = {
         variants.push("dyson v11 main body");
         variants.push("dyson v11 motor unit");
         variants.push("dyson v11 body only");
-        variants.push("dyson v11 unit only");
-        variants.push("dyson v11 handheld unit");
-        variants.push("dyson v11 bare unit");
-        variants.push("dyson cordless v11 main body");
-        variants.push("dyson cordless v11 motor unit");
-        variants.push("dyson v11 machine body");
-        variants.push("dyson v11 vacuum body");
-        variants.push("dyson v11 body");
       } else {
         variants.push("dyson main unit");
         variants.push("dyson main body");
         variants.push("dyson motor unit");
         variants.push("dyson body only");
-        variants.push("dyson unit only");
-        variants.push("dyson bare unit");
-        variants.push("dyson machine body");
-        variants.push("dyson vacuum body");
       }
     } else if (isV11) {
       variants.push("dyson v11");
@@ -710,13 +669,13 @@ export const dysonEngine = {
     let estimatedResale = baseEstimatedResale;
 
     if (isDysonFaultyStyleListing(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.72);
+      estimatedResale = roundMoney(baseEstimatedResale * 0.55);
     } else if (isDysonHousingStyleListing(titleText) || isDysonUnitPartStyleListing(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.62);
+      estimatedResale = roundMoney(baseEstimatedResale * 0.5);
     } else if (isDysonAssemblyStyleListing(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.76);
+      estimatedResale = roundMoney(baseEstimatedResale * 0.68);
     } else if (isDysonPartsCategory(item) && !hasStrongWorkingSignals(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.82);
+      estimatedResale = roundMoney(baseEstimatedResale * 0.92);
     }
 
     return {
