@@ -184,9 +184,6 @@ function isLikelyValidDysonMainUnitListing(text) {
   if (!isDysonMainUnitListing(text)) return false;
   if (isDysonHardAccessoryOnly(text)) return false;
   if (isDysonFullMachineListing(text)) return false;
-  if (isDysonHousingStyleListing(text)) return false;
-  if (isDysonAssemblyStyleListing(text)) return false;
-  if (isDysonUnitPartStyleListing(text)) return false;
   return true;
 }
 
@@ -221,22 +218,18 @@ function matchesDysonVariant(searchText, item) {
 
   if (wantsV11 && !titleHasV11) return false;
 
-  if (isDysonHousingStyleListing(titleText)) return false;
-  if (isDysonAssemblyStyleListing(titleText)) return false;
-  if (isDysonUnitPartStyleListing(titleText)) return false;
-
   if (wantsOutsize) {
     if (!titleHasOutsize) return false;
     if (titleIsMainUnit) return false;
     if (isDysonPartsCategory(item)) return false;
-    if (isDysonFaultyStyleListing(titleText)) return false;
     return titleIsFullMachine;
   }
 
   if (wantsMainUnit) {
     if (titleHasOutsize) return false;
-    if (!titleIsMainUnit) return false;
-    if (isDysonFaultyStyleListing(titleText)) return false;
+    if (!isDysonMainUnitListing(titleText)) return false;
+    if (isDysonHardAccessoryOnly(titleText)) return false;
+    if (isDysonFullMachineListing(titleText)) return false;
     return true;
   }
 
@@ -245,7 +238,6 @@ function matchesDysonVariant(searchText, item) {
     if (titleHasOutsize) return false;
     if (titleIsMainUnit) return false;
     if (isDysonPartsCategory(item)) return false;
-    if (isDysonFaultyStyleListing(titleText)) return false;
     return titleIsFullMachine;
   }
 
@@ -295,7 +287,7 @@ function scoreDysonTitleAgainstQuery(searchText, item) {
     searchText.includes("vacuum body") ||
     searchText.includes("body")
   ) {
-    score += isLikelyValidDysonMainUnitListing(titleText) ? 0.4 : -0.35;
+    score += isLikelyValidDysonMainUnitListing(titleText) ? 0.4 : -0.2;
   }
 
   if (
@@ -319,19 +311,19 @@ function scoreDysonTitleAgainstQuery(searchText, item) {
   }
 
   if (isDysonHousingStyleListing(titleText)) {
-    score -= 1.1;
+    score -= 0.45;
   }
 
   if (isDysonAssemblyStyleListing(titleText)) {
-    score -= 0.9;
+    score -= 0.35;
   }
 
   if (isDysonUnitPartStyleListing(titleText)) {
-    score -= 1.1;
+    score -= 0.45;
   }
 
   if (isDysonFaultyStyleListing(titleText)) {
-    score -= 1.2;
+    score -= 0.7;
   }
 
   return score;
@@ -386,12 +378,12 @@ function buildLowCompFallbackTotals(searchText, marketPool = [], listingPool = [
   const isOutsize = searchText.includes("outsize");
 
   const relaxedMarket = marketPool
-    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? 0.12 : 0.15))
+    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? -0.1 : 0.15))
     .slice(0, 16)
     .map((entry) => entry.total);
 
   const relaxedListings = listingPool
-    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? 0.12 : 0.15))
+    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? -0.1 : 0.15))
     .slice(0, 14)
     .map((entry) => entry.total);
 
@@ -403,10 +395,10 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
   const marketPool = enrichDysonCompPool(searchText, marketItems);
   const listingPool = enrichDysonCompPool(searchText, listingItems);
 
-  const strongMarket = marketPool.filter((entry) => entry.score >= 0.4);
+  const strongMarket = marketPool.filter((entry) => entry.score >= 0.25);
   const usableMarket = strongMarket.length >= 3 ? strongMarket : marketPool;
 
-  const strongListings = listingPool.filter((entry) => entry.score >= 0.4);
+  const strongListings = listingPool.filter((entry) => entry.score >= 0.25);
   const usableListings = strongListings.length >= 2 ? strongListings : listingPool;
 
   let marketTotals = removePriceOutliers(usableMarket.map((entry) => entry.total));
@@ -455,7 +447,7 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
 
   let conservativeMultiplier = 0.95;
   if (isOutsize) conservativeMultiplier = 0.97;
-  else if (isMainUnit) conservativeMultiplier = 0.98;
+  else if (isMainUnit) conservativeMultiplier = 0.96;
 
   let estimatedResale = roundMoney(baseline * conservativeMultiplier);
 
@@ -472,17 +464,17 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
   if (isMainUnit) {
     if (marketMedian && listingMedian) {
       estimatedResale = roundMoney(
-        Math.max(estimatedResale, marketMedian * 0.97, listingMedian * 0.94)
+        Math.max(estimatedResale, marketMedian * 0.96, listingMedian * 0.92)
       );
       pricingMode =
         pricingMode === "Low-comp fallback blend"
           ? "Main unit fallback blend"
           : "Main unit weighted median";
     } else if (marketMedian) {
-      estimatedResale = roundMoney(Math.max(estimatedResale, marketMedian * 0.97));
+      estimatedResale = roundMoney(Math.max(estimatedResale, marketMedian * 0.96));
       pricingMode = "Main unit fallback blend";
     } else if (listingMedian) {
-      estimatedResale = roundMoney(Math.max(estimatedResale, listingMedian * 0.94));
+      estimatedResale = roundMoney(Math.max(estimatedResale, listingMedian * 0.92));
       pricingMode = "Main unit listings fallback";
     }
   }
@@ -530,22 +522,22 @@ function getDysonListingWarnings(item, queryContext) {
 
   if (isDysonHousingStyleListing(titleText)) {
     warnings.push("Title suggests housing or shell style parts, not a clean resale-ready main unit.");
-    penalty += 55;
+    penalty += 28;
   }
 
   if (isDysonAssemblyStyleListing(titleText)) {
     warnings.push("Title suggests an assembly listing rather than a straightforward working main motor unit.");
-    penalty += 35;
+    penalty += 18;
   }
 
   if (isDysonUnitPartStyleListing(titleText)) {
     warnings.push("Title reads like a part-number style component listing rather than a complete main unit.");
-    penalty += 55;
+    penalty += 28;
   }
 
   if (isDysonFaultyStyleListing(titleText)) {
     warnings.push("Fault wording detected in the title, so resale risk is much higher.");
-    penalty += 80;
+    penalty += 45;
   }
 
   if (
@@ -554,7 +546,7 @@ function getDysonListingWarnings(item, queryContext) {
     !hasStrongWorkingSignals(titleText)
   ) {
     warnings.push("This is in a parts category and the title does not clearly confirm fully working condition.");
-    penalty += 12;
+    penalty += 10;
   }
 
   return {
@@ -669,13 +661,13 @@ export const dysonEngine = {
     let estimatedResale = baseEstimatedResale;
 
     if (isDysonFaultyStyleListing(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.55);
-    } else if (isDysonHousingStyleListing(titleText) || isDysonUnitPartStyleListing(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.5);
-    } else if (isDysonAssemblyStyleListing(titleText)) {
       estimatedResale = roundMoney(baseEstimatedResale * 0.68);
+    } else if (isDysonHousingStyleListing(titleText) || isDysonUnitPartStyleListing(titleText)) {
+      estimatedResale = roundMoney(baseEstimatedResale * 0.72);
+    } else if (isDysonAssemblyStyleListing(titleText)) {
+      estimatedResale = roundMoney(baseEstimatedResale * 0.8);
     } else if (isDysonPartsCategory(item) && !hasStrongWorkingSignals(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.92);
+      estimatedResale = roundMoney(baseEstimatedResale * 0.94);
     }
 
     return {
