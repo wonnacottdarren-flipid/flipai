@@ -1,10 +1,13 @@
 import OpenAI from "openai";
+import { safeUser, incrementUsage, getUserById } from "./db.js";
+import jwt from "jsonwebtoken";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 const model = process.env.OPENAI_MODEL || "gpt-5.4";
+const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 
 const developerPrompt = `You are a professional UK-based eBay reseller and product flipper with 10+ years of real-world experience.
 
@@ -138,7 +141,7 @@ function toMoney(value) {
 function safeJsonParse(text) {
   try {
     return JSON.parse(text);
-  } catch (error) {
+  } catch {
     throw new Error("Model returned invalid JSON.");
   }
 }
@@ -147,6 +150,32 @@ function clampTitle(title) {
   const text = String(title || "").trim();
   if (text.length <= 80) return text;
   return text.slice(0, 80).trim();
+}
+
+function getUserFromCookie(req) {
+  try {
+    const token = req.cookies?.flipai_token;
+    if (!token) return null;
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return getUserById(decoded.userId);
+  } catch {
+    return null;
+  }
+}
+
+function getPlanLimit(user) {
+  const plan = String(user?.plan || "free").toLowerCase();
+  const status = String(user?.subscriptionStatus || "free").toLowerCase();
+
+  if (plan === "pro" && (status === "active" || status === "trialing")) {
+    return Infinity;
+  }
+
+  if (plan === "starter" && (status === "active" || status === "trialing")) {
+    return 25;
+  }
+
+  return 5;
 }
 
 function buildEstimatedRange(forcedEstimatedResale, manualSoldComps) {
@@ -259,7 +288,7 @@ function normaliseOutput(parsed, context) {
   return parsed;
 }
 
-export async function runAnalysis({
+async function generateAnalysis({
   product,
   condition,
   buyPrice,
@@ -352,4 +381,116 @@ export async function runAnalysis({
     forcedEstimatedResale: forcedResale,
     pricingMode,
   });
+}
+
+export async function runAnalysis(req, res) {
+  try {
+    const user = getUserFromCookie(req);
+
+    if (!user) {
+      return res.status(401).json({ error: "Please sign in." });
+    }
+
+    const planLimit = getPlanLimit(user);
+    const usageCount = Number(user.usageCount || 0);
+
+    if (Number.isFinite(planLimit) && usageCount >= planLimit) {
+      return res.status(403).json({
+        error:
+          planLimit === 25
+            ? "You have used all 25 Starter analyses. Upgrade to Pro for unlimited access."
+            : "You have used all 5 free analyses. Upgrade to continue.",
+        locked: true,
+        user: safeUser(user),
+      });
+    }
+
+    const {
+      product,
+      condition,
+      buyPrice = 0,
+      repairCost = 0,
+      extras = "",
+      goal = "Fast sale",
+      manualSoldPrices = "",
+    } = req.body || {};
+
+    const manualPrices = String(manualSoldPrices || "")
+      .split(/[\n,]+/)
+      .map((value) => Number(String(value).trim()))
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    const sortedPrices = [...manualPrices].sort((a, b) => a - b);
+    const compCount = sortedPrices.length;
+
+    const avgSoldPrice = compCount
+      ? roundMoney(sortedPrices.reduce((sum, value) => sum + value, 0) / compCount)
+      : 0;
+
+    const medianSoldPrice = compCount
+      ? (
+          compCount % 2 === 0
+            ? roundMoney(
+                (sortedPrices[compCount / 2 - 1] + sortedPrices[compCount / 2]) / 2
+              )
+            : roundMoney(sortedPrices[Math.floor(compCount / 2)])
+        )
+      : 0;
+
+    const minSoldPrice = compCount ? roundMoney(sortedPrices[0]) : 0;
+    const maxSoldPrice = compCount ? roundMoney(sortedPrices[compCount - 1]) : 0;
+
+    let confidence = 20;
+    if (compCount >= 3) confidence = 55;
+    if (compCount >= 5) confidence = 72;
+    if (compCount >= 8) confidence = 86;
+
+    let confidenceLabel = "Low";
+    if (confidence >= 80) confidenceLabel = "High";
+    else if (confidence >= 55) confidenceLabel = "Medium";
+
+    const manualSoldComps = {
+      connected: compCount > 0,
+      compCount,
+      avgSoldPrice,
+      medianSoldPrice,
+      minSoldPrice,
+      maxSoldPrice,
+      confidence,
+      confidenceLabel,
+    };
+
+    const forcedEstimatedResale =
+      compCount > 0 ? medianSoldPrice || avgSoldPrice || 0 : 0;
+
+    const pricingMode =
+      compCount > 0 ? "Manual sold comps" : "Condition estimate";
+
+    const result = await generateAnalysis({
+      product,
+      condition,
+      buyPrice: Number(buyPrice || 0),
+      repairCost: Number(repairCost || 0),
+      extras,
+      goal,
+      manualSoldPrices,
+      manualSoldComps,
+      forcedEstimatedResale,
+      pricingMode,
+    });
+
+    incrementUsage(user.id);
+    const refreshedUser = getUserById(user.id);
+
+    return res.json({
+      ok: true,
+      result,
+      user: safeUser(refreshedUser),
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      error: err.message || "Analysis failed.",
+    });
+  }
 }
