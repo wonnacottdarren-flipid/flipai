@@ -1334,6 +1334,13 @@ app.post("/api/find-deals", async (req, res) => {
       cleanMarket = cleanMarket.filter((item) => engine.matchesItem(item, queryContext));
     }
 
+    console.log("=== DEBUG: PIPELINE START ===");
+    console.log("Query:", query);
+    console.log("Search Variants:", fetchedListings.searchVariants);
+    console.log("Fetched Listings:", Array.isArray(fetchedListings.items) ? fetchedListings.items.length : 0);
+    console.log("After Clean Listings:", cleanListings.length);
+    console.log("Market Items:", cleanMarket.length);
+
     const pricingModel =
       engine && typeof engine.buildPricingModel === "function"
         ? engine.buildPricingModel({
@@ -1342,6 +1349,8 @@ app.post("/api/find-deals", async (req, res) => {
             listingItems: cleanListings,
           })
         : createGenericPricingModel(cleanMarket);
+
+    console.log("Pricing Model:", pricingModel);
 
     const evaluatedDeals = cleanListings.map((item) =>
       evaluateDeal({
@@ -1352,11 +1361,31 @@ app.post("/api/find-deals", async (req, res) => {
       })
     );
 
-    let deals = filterDealsForOutput(evaluatedDeals, Boolean(includeTightDeals));
+    console.log("Evaluated Deals:", evaluatedDeals.length);
+    console.log("Top 5 Evaluated:");
+    evaluatedDeals.slice(0, 5).forEach((d, i) => {
+      console.log(`#${i + 1}`, {
+        title: d.title,
+        price: d.price,
+        total: d.scanner?.totalBuyPrice,
+        resale: d.scanner?.estimatedResale,
+        profit: d.scanner?.estimatedProfit,
+        margin: d.scanner?.marginPercent,
+        score: d.dealScore,
+        label: d.finderLabel,
+        confidence: d.scanner?.confidence,
+        compCount: d.scanner?.compCount,
+        warnings: d.warningFlags,
+      });
+    });
 
-    if (!deals.length) {
-      deals = applyEmergencyDealFallback(evaluatedDeals, Boolean(includeTightDeals));
-    }
+    const strictDeals = filterDealsForOutput(evaluatedDeals, Boolean(includeTightDeals));
+    console.log("After STRICT filter:", strictDeals.length);
+
+    const fallbackDeals = applyEmergencyDealFallback(evaluatedDeals, Boolean(includeTightDeals));
+    console.log("After FALLBACK filter:", fallbackDeals.length);
+
+    let deals = strictDeals.length ? strictDeals : fallbackDeals;
 
     const preferredDeals = applyBundlePreferenceFallback(deals, queryContext);
     const finalDeals = preferredDeals
