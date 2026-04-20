@@ -152,7 +152,8 @@ function extractTotalPrice(item) {
 
 function extractItemUrl(item) {
   return String(
-    item?.itemWebUrl ||
+    item?.originalUrl ||
+      item?.itemWebUrl ||
       item?.viewItemURL ||
       item?.url ||
       item?.link ||
@@ -444,9 +445,10 @@ function dedupeItems(items = []) {
     const key =
       item?.itemId ||
       item?.legacyItemId ||
+      item?.originalUrl ||
       item?.itemWebUrl ||
       item?.viewItemURL ||
-      item?.url ||
+      item?.link ||
       `${extractItemTitle(item)}::${extractTotalPrice(item)}`;
 
     if (!key || seen.has(key)) continue;
