@@ -1851,9 +1851,11 @@
         "Untitled listing";
 
       const url =
+        rawDeal.url ||
+        rawDeal.affiliateUrl ||
+        rawDeal.originalUrl ||
         rawDeal.itemWebUrl ||
         rawDeal.viewItemURL ||
-        rawDeal.url ||
         rawDeal.link ||
         "";
 
@@ -1891,6 +1893,8 @@
         extras: "",
         repairCost: Number(scanner.repairCost || 0),
         url,
+        originalUrl: rawDeal.originalUrl || rawDeal.itemWebUrl || rawDeal.viewItemURL || rawDeal.link || "",
+        affiliateUrl: rawDeal.affiliateUrl || rawDeal.url || "",
         source: "eBay",
         image,
         bestDeal: Boolean(rawDeal.bestDeal),
@@ -1921,7 +1925,7 @@
       document.getElementById("buyPrice").value = Number(totalBuyPrice || deal.price || 0).toFixed(2);
       document.getElementById("repairCost").value = Number(deal.repairCost || 0).toFixed(2);
       document.getElementById("manualSoldPrices").value = "";
-      document.getElementById("extras").value = deal.url || "";
+      document.getElementById("extras").value = deal.originalUrl || deal.url || "";
       document.getElementById("goal").value = "Fast sale";
 
       document.getElementById("analyzer").scrollIntoView({
@@ -2199,7 +2203,16 @@
         reason: rawDeal.reason || "Possible opportunity found.",
         condition: rawDeal.condition || "",
         marketBucket: rawDeal.marketBucket || "",
-        url: rawDeal.url || rawDeal.itemWebUrl || rawDeal.viewItemURL || rawDeal.itemWebUrl || "",
+        url:
+          rawDeal.url ||
+          rawDeal.affiliateUrl ||
+          rawDeal.originalUrl ||
+          rawDeal.itemWebUrl ||
+          rawDeal.viewItemURL ||
+          rawDeal.link ||
+          "",
+        originalUrl: rawDeal.originalUrl || rawDeal.itemWebUrl || rawDeal.viewItemURL || rawDeal.link || "",
+        affiliateUrl: rawDeal.affiliateUrl || rawDeal.url || "",
         repairCost: Number(scanner.repairCost || 0),
         bestOffer,
         buyingOptions: Array.isArray(rawDeal.buyingOptions) ? rawDeal.buyingOptions : [],
@@ -2360,7 +2373,7 @@
                   ${
                     deal.url
                       ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
-                      : ""
+                    : ""
                   }
                 </div>
               </div>
