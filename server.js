@@ -229,7 +229,6 @@ function buildBestOfferGuidance(item, scanner) {
   const aggressiveOffer = roundMoney(Math.min(askPrice * 0.82, askPrice));
 
   let maxSafeOffer = roundMoney(resale * 0.7);
-
   if (maxSafeOffer > askPrice) {
     maxSafeOffer = askPrice;
   }
@@ -592,7 +591,13 @@ function buildDealReasonBreakdown({
   };
 }
 
-function buildReasonText({ estimatedProfit, undervaluedAmount, offerOpportunity = false, offerPrice = 0, offerProfit = 0 }) {
+function buildReasonText({
+  estimatedProfit,
+  undervaluedAmount,
+  offerOpportunity = false,
+  offerPrice = 0,
+  offerProfit = 0,
+}) {
   if (offerOpportunity) {
     return `Not a clean buy at ask price, but looks workable around £${roundMoney(offerPrice).toFixed(2)} with about £${roundMoney(offerProfit).toFixed(2)} projected profit.`;
   }
@@ -658,16 +663,11 @@ function evaluateDeal({
   let offerProfit = 0;
 
   if (bestOffer?.hasBestOffer) {
-    const maxSafeProfit = Number(bestOffer?.profitAtMaxSafe || 0);
     const suggestedProfit = Number(bestOffer?.profitAtSuggested || 0);
     const aggressiveProfit = Number(bestOffer?.profitAtAggressive || 0);
+    const maxSafeProfit = Number(bestOffer?.profitAtMaxSafe || 0);
 
-    if (maxSafeProfit >= 15) {
-      offerOpportunity = true;
-      offerOpportunityType = "max safe offer";
-      offerPrice = Number(bestOffer.maxSafeOffer || 0);
-      offerProfit = maxSafeProfit;
-    } else if (suggestedProfit >= 15) {
+    if (suggestedProfit >= 15) {
       offerOpportunity = true;
       offerOpportunityType = "suggested offer";
       offerPrice = Number(bestOffer.suggestedOffer || 0);
@@ -677,6 +677,11 @@ function evaluateDeal({
       offerOpportunityType = "aggressive offer";
       offerPrice = Number(bestOffer.aggressiveOffer || 0);
       offerProfit = aggressiveProfit;
+    } else if (maxSafeProfit >= 15) {
+      offerOpportunity = true;
+      offerOpportunityType = "max safe offer";
+      offerPrice = Number(bestOffer.maxSafeOffer || 0);
+      offerProfit = maxSafeProfit;
     }
   }
 
