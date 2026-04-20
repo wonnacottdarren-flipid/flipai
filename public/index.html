@@ -667,6 +667,66 @@
       padding: 18px;
       border-radius: 18px;
       margin-bottom: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .deal-card-topline {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .deal-rank-banner,
+    .deal-type-banner,
+    .deal-priority-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.25px;
+      text-transform: uppercase;
+    }
+
+    .deal-rank-banner {
+      color: #4ade80;
+      background: rgba(34, 197, 94, 0.14);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .deal-rank-banner.top {
+      color: #93c5fd;
+      background: rgba(79,140,255,0.14);
+      border: 1px solid rgba(79,140,255,0.3);
+    }
+
+    .deal-type-banner.buy {
+      color: #bbf7d0;
+      background: rgba(34,197,94,0.14);
+      border: 1px solid rgba(34,197,94,0.28);
+    }
+
+    .deal-type-banner.offer {
+      color: #fde68a;
+      background: rgba(245,158,11,0.14);
+      border: 1px solid rgba(245,158,11,0.3);
+    }
+
+    .deal-type-banner.tight {
+      color: #dbeafe;
+      background: rgba(79,140,255,0.14);
+      border: 1px solid rgba(79,140,255,0.3);
+    }
+
+    .deal-priority-banner {
+      color: #dbeafe;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
     }
 
     .deal-title {
@@ -674,6 +734,13 @@
       font-size: 18px;
       line-height: 1.4;
       color: #eff6ff;
+    }
+
+    .deal-subtitle {
+      margin: 0 0 12px;
+      color: #cbd5e1;
+      font-size: 14px;
+      line-height: 1.6;
     }
 
     .deal-price-row {
@@ -826,6 +893,35 @@
       padding: 4px 0;
     }
 
+    .empty-state {
+      padding: 20px;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .empty-state h3 {
+      margin: 0 0 10px;
+      font-size: 20px;
+      color: #eff6ff;
+      letter-spacing: -0.3px;
+    }
+
+    .empty-state p {
+      margin: 0 0 10px;
+      color: #cbd5e1;
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .empty-state ul {
+      margin: 0;
+      padding-left: 18px;
+      color: #cbd5e1;
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
     .finder-hidden-note {
       margin-bottom: 14px;
       padding: 14px 16px;
@@ -855,6 +951,29 @@
       color: #dbeafe;
     }
 
+    .offer-box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .offer-type-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #fde68a;
+      background: rgba(245,158,11,0.14);
+      border: 1px solid rgba(245,158,11,0.26);
+      text-transform: uppercase;
+    }
+
     .offer-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -879,6 +998,11 @@
       font-size: 17px;
       font-weight: 800;
       color: #fff;
+    }
+
+    .offer-highlight {
+      border-color: rgba(79,140,255,0.28);
+      background: rgba(79,140,255,0.08);
     }
 
     .offer-subline {
@@ -1355,7 +1479,7 @@
     </div>
 
     <div class="footer">
-      FlipAI provides AI-assisted estimates only. Actual resale prices, fees, and profits may vary.
+      FlipAI provides AI-assisted estimates only. Actual resale prices, fees, profits, and offer acceptance may vary.
     </div>
   </div>
 
@@ -1488,6 +1612,49 @@
       if (value.includes("offer")) return "label-offer";
       if (value.includes("tight")) return "label-tight";
       return "";
+    }
+
+    function normalizeOfferType(value) {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      return text
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function getDealTypeLabel(finderLabel) {
+      const label = String(finderLabel || "").toLowerCase();
+      if (label.includes("offer")) return "Offer deal";
+      if (label.includes("tight")) return "Tight deal";
+      if (label.includes("buy")) return "Buy now deal";
+      return "Deal";
+    }
+
+    function getDealTypeClass(finderLabel) {
+      const label = String(finderLabel || "").toLowerCase();
+      if (label.includes("offer")) return "offer";
+      if (label.includes("tight")) return "tight";
+      return "buy";
+    }
+
+    function renderEmptyStateCard(title, lines = [], bullets = []) {
+      return `
+        <div class="empty-state">
+          <h3>${escapeHtml(title)}</h3>
+          ${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
+          ${
+            bullets.length
+              ? `
+                <ul>
+                  ${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+                </ul>
+              `
+              : ""
+          }
+        </div>
+      `;
     }
 
     function setAuthStatus(message, type) {
@@ -1659,6 +1826,7 @@
 
     function mapDealFields(rawDeal = {}) {
       const scanner = rawDeal.scanner || {};
+      const bestOffer = rawDeal.bestOffer || null;
 
       const price = Number(
         rawDeal.price?.value ??
@@ -1726,10 +1894,15 @@
         source: "eBay",
         image,
         bestDeal: Boolean(rawDeal.bestDeal),
-        bestOffer: rawDeal.bestOffer || null,
+        bestOffer,
         buyingOptions: Array.isArray(rawDeal.buyingOptions) ? rawDeal.buyingOptions : [],
         finderLabel: rawDeal.finderLabel || "",
-        marginPercent: Number(scanner.marginPercent || 0)
+        marginPercent: Number(scanner.marginPercent || 0),
+        offerOpportunityType: normalizeOfferType(
+          rawDeal.offerOpportunityType ||
+          bestOffer?.offerOpportunityType ||
+          bestOffer?.recommendedOfferType
+        )
       };
     }
 
@@ -1767,30 +1940,67 @@
       return Math.round(Number(value || 0) * 100) / 100;
     }
 
-    function renderBestOfferBox(bestOffer) {
+    function buildDealSubtitle(deal) {
+      const typeClass = getDealTypeClass(deal.finderLabel);
+      if (typeClass === "offer") {
+        return "This listing looks most attractive if the seller accepts an offer at the right level.";
+      }
+      if (typeClass === "tight") {
+        return "This is a borderline opportunity. Margin looks tighter, so check comps and condition carefully.";
+      }
+      return "This looks viable at the current listed price based on FlipAI's current scoring.";
+    }
+
+    function renderDealTypeBanner(finderLabel) {
+      if (!finderLabel) return "";
+      return `<div class="deal-type-banner ${getDealTypeClass(finderLabel)}">${escapeHtml(getDealTypeLabel(finderLabel))}</div>`;
+    }
+
+    function renderOfferPriorityBanner(offerOpportunityType) {
+      const label = normalizeOfferType(offerOpportunityType);
+      if (!label) return "";
+      return `<div class="deal-priority-banner">Priority: ${escapeHtml(label)}</div>`;
+    }
+
+    function renderBestOfferBox(bestOffer, offerOpportunityType = "") {
       if (!bestOffer || bestOffer.hasBestOffer !== true) {
         return "";
       }
 
+      const normalizedType = normalizeOfferType(
+        offerOpportunityType ||
+        bestOffer.offerOpportunityType ||
+        bestOffer.recommendedOfferType
+      );
+
       return `
         <div class="offer-box">
-          <h4>Offer guidance</h4>
+          <div class="offer-box-header">
+            <h4>Offer guidance</h4>
+            ${
+              normalizedType
+                ? `<div class="offer-type-pill">${escapeHtml(normalizedType)}</div>`
+                : ""
+            }
+          </div>
+
           <div class="offer-grid">
             <div class="offer-stat">
+              <div class="label">Ask price</div>
+              <div class="value">${currency(bestOffer.askPrice)}</div>
+            </div>
+            <div class="offer-stat offer-highlight">
               <div class="label">Suggested offer</div>
               <div class="value">${currency(bestOffer.suggestedOffer)}</div>
-            </div>
-            <div class="offer-stat">
-              <div class="label">Aggressive offer</div>
-              <div class="value">${currency(bestOffer.aggressiveOffer)}</div>
             </div>
             <div class="offer-stat">
               <div class="label">Do not go above</div>
               <div class="value">${currency(bestOffer.maxSafeOffer)}</div>
             </div>
           </div>
+
           <div class="offer-grid">
-            <div class="offer-stat">
+            <div class="offer-stat offer-highlight">
               <div class="label">Profit @ suggested</div>
               <div class="value">${currency(bestOffer.profitAtSuggested)}</div>
             </div>
@@ -1803,8 +2013,13 @@
               <div class="value">${currency(bestOffer.profitAtMaxSafe)}</div>
             </div>
           </div>
+
           <div class="offer-subline">
-            Current ask price: <strong>${currency(bestOffer.askPrice)}</strong>
+            ${
+              normalizedType
+                ? `FlipAI currently prefers the <strong>${escapeHtml(normalizedType)}</strong> route for this listing.`
+                : `This listing has Best Offer enabled, so the strongest margin may come from negotiating below the ask price.`
+            }
           </div>
         </div>
       `;
@@ -1838,8 +2053,18 @@
       window.__lastDeals = deals;
 
       if (!deals.length) {
-        dealResultsEl.innerHTML =
-          '<div class="deal-empty">No matching listings found. Try a broader search or higher max price.</div>';
+        dealResultsEl.innerHTML = renderEmptyStateCard(
+          "No matching listings found",
+          [
+            "FlipAI did not find any listings that matched your current eBay search filters."
+          ],
+          [
+            "Try a broader search term",
+            "Raise the max price slightly",
+            "Remove a condition word if your search is too narrow",
+            "Then use Find Best Deals to see ranked opportunities"
+          ]
+        );
         return;
       }
 
@@ -1851,15 +2076,30 @@
                 ? "border:1px solid rgba(34,197,94,0.45); box-shadow: 0 0 0 1px rgba(34,197,94,0.18), 0 20px 60px rgba(0,0,0,0.28);"
                 : ""
             }">
-              ${
-                deal.bestDeal
-                  ? `<div class="panel" style="margin-bottom:12px;font-weight:800;color:#4ade80;">BEST DEAL 🔥</div>`
-                  : ""
-              }
+              <div class="deal-card-topline">
+                ${
+                  deal.bestDeal
+                    ? `<div class="deal-rank-banner">Best value found</div>`
+                    : ""
+                }
+                ${
+                  deal.bestOffer && deal.bestOffer.hasBestOffer
+                    ? `<div class="deal-type-banner offer">Best offer enabled</div>`
+                    : `<div class="deal-type-banner buy">Buy now listing</div>`
+                }
+                ${renderOfferPriorityBanner(deal.offerOpportunityType)}
+              </div>
 
               ${deal.image ? `<div class="deal-image-wrap"><img class="deal-image" src="${escapeHtml(deal.image)}" alt="${escapeHtml(deal.title)}" /></div>` : ""}
 
               <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
+              <p class="deal-subtitle">
+                ${
+                  deal.bestOffer && deal.bestOffer.hasBestOffer
+                    ? "Best Offer is available on this listing, so negotiation could improve the margin."
+                    : "This is a straightforward listing view, useful for checking price, shipping, and current margin assumptions."
+                }
+              </p>
 
               <div class="deal-price-row">
                 <div class="deal-price">${currency(deal.price)}</div>
@@ -1868,11 +2108,6 @@
                 ${
                   deal.condition
                     ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
-                    : ""
-                }
-                ${
-                  deal.bestOffer && deal.bestOffer.hasBestOffer
-                    ? `<div class="deal-offer-chip">Best offer</div>`
                     : ""
                 }
                 <div class="deal-score">Score ${escapeHtml(deal.score)}</div>
@@ -1924,7 +2159,7 @@
 
               <div class="deal-summary">${escapeHtml(deal.reason)}</div>
 
-              ${renderBestOfferBox(deal.bestOffer)}
+              ${renderBestOfferBox(deal.bestOffer, deal.offerOpportunityType)}
 
               <div class="deal-actions">
                 <button onclick="useDealForAnalysis(${index}, '__lastDeals')">Send to Analyzer</button>
@@ -1942,6 +2177,7 @@
 
     function mapFinderDeal(rawDeal = {}) {
       const scanner = rawDeal.scanner || {};
+      const bestOffer = rawDeal.bestOffer || null;
 
       return {
         title: rawDeal.title || "Untitled listing",
@@ -1965,11 +2201,16 @@
         marketBucket: rawDeal.marketBucket || "",
         url: rawDeal.url || rawDeal.itemWebUrl || rawDeal.viewItemURL || rawDeal.itemWebUrl || "",
         repairCost: Number(scanner.repairCost || 0),
-        bestOffer: rawDeal.bestOffer || null,
+        bestOffer,
         buyingOptions: Array.isArray(rawDeal.buyingOptions) ? rawDeal.buyingOptions : [],
         image: rawDeal.imageUrl || rawDeal.image?.imageUrl || "",
         marginPercent: Number(scanner.marginPercent || 0),
-        compCount: Number(scanner.compCount || 0)
+        compCount: Number(scanner.compCount || 0),
+        offerOpportunityType: normalizeOfferType(
+          rawDeal.offerOpportunityType ||
+          bestOffer?.offerOpportunityType ||
+          bestOffer?.recommendedOfferType
+        )
       };
     }
 
@@ -1977,18 +2218,24 @@
       const includeTightDeals = Boolean(source?.includeTightDeals);
 
       if (includeTightDeals) {
-        return `
-          <div class="deal-empty">
-            No Buy, Offer, or Tight deals were found for this search.
-            Try raising your max price, broadening the search term, or switching product.
-          </div>
-        `;
+        return renderEmptyStateCard(
+          "No Buy, Offer, or Tight deals found",
+          [
+            "FlipAI checked the current exact matches but none cleared the threshold for showing as worthwhile right now."
+          ],
+          [
+            "Raise your max price slightly",
+            "Broaden the search term",
+            "Try a different model or product type",
+            "Check the normal eBay Search view to review raw listings"
+          ]
+        );
       }
 
       return `
         <div class="finder-hidden-note">
           <strong>No Buy or Offer deals found.</strong>
-          Try increasing max price or switch on <strong>Reveal Tight deals</strong> to show borderline opportunities.
+          You may still have borderline opportunities. Try increasing max price slightly, broadening the search, or switch on <strong>Reveal Tight deals</strong> to show lower-margin results.
         </div>
       `;
     }
@@ -2016,15 +2263,20 @@
                   ? "border:1px solid rgba(79,140,255,0.45); box-shadow: 0 0 0 1px rgba(79,140,255,0.18), 0 20px 60px rgba(0,0,0,0.28);"
                   : ""
               }">
-                ${
-                  index === 0
-                    ? `<div class="panel" style="margin-bottom:12px;font-weight:800;color:#93c5fd;">TOP RANKED DEAL FINDER RESULT 🚀</div>`
-                    : ""
-                }
+                <div class="deal-card-topline">
+                  ${
+                    index === 0
+                      ? `<div class="deal-rank-banner top">Top ranked result</div>`
+                      : ""
+                  }
+                  ${renderDealTypeBanner(deal.finderLabel)}
+                  ${renderOfferPriorityBanner(deal.offerOpportunityType)}
+                </div>
 
                 ${deal.image ? `<div class="deal-image-wrap"><img class="deal-image" src="${escapeHtml(deal.image)}" alt="${escapeHtml(deal.title)}" /></div>` : ""}
 
                 <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
+                <p class="deal-subtitle">${escapeHtml(buildDealSubtitle(deal))}</p>
 
                 <div class="deal-price-row">
                   <div class="deal-price">${currency(deal.price)}</div>
@@ -2059,7 +2311,13 @@
                     <div class="value">${currency(deal.estimatedResale)}</div>
                   </div>
                   <div class="deal-metric">
-                    <div class="label">Estimated profit</div>
+                    <div class="label">
+                      ${
+                        getDealTypeClass(deal.finderLabel) === "offer"
+                          ? "Profit at current ask"
+                          : "Estimated profit"
+                      }
+                    </div>
                     <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
                       ${currency(deal.estimatedProfit)}
                     </div>
@@ -2095,7 +2353,7 @@
 
                 <div class="deal-summary">${escapeHtml(deal.reason)}</div>
 
-                ${renderBestOfferBox(deal.bestOffer)}
+                ${renderBestOfferBox(deal.bestOffer, deal.offerOpportunityType)}
 
                 <div class="deal-actions">
                   <button onclick="useDealForAnalysis(${index}, '__lastFoundDeals')">Send to Analyzer</button>
@@ -2252,7 +2510,11 @@
 
         if (res.status === 401) {
           setDealStatus("Please sign in to search eBay.", "error");
-          dealResultsEl.innerHTML = '<div class="deal-empty">Sign in first, then search eBay listings.</div>';
+          dealResultsEl.innerHTML = renderEmptyStateCard(
+            "Sign in required",
+            ["Sign in first, then search eBay listings from inside FlipAI."],
+            []
+          );
           return;
         }
 
@@ -2264,7 +2526,11 @@
         renderDealResults(data);
       } catch (err) {
         setDealStatus(`Error: ${err.message}`, "error");
-        dealResultsEl.innerHTML = '<div class="deal-empty">No search results available right now.</div>';
+        dealResultsEl.innerHTML = renderEmptyStateCard(
+          "Search results unavailable",
+          ["FlipAI could not load search results right now."],
+          ["Try again in a moment", "Check your search term", "Then rerun the search"]
+        );
       } finally {
         findDealsBtn.disabled = false;
       }
@@ -2291,7 +2557,11 @@
 
         if (res.status === 401) {
           setFinderStatus("Please sign in to find deals.", "error");
-          finderResultsEl.innerHTML = '<div class="deal-empty">Sign in first, then use Deal Finder.</div>';
+          finderResultsEl.innerHTML = renderEmptyStateCard(
+            "Sign in required",
+            ["Sign in first, then use Deal Finder to rank likely opportunities."],
+            []
+          );
           return;
         }
 
@@ -2317,7 +2587,11 @@
         });
       } catch (err) {
         setFinderStatus(`Error: ${err.message}`, "error");
-        finderResultsEl.innerHTML = '<div class="deal-empty">No ranked deals available right now.</div>';
+        finderResultsEl.innerHTML = renderEmptyStateCard(
+          "Ranked deals unavailable",
+          ["FlipAI could not rank deals right now."],
+          ["Try again in a moment", "Broaden the search term", "Or lower restrictions and rerun"]
+        );
       } finally {
         findBestDealsBtn.disabled = false;
       }
