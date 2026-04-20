@@ -6,7 +6,6 @@ import {
   percentile,
   extractItemTitle,
   removePriceOutliers,
-  enrichCompPool,
 } from "./baseEngine.js";
 
 function hasAny(text, phrases = []) {
@@ -116,11 +115,96 @@ function isDysonFullMachineListing(text) {
   ]);
 }
 
+function isDysonHousingStyleListing(text) {
+  return hasAny(text, [
+    "housing",
+    "housing body",
+    "body housing",
+    "shell",
+    "casing",
+    "outer body",
+    "plastic body",
+    "cover only",
+  ]);
+}
+
+function isDysonAssemblyStyleListing(text) {
+  return hasAny(text, [
+    "assembly",
+    "trigger assembly",
+    "handle assembly",
+    "handle trigger assembly",
+    "cyclone assembly",
+    "body assembly",
+  ]);
+}
+
+function isDysonUnitPartStyleListing(text) {
+  return hasAny(text, [
+    "unit part",
+    "body unit part",
+    "main body part",
+    "housing body a unit part",
+    "part 970",
+    "part no",
+    "part number",
+  ]);
+}
+
+function isDysonFaultyStyleListing(text) {
+  return hasAny(text, [
+    "cuts out",
+    "cuts out after",
+    "faulty",
+    "not working",
+    "does not work",
+    "broken",
+    "for repair",
+    "needs repair",
+    "intermittent",
+    "stops working",
+    "dead",
+    "no power",
+    "not fully working",
+  ]);
+}
+
+function hasStrongWorkingSignals(text) {
+  return hasAny(text, [
+    "fully working",
+    "full working order",
+    "working perfectly",
+    "tested working",
+    "tested and working",
+    "good working order",
+    "in working order",
+  ]);
+}
+
 function isLikelyValidDysonMainUnitListing(text) {
   if (!isDysonMainUnitListing(text)) return false;
   if (isDysonHardAccessoryOnly(text)) return false;
   if (isDysonFullMachineListing(text)) return false;
+  if (isDysonHousingStyleListing(text)) return false;
+  if (isDysonAssemblyStyleListing(text)) return false;
+  if (isDysonUnitPartStyleListing(text)) return false;
   return true;
+}
+
+function isAllowedPartsCategoryMainUnit(text, item) {
+  if (!isDysonPartsCategory(item)) {
+    return true;
+  }
+
+  if (!isLikelyValidDysonMainUnitListing(text)) {
+    return false;
+  }
+
+  if (isDysonHousingStyleListing(text)) return false;
+  if (isDysonAssemblyStyleListing(text)) return false;
+  if (isDysonUnitPartStyleListing(text)) return false;
+
+  return hasStrongWorkingSignals(text);
 }
 
 function matchesDysonVariant(searchText, item) {
@@ -154,17 +238,23 @@ function matchesDysonVariant(searchText, item) {
 
   if (wantsV11 && !titleHasV11) return false;
 
+  if (isDysonHousingStyleListing(titleText)) return false;
+  if (isDysonAssemblyStyleListing(titleText)) return false;
+  if (isDysonUnitPartStyleListing(titleText)) return false;
+
   if (wantsOutsize) {
     if (!titleHasOutsize) return false;
     if (titleIsMainUnit) return false;
     if (isDysonPartsCategory(item)) return false;
+    if (isDysonFaultyStyleListing(titleText)) return false;
     return titleIsFullMachine;
   }
 
   if (wantsMainUnit) {
     if (titleHasOutsize) return false;
-    if (isDysonPartsCategory(item) && !titleIsMainUnit) return false;
-    return titleIsMainUnit;
+    if (!titleIsMainUnit) return false;
+    if (!isAllowedPartsCategoryMainUnit(titleText, item)) return false;
+    return true;
   }
 
   if (wantsV11) {
@@ -172,10 +262,14 @@ function matchesDysonVariant(searchText, item) {
     if (titleHasOutsize) return false;
     if (titleIsMainUnit) return false;
     if (isDysonPartsCategory(item)) return false;
+    if (isDysonFaultyStyleListing(titleText)) return false;
     return titleIsFullMachine;
   }
 
-  if (isDysonPartsCategory(item) && !titleIsMainUnit) return false;
+  if (isDysonPartsCategory(item) && !isAllowedPartsCategoryMainUnit(titleText, item)) {
+    return false;
+  }
+
   return true;
 }
 
@@ -232,12 +326,36 @@ function scoreDysonTitleAgainstQuery(searchText, item) {
     score += 0.2;
   }
 
+  if (hasStrongWorkingSignals(titleText)) {
+    score += 0.28;
+  }
+
   if (isDysonHardAccessoryOnly(titleText)) {
     score -= 0.7;
   }
 
   if (isDysonFullMachineListing(titleText) && searchText.includes("main unit")) {
     score -= 0.5;
+  }
+
+  if (isDysonHousingStyleListing(titleText)) {
+    score -= 1.1;
+  }
+
+  if (isDysonAssemblyStyleListing(titleText)) {
+    score -= 0.9;
+  }
+
+  if (isDysonUnitPartStyleListing(titleText)) {
+    score -= 1.1;
+  }
+
+  if (isDysonFaultyStyleListing(titleText)) {
+    score -= 0.85;
+  }
+
+  if (isDysonPartsCategory(item) && !hasStrongWorkingSignals(titleText)) {
+    score -= 0.45;
   }
 
   return score;
@@ -429,6 +547,51 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
   };
 }
 
+function getDysonListingWarnings(item, queryContext) {
+  const titleText = normalizeText(extractItemTitle(item));
+  const warnings = [];
+  let penalty = 0;
+
+  if (isDysonHousingStyleListing(titleText)) {
+    warnings.push("Title suggests housing or shell style parts, not a clean resale-ready main unit.");
+    penalty += 40;
+  }
+
+  if (isDysonAssemblyStyleListing(titleText)) {
+    warnings.push("Title suggests an assembly listing rather than a straightforward working main motor unit.");
+    penalty += 28;
+  }
+
+  if (isDysonUnitPartStyleListing(titleText)) {
+    warnings.push("Title reads like a part-number style component listing rather than a complete working main unit.");
+    penalty += 40;
+  }
+
+  if (isDysonFaultyStyleListing(titleText)) {
+    warnings.push("Fault wording detected in the title, so resale risk is much higher.");
+    penalty += 55;
+  }
+
+  if (isDysonPartsCategory(item) && !hasStrongWorkingSignals(titleText)) {
+    warnings.push("This is in a parts category without a strong tested-working signal.");
+    penalty += 20;
+  }
+
+  if (
+    queryContext?.isMainUnit &&
+    isDysonPartsCategory(item) &&
+    !hasStrongWorkingSignals(titleText)
+  ) {
+    warnings.push("Main-unit search matched a parts-category listing without clear proof it is fully working.");
+    penalty += 15;
+  }
+
+  return {
+    warningFlags: warnings,
+    warningScorePenalty: penalty,
+  };
+}
+
 export const dysonEngine = {
   ...baseEngine,
   id: "dyson",
@@ -537,6 +700,33 @@ export const dysonEngine = {
       marketItems,
       listingItems
     );
+  },
+
+  adjustListingPricing({ item, queryContext, pricingModel }) {
+    const baseEstimatedResale = roundMoney(pricingModel?.estimatedResale || 0);
+    const warningData = getDysonListingWarnings(item, queryContext);
+    const titleText = normalizeText(extractItemTitle(item));
+
+    let estimatedResale = baseEstimatedResale;
+
+    if (isDysonFaultyStyleListing(titleText)) {
+      estimatedResale = roundMoney(baseEstimatedResale * 0.72);
+    } else if (isDysonHousingStyleListing(titleText) || isDysonUnitPartStyleListing(titleText)) {
+      estimatedResale = roundMoney(baseEstimatedResale * 0.62);
+    } else if (isDysonAssemblyStyleListing(titleText)) {
+      estimatedResale = roundMoney(baseEstimatedResale * 0.76);
+    } else if (isDysonPartsCategory(item) && !hasStrongWorkingSignals(titleText)) {
+      estimatedResale = roundMoney(baseEstimatedResale * 0.82);
+    }
+
+    return {
+      estimatedResale,
+      bundleValueBonus: 0,
+      warningFlags: warningData.warningFlags,
+      warningScorePenalty: warningData.warningScorePenalty,
+      bundleSignals: {},
+      bundleType: "standard",
+    };
   },
 };
 
