@@ -770,7 +770,7 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
       return true;
     }
 
-    if (includeTightDeals && verdict === "MARGINAL") {
+    if (verdict === "MARGINAL") {
       return true;
     }
 
