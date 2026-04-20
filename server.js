@@ -494,6 +494,10 @@ function buildDealReasonBreakdown({
   repairCost = 0,
   warningFlags = [],
   warningScorePenalty = 0,
+  offerOpportunity = false,
+  offerOpportunityType = "",
+  offerProfit = 0,
+  offerPrice = 0,
 }) {
   const bullets = [];
 
@@ -519,6 +523,15 @@ function buildDealReasonBreakdown({
   if (repairCost > 0) {
     bullets.push(
       `Repair or replacement allowance of ${roundMoney(repairCost).toFixed(2)} was factored into the deal.`
+    );
+  }
+
+  if (offerOpportunity) {
+    bullets.push(
+      `Not strong at ask price, but becomes workable around ${roundMoney(offerPrice).toFixed(2)} via ${offerOpportunityType}.`
+    );
+    bullets.push(
+      `Projected offer-based profit is about ${roundMoney(offerProfit).toFixed(2)}.`
     );
   }
 
@@ -570,12 +583,20 @@ function buildDealReasonBreakdown({
     warningScorePenalty,
     risk,
     verdict,
+    offerOpportunity,
+    offerOpportunityType,
+    offerProfit: roundMoney(offerProfit),
+    offerPrice: roundMoney(offerPrice),
     bullets,
     title: String(title || "").trim(),
   };
 }
 
-function buildReasonText({ estimatedProfit, undervaluedAmount }) {
+function buildReasonText({ estimatedProfit, undervaluedAmount, offerOpportunity = false, offerPrice = 0, offerProfit = 0 }) {
+  if (offerOpportunity) {
+    return `Not a clean buy at ask price, but looks workable around £${roundMoney(offerPrice).toFixed(2)} with about £${roundMoney(offerProfit).toFixed(2)} projected profit.`;
+  }
+
   return `Strong spread: about £${roundMoney(undervaluedAmount).toFixed(2)} below model with £${roundMoney(estimatedProfit).toFixed(2)} projected profit.`;
 }
 
@@ -625,18 +646,54 @@ function evaluateDeal({
   const marginPercent =
     total > 0 ? roundMoney((estimatedProfit / total) * 100) : 0;
 
+  const bestOffer = buildBestOfferGuidance(item, {
+    totalBuyPrice: total,
+    estimatedResale,
+    repairCost,
+  });
+
+  let offerOpportunity = false;
+  let offerOpportunityType = "";
+  let offerPrice = 0;
+  let offerProfit = 0;
+
+  if (bestOffer?.hasBestOffer) {
+    const maxSafeProfit = Number(bestOffer?.profitAtMaxSafe || 0);
+    const suggestedProfit = Number(bestOffer?.profitAtSuggested || 0);
+    const aggressiveProfit = Number(bestOffer?.profitAtAggressive || 0);
+
+    if (maxSafeProfit >= 15) {
+      offerOpportunity = true;
+      offerOpportunityType = "max safe offer";
+      offerPrice = Number(bestOffer.maxSafeOffer || 0);
+      offerProfit = maxSafeProfit;
+    } else if (suggestedProfit >= 15) {
+      offerOpportunity = true;
+      offerOpportunityType = "suggested offer";
+      offerPrice = Number(bestOffer.suggestedOffer || 0);
+      offerProfit = suggestedProfit;
+    } else if (aggressiveProfit >= 15) {
+      offerOpportunity = true;
+      offerOpportunityType = "aggressive offer";
+      offerPrice = Number(bestOffer.aggressiveOffer || 0);
+      offerProfit = aggressiveProfit;
+    }
+  }
+
   let verdict = "AVOID";
   if (estimatedProfit >= 40) verdict = "GOOD DEAL";
   else if (estimatedProfit >= 15) verdict = "OK DEAL";
   else if (estimatedProfit >= 5) verdict = "MARGINAL";
+  else if (offerOpportunity) verdict = "OFFER DEAL";
 
   let risk = "High";
   if (estimatedProfit >= 40) risk = "Low";
-  else if (estimatedProfit >= 15) risk = "Medium";
+  else if (estimatedProfit >= 15 || offerOpportunity) risk = "Medium";
 
   const rawScore = roundMoney(
     Math.max(0, estimatedProfit) +
       Math.max(0, marginPercent) +
+      Math.max(0, offerProfit * 0.5) +
       (risk === "Low" ? 15 : risk === "Medium" ? 8 : 0)
   );
 
@@ -661,6 +718,7 @@ function evaluateDeal({
   let finderLabel = "Tight";
   if (estimatedProfit >= 40) finderLabel = "Buy";
   else if (estimatedProfit >= 15) finderLabel = "Offer";
+  else if (offerOpportunity) finderLabel = "Offer Deal";
 
   const scanner = {
     totalBuyPrice: total,
@@ -678,6 +736,10 @@ function evaluateDeal({
     confidence: Number(pricingModel?.confidence || 0),
     confidenceLabel: pricingModel?.confidenceLabel || "Low",
     pricingMode: pricingModel?.pricingMode || "Market median",
+    offerOpportunity,
+    offerOpportunityType,
+    offerPrice: roundMoney(offerPrice),
+    offerProfit: roundMoney(offerProfit),
   };
 
   const reasonBreakdown = buildDealReasonBreakdown({
@@ -699,6 +761,10 @@ function evaluateDeal({
     warningScorePenalty,
     risk,
     verdict,
+    offerOpportunity,
+    offerOpportunityType,
+    offerProfit,
+    offerPrice,
   });
 
   return {
@@ -707,7 +773,7 @@ function evaluateDeal({
     price,
     shipping,
     scanner,
-    bestOffer: buildBestOfferGuidance(item, scanner),
+    bestOffer,
     estimatedProfit,
     dealScore: score,
     rawDealScore: rawScore,
@@ -716,7 +782,13 @@ function evaluateDeal({
     undervaluedAmount,
     undervaluedPercent,
     finderLabel,
-    reason: buildReasonText({ estimatedProfit, undervaluedAmount }),
+    reason: buildReasonText({
+      estimatedProfit,
+      undervaluedAmount,
+      offerOpportunity,
+      offerPrice,
+      offerProfit,
+    }),
     reasonBreakdown,
     url:
       item?.itemWebUrl ||
@@ -727,6 +799,10 @@ function evaluateDeal({
     bundleType: adjusted?.bundleType || classified?.bundleType || "",
     bundleSignals: adjusted?.bundleSignals || classified?.bundleSignals || {},
     bundleValueBonus: roundMoney(adjusted?.bundleValueBonus || 0),
+    offerOpportunity,
+    offerOpportunityType,
+    offerPrice: roundMoney(offerPrice),
+    offerProfit: roundMoney(offerProfit),
   };
 }
 
@@ -734,6 +810,9 @@ function sortDealsForFindDeals(deals = [], queryContext = {}) {
   const wantsBundle = Boolean(queryContext?.wantsBundle);
 
   const sorted = [...deals].sort((a, b) => {
+    const aOffer = a?.scanner?.verdict === "OFFER DEAL" ? 1 : 0;
+    const bOffer = b?.scanner?.verdict === "OFFER DEAL" ? 1 : 0;
+
     if (wantsBundle) {
       const aBundle = a?.bundleType === "bundle" ? 1 : 0;
       const bBundle = b?.bundleType === "bundle" ? 1 : 0;
@@ -741,6 +820,10 @@ function sortDealsForFindDeals(deals = [], queryContext = {}) {
       if (bBundle !== aBundle) {
         return bBundle - aBundle;
       }
+    }
+
+    if (bOffer !== aOffer) {
+      return bOffer - aOffer;
     }
 
     return Number(b?.dealScore || 0) - Number(a?.dealScore || 0);
@@ -770,7 +853,11 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
       return true;
     }
 
-    if (verdict === "MARGINAL") {
+    if (verdict === "OFFER DEAL") {
+      return true;
+    }
+
+    if (includeTightDeals && verdict === "MARGINAL") {
       return true;
     }
 
