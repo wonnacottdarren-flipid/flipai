@@ -547,15 +547,15 @@ function buildDealReasonBreakdown({
 
   if (label.includes("buy")) {
     bullets.push(
-      `Looks buyable at the current total cost with about £${roundMoney(estimatedProfit).toFixed(2)} projected profit.`
+      `Strong enough to consider at the current total cost, with about £${roundMoney(estimatedProfit).toFixed(2)} projected profit.`
     );
   } else if (label.includes("offer")) {
     bullets.push(
-      `Not strong enough at the current ask, but becomes attractive if negotiated lower.`
+      `Not quite strong enough as a straight buy, but it improves if you negotiate lower.`
     );
   } else if (label.includes("tight")) {
     bullets.push(
-      `Borderline setup. This may work, but only with careful condition checks and realistic comps.`
+      `Borderline setup. This only makes sense if condition checks and comps still hold up after review.`
     );
   }
 
@@ -568,7 +568,7 @@ function buildDealReasonBreakdown({
       `${Number(compCount || 0)} comp${Number(compCount || 0) === 1 ? "" : "s"} support this estimate using ${pricingMode || "market pricing"}.`
     );
   } else {
-    bullets.push("Comp support is limited here, so treat the pricing model more cautiously.");
+    bullets.push("Comp support is limited here, so this needs extra manual verification.");
   }
 
   if (undervaluedAmount > 0) {
@@ -596,7 +596,7 @@ function buildDealReasonBreakdown({
   }
 
   if (marginPercent >= 25) {
-    bullets.push("Margin profile looks strong for a resale candidate.");
+    bullets.push("Margin profile looks strong for a flip candidate.");
   } else if (marginPercent >= 12) {
     bullets.push("Margin is workable if the item condition matches expectations.");
   } else {
@@ -618,7 +618,7 @@ function buildDealReasonBreakdown({
   }
 
   if (risk === "Low") {
-    bullets.push("Risk is lower because projected profit clears the buffer comfortably.");
+    bullets.push("Risk is lower because the projected profit clears the buffer comfortably.");
   } else if (risk === "Medium") {
     bullets.push("Risk is moderate because the deal works, but without huge room for error.");
   } else {
@@ -667,7 +667,7 @@ function buildReasonText({
   const label = String(finderLabel || "").toLowerCase();
 
   if (label.includes("buy")) {
-    return `Good buy at the current price. Estimated resale is around £${roundMoney(estimatedResale).toFixed(2)} against about £${roundMoney(totalBuyPrice).toFixed(2)} total cost, leaving roughly £${roundMoney(estimatedProfit).toFixed(2)} projected profit.`;
+    return `Looks strong enough to review as a buy now. Estimated resale is around £${roundMoney(estimatedResale).toFixed(2)} against about £${roundMoney(totalBuyPrice).toFixed(2)} total cost, leaving roughly £${roundMoney(estimatedProfit).toFixed(2)} projected profit.`;
   }
 
   if (label.includes("offer")) {
@@ -675,7 +675,7 @@ function buildReasonText({
   }
 
   if (label.includes("tight")) {
-    return `Borderline deal. It may still work, but profit is tighter and this one needs condition checks plus comp verification before buying.`;
+    return `This is only a tight check. Profit is thinner here, so verify condition and comps before buying.`;
   }
 
   if (offerOpportunity) {
@@ -790,24 +790,30 @@ function evaluateDeal({
   const hasStrongAsk =
     estimatedProfit >= 35 &&
     marginPercent >= 18 &&
-    warningFlags.length <= 1;
+    warningFlags.length <= 1 &&
+    (compCount >= 3 || confidence >= 55);
 
   const hasSolidAsk =
-    estimatedProfit >= 20 &&
+    estimatedProfit >= 22 &&
     marginPercent >= 12 &&
-    warningFlags.length <= 2;
-
-  const hasTightAsk =
-    estimatedProfit >= 10 &&
-    marginPercent >= 7;
+    warningFlags.length <= 2 &&
+    (compCount >= 3 || confidence >= 55);
 
   const hasStrongOffer =
     offerOpportunity &&
-    offerProfit >= 20;
+    offerProfit >= 20 &&
+    warningFlags.length <= 2 &&
+    (compCount >= 3 || confidence >= 55);
+
+  const hasTightAsk =
+    estimatedProfit >= 10 &&
+    marginPercent >= 7 &&
+    warningFlags.length <= 2;
 
   const hasTightOffer =
     offerOpportunity &&
-    offerProfit >= 12;
+    offerProfit >= 12 &&
+    warningFlags.length <= 2;
 
   let finderLabel = "Skip";
   let verdict = "SKIP";
@@ -823,8 +829,7 @@ function evaluateDeal({
     risk = offerProfit >= 28 ? "Medium" : "High";
   } else if (
     (hasTightAsk || hasTightOffer) &&
-    (compCount >= 3 || confidence >= 55) &&
-    warningFlags.length <= 2
+    (compCount >= 3 || confidence >= 55)
   ) {
     finderLabel = "Tight";
     verdict = "TIGHT CHECK";
@@ -834,7 +839,7 @@ function evaluateDeal({
   const bucketPriority = getDealBucketPriority(finderLabel);
 
   const scoreBeforePenalty = roundMoney(
-    bucketPriority * 40 +
+    bucketPriority * 45 +
       Math.max(0, estimatedProfit) * 1.2 +
       Math.max(0, offerProfit) * 0.8 +
       Math.max(0, marginPercent) * 0.8 +
@@ -844,7 +849,10 @@ function evaluateDeal({
   );
 
   const lowConfidencePenalty = confidence < 55 ? 8 : 0;
-  const finalPenalty = roundMoney(warningScorePenalty + lowConfidencePenalty);
+  const thinMarginPenalty = marginPercent < 10 ? 8 : 0;
+  const finalPenalty = roundMoney(
+    warningScorePenalty + lowConfidencePenalty + thinMarginPenalty
+  );
   const score = roundMoney(Math.max(0, scoreBeforePenalty - finalPenalty));
 
   const scanner = {
@@ -966,6 +974,13 @@ function sortDealsForFindDeals(deals = [], queryContext = {}) {
       return profitDiff;
     }
 
+    const offerProfitDiff =
+      Number(b?.scanner?.offerProfit || b?.offerProfit || 0) -
+      Number(a?.scanner?.offerProfit || a?.offerProfit || 0);
+    if (offerProfitDiff !== 0) {
+      return offerProfitDiff;
+    }
+
     return (
       Number(b?.scanner?.confidence || 0) -
       Number(a?.scanner?.confidence || 0)
@@ -996,22 +1011,35 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
     const warningCount = Array.isArray(item?.warningFlags) ? item.warningFlags.length : 0;
     const score = Number(item?.dealScore || 0);
     const estimatedProfit = Number(item?.scanner?.estimatedProfit || item?.estimatedProfit || 0);
+    const marginPercent = Number(item?.scanner?.marginPercent || item?.marginPercent || 0);
 
     if (label.includes("buy")) {
-      return estimatedProfit >= 20 && score >= 70;
+      return (
+        estimatedProfit >= 22 &&
+        marginPercent >= 12 &&
+        score >= 78 &&
+        warningCount <= 2 &&
+        (compCount >= 3 || confidence >= 55)
+      );
     }
 
     if (label.includes("offer")) {
       const offerProfit = Number(item?.offerProfit || item?.scanner?.offerProfit || 0);
-      return offerProfit >= 18 && score >= 60;
+      return (
+        offerProfit >= 18 &&
+        score >= 64 &&
+        warningCount <= 2 &&
+        (compCount >= 3 || confidence >= 55)
+      );
     }
 
     if (includeTightDeals && label.includes("tight")) {
       return (
         estimatedProfit >= 10 &&
-        score >= 45 &&
-        (compCount >= 3 || confidence >= 55) &&
-        warningCount <= 2
+        marginPercent >= 7 &&
+        score >= 48 &&
+        warningCount <= 2 &&
+        (compCount >= 3 || confidence >= 55)
       );
     }
 
