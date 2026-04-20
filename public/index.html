@@ -1822,6 +1822,63 @@
         .replace(/'/g, "&#039;");
     }
 
+    async function safeReadResponse(res) {
+      const contentType = res.headers.get("content-type") || "";
+      const rawText = await res.text();
+
+      if (!rawText) {
+        return { data: {}, rawText: "" };
+      }
+
+      if (contentType.includes("application/json")) {
+        try {
+          return {
+            data: JSON.parse(rawText),
+            rawText
+          };
+        } catch {
+          return {
+            data: { error: rawText },
+            rawText
+          };
+        }
+      }
+
+      try {
+        return {
+          data: JSON.parse(rawText),
+          rawText
+        };
+      } catch {
+        return {
+          data: { error: rawText },
+          rawText
+        };
+      }
+    }
+
+    function getResponseErrorMessage(res, data, fallbackMessage) {
+      const message =
+        data?.error ||
+        data?.message ||
+        data?.raw ||
+        "";
+
+      if (message) {
+        const clean = String(message).trim();
+        if (clean.toLowerCase().includes("service unavailable")) {
+          return "Service temporarily unavailable. Please try again in a moment.";
+        }
+        return clean;
+      }
+
+      if (res.status >= 500) {
+        return "Service temporarily unavailable. Please try again in a moment.";
+      }
+
+      return fallbackMessage;
+    }
+
     function verdictColor(text) {
       const value = String(text || "").toUpperCase();
 
@@ -2837,7 +2894,7 @@
           body: JSON.stringify(payload)
         });
 
-        const data = await res.json();
+        const { data } = await safeReadResponse(res);
 
         if (res.status === 401) {
           setAutoCompsStatus("Please sign in to auto-fill comps.", "error");
@@ -2845,7 +2902,7 @@
         }
 
         if (!res.ok) {
-          throw new Error(data.error || "Could not auto-fill comps.");
+          throw new Error(getResponseErrorMessage(res, data, "Could not auto-fill comps."));
         }
 
         const autoComps = data.autoComps || {};
@@ -2884,7 +2941,7 @@
           body: JSON.stringify(payload)
         });
 
-        const data = await res.json();
+        const { data } = await safeReadResponse(res);
 
         if (res.status === 401) {
           setAnalyzeStatus("Please sign in to use FlipAI analysis.", "error");
@@ -2898,7 +2955,7 @@
           const status = String(user?.subscriptionStatus || "free").toLowerCase();
           const isStarter = plan === "starter" && (status === "active" || status === "trialing");
 
-          setAnalyzeStatus(data.error || "Limit reached.", "error");
+          setAnalyzeStatus(getResponseErrorMessage(res, data, "Limit reached."), "error");
 
           if (isStarter) {
             renderLockedState(
@@ -2919,7 +2976,7 @@
         }
 
         if (!res.ok) {
-          throw new Error(data.error || "Request failed");
+          throw new Error(getResponseErrorMessage(res, data, "Request failed"));
         }
 
         setAnalyzeStatus("Analysis complete.", "success");
@@ -2953,7 +3010,7 @@
           body: JSON.stringify(payload)
         });
 
-        const data = await res.json();
+        const { data } = await safeReadResponse(res);
 
         if (res.status === 401) {
           setDealStatus("Please sign in to search eBay.", "error");
@@ -2966,7 +3023,7 @@
         }
 
         if (!res.ok) {
-          throw new Error(data.error || "Could not search eBay.");
+          throw new Error(getResponseErrorMessage(res, data, "Could not search eBay."));
         }
 
         setDealStatus("Search complete.", "success");
@@ -3000,7 +3057,7 @@
           body: JSON.stringify(payload)
         });
 
-        const data = await res.json();
+        const { data } = await safeReadResponse(res);
 
         if (res.status === 401) {
           setFinderStatus("Please sign in to find deals.", "error");
@@ -3013,7 +3070,7 @@
         }
 
         if (!res.ok) {
-          throw new Error(data.error || "Could not find deals.");
+          throw new Error(getResponseErrorMessage(res, data, "Could not find deals."));
         }
 
         window.__lastFinderQueryRan = true;
@@ -3069,7 +3126,7 @@
           return;
         }
 
-        const data = await res.json();
+        const { data } = await safeReadResponse(res);
 
         if (data.user) {
           authArea.style.display = "none";
@@ -3109,10 +3166,10 @@
           body: JSON.stringify({ email, password })
         });
 
-        const data = await res.json();
+        const { data } = await safeReadResponse(res);
 
         if (!res.ok) {
-          throw new Error(data.error || "Login failed");
+          throw new Error(getResponseErrorMessage(res, data, "Login failed"));
         }
 
         setAuthStatus("Login successful.", "success");
@@ -3152,10 +3209,10 @@
           body: JSON.stringify({ name, email, password })
         });
 
-        const data = await res.json();
+        const { data } = await safeReadResponse(res);
 
         if (!res.ok) {
-          throw new Error(data.error || "Signup failed");
+          throw new Error(getResponseErrorMessage(res, data, "Signup failed"));
         }
 
         setAuthStatus("Account created.", "success");
@@ -3218,10 +3275,10 @@
           body: JSON.stringify({ plan: selectedPlan })
         });
 
-        const data = await res.json();
+        const { data } = await safeReadResponse(res);
 
         if (!res.ok) {
-          throw new Error(data.error || "Could not start checkout.");
+          throw new Error(getResponseErrorMessage(res, data, "Could not start checkout."));
         }
 
         if (data.url) {
@@ -3244,10 +3301,10 @@
           credentials: "include"
         });
 
-        const data = await res.json();
+        const { data } = await safeReadResponse(res);
 
         if (!res.ok) {
-          throw new Error(data.error || "Could not open billing portal.");
+          throw new Error(getResponseErrorMessage(res, data, "Could not open billing portal."));
         }
 
         if (data.url) {
