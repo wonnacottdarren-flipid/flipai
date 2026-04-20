@@ -38,8 +38,6 @@ const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 const EBAY_AFFILIATE_ENABLED =
   String(process.env.EBAY_AFFILIATE_ENABLED || "").trim().toLowerCase() === "true";
 const EBAY_CAMPAIGN_ID = String(process.env.EBAY_CAMPAIGN_ID || "").trim();
-const EBAY_CUSTOM_ID = String(process.env.EBAY_CUSTOM_ID || "flipai").trim();
-const EBAY_AFFILIATE_TOOL_ID = String(process.env.EBAY_AFFILIATE_TOOL_ID || "10001").trim();
 
 app.use(cors({ origin: appUrl, credentials: true }));
 app.use(cookieParser());
@@ -165,25 +163,7 @@ function buildAffiliateUrl(rawUrl) {
   const cleanUrl = String(rawUrl || "").trim();
   if (!cleanUrl) return "";
 
-  if (!EBAY_AFFILIATE_ENABLED || !EBAY_CAMPAIGN_ID) {
-    return cleanUrl;
-  }
-
-  if (cleanUrl.includes("rover.ebay.com")) {
-    return cleanUrl;
-  }
-
-  try {
-    return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${encodeURIComponent(
-      EBAY_CAMPAIGN_ID
-    )}&customid=${encodeURIComponent(
-      EBAY_CUSTOM_ID
-    )}&toolid=${encodeURIComponent(
-      EBAY_AFFILIATE_TOOL_ID
-    )}&mpre=${encodeURIComponent(cleanUrl)}`;
-  } catch {
-    return cleanUrl;
-  }
+  return cleanUrl;
 }
 
 function decorateItemWithAffiliate(item = {}) {
@@ -194,7 +174,7 @@ function decorateItemWithAffiliate(item = {}) {
     ...item,
     originalUrl,
     affiliateUrl,
-    url: affiliateUrl || originalUrl,
+    url: originalUrl,
   };
 }
 
@@ -854,7 +834,7 @@ function evaluateDeal({
     reasonBreakdown,
     originalUrl,
     affiliateUrl,
-    url: affiliateUrl || originalUrl,
+    url: originalUrl,
     bundleType: adjusted?.bundleType || classified?.bundleType || "",
     bundleSignals: adjusted?.bundleSignals || classified?.bundleSignals || {},
     bundleValueBonus: roundMoney(adjusted?.bundleValueBonus || 0),
