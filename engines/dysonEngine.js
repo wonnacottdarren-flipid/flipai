@@ -20,6 +20,36 @@ function isDysonPartsCategory(item) {
   );
 }
 
+function isDysonHardAccessoryOnly(text) {
+  return hasAny(text, [
+    "attachment only",
+    "attachments only",
+    "tool only",
+    "tools only",
+    "battery only",
+    "charger only",
+    "filter only",
+    "wand only",
+    "head only",
+    "roller head only",
+    "motorhead only",
+    "floor head only",
+    "bin only",
+    "canister only",
+    "hose only",
+    "dock only",
+    "wall dock only",
+    "nozzle only",
+    "crevice tool only",
+    "brush only",
+    "trigger only",
+    "spares",
+    "spare parts",
+    "for parts only",
+    "parts only",
+  ]);
+}
+
 function isDysonAccessoryOrParts(text) {
   return hasAny(text, [
     "parts",
@@ -33,9 +63,7 @@ function isDysonAccessoryOrParts(text) {
     "filter only",
     "wand only",
     "head only",
-    "battery",
-    "charger",
-    "dock",
+    "dock only",
     "wall dock",
     "filter",
     "filters",
@@ -63,11 +91,15 @@ function isDysonMainUnitListing(text) {
     "body only",
     "main body",
     "machine body",
-    "body",
+    "vacuum body",
+    "body unit",
     "handheld unit",
     "main vacuum unit",
     "bare unit",
     "unit only",
+    "main machine",
+    "motor body",
+    "body",
   ]);
 }
 
@@ -84,6 +116,13 @@ function isDysonFullMachineListing(text) {
   ]);
 }
 
+function isLikelyValidDysonMainUnitListing(text) {
+  if (!isDysonMainUnitListing(text)) return false;
+  if (isDysonHardAccessoryOnly(text)) return false;
+  if (isDysonFullMachineListing(text)) return false;
+  return true;
+}
+
 function matchesDysonVariant(searchText, item) {
   if (!searchText.includes("dyson")) {
     return true;
@@ -98,29 +137,33 @@ function matchesDysonVariant(searchText, item) {
     searchText.includes("main body") ||
     searchText.includes("body only") ||
     searchText.includes("motor unit") ||
+    searchText.includes("bare unit") ||
+    searchText.includes("unit only") ||
+    searchText.includes("handheld unit") ||
+    searchText.includes("machine body") ||
+    searchText.includes("vacuum body") ||
     searchText.includes("body");
 
   const titleHasV11 = titleText.includes("v11");
   const titleHasOutsize = titleText.includes("outsize");
-  const titleIsMainUnit = isDysonMainUnitListing(titleText);
+  const titleIsMainUnit = isLikelyValidDysonMainUnitListing(titleText);
   const titleIsParts = isDysonAccessoryOrParts(titleText);
   const titleIsFullMachine =
     isDysonFullMachineListing(titleText) ||
     (!titleIsMainUnit && !titleIsParts);
 
-  if (isDysonPartsCategory(item)) return false;
-  if (titleIsParts) return false;
   if (wantsV11 && !titleHasV11) return false;
 
   if (wantsOutsize) {
     if (!titleHasOutsize) return false;
     if (titleIsMainUnit) return false;
+    if (isDysonPartsCategory(item)) return false;
     return titleIsFullMachine;
   }
 
   if (wantsMainUnit) {
-    if (wantsV11 && !titleHasV11) return false;
     if (titleHasOutsize) return false;
+    if (isDysonPartsCategory(item) && !titleIsMainUnit) return false;
     return titleIsMainUnit;
   }
 
@@ -128,9 +171,11 @@ function matchesDysonVariant(searchText, item) {
     if (!titleHasV11) return false;
     if (titleHasOutsize) return false;
     if (titleIsMainUnit) return false;
+    if (isDysonPartsCategory(item)) return false;
     return titleIsFullMachine;
   }
 
+  if (isDysonPartsCategory(item) && !titleIsMainUnit) return false;
   return true;
 }
 
@@ -169,9 +214,14 @@ function scoreDysonTitleAgainstQuery(searchText, item) {
     searchText.includes("main body") ||
     searchText.includes("body only") ||
     searchText.includes("motor unit") ||
+    searchText.includes("bare unit") ||
+    searchText.includes("unit only") ||
+    searchText.includes("handheld unit") ||
+    searchText.includes("machine body") ||
+    searchText.includes("vacuum body") ||
     searchText.includes("body")
   ) {
-    score += isDysonMainUnitListing(titleText) ? 0.35 : -0.35;
+    score += isLikelyValidDysonMainUnitListing(titleText) ? 0.4 : -0.35;
   }
 
   if (
@@ -180,6 +230,14 @@ function scoreDysonTitleAgainstQuery(searchText, item) {
     titleText.includes("v11")
   ) {
     score += 0.2;
+  }
+
+  if (isDysonHardAccessoryOnly(titleText)) {
+    score -= 0.7;
+  }
+
+  if (isDysonFullMachineListing(titleText) && searchText.includes("main unit")) {
+    score -= 0.5;
   }
 
   return score;
@@ -224,18 +282,23 @@ function buildLowCompFallbackTotals(searchText, marketPool = [], listingPool = [
     searchText.includes("main body") ||
     searchText.includes("body only") ||
     searchText.includes("motor unit") ||
+    searchText.includes("bare unit") ||
+    searchText.includes("unit only") ||
+    searchText.includes("handheld unit") ||
+    searchText.includes("machine body") ||
+    searchText.includes("vacuum body") ||
     searchText.includes("body");
 
   const isOutsize = searchText.includes("outsize");
 
   const relaxedMarket = marketPool
-    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? 0.2 : 0.15))
-    .slice(0, 12)
+    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? 0.12 : 0.15))
+    .slice(0, 16)
     .map((entry) => entry.total);
 
   const relaxedListings = listingPool
-    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? 0.2 : 0.15))
-    .slice(0, 10)
+    .filter((entry) => entry.score >= (isMainUnit || isOutsize ? 0.12 : 0.15))
+    .slice(0, 14)
     .map((entry) => entry.total);
 
   const combined = uniqueRoundedValues([...relaxedMarket, ...relaxedListings]);
@@ -246,10 +309,10 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
   const marketPool = enrichDysonCompPool(searchText, marketItems);
   const listingPool = enrichDysonCompPool(searchText, listingItems);
 
-  const strongMarket = marketPool.filter((entry) => entry.score >= 0.45);
+  const strongMarket = marketPool.filter((entry) => entry.score >= 0.4);
   const usableMarket = strongMarket.length >= 3 ? strongMarket : marketPool;
 
-  const strongListings = listingPool.filter((entry) => entry.score >= 0.45);
+  const strongListings = listingPool.filter((entry) => entry.score >= 0.4);
   const usableListings = strongListings.length >= 2 ? strongListings : listingPool;
 
   let marketTotals = removePriceOutliers(usableMarket.map((entry) => entry.total));
@@ -261,6 +324,11 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
     searchText.includes("main body") ||
     searchText.includes("body only") ||
     searchText.includes("motor unit") ||
+    searchText.includes("bare unit") ||
+    searchText.includes("unit only") ||
+    searchText.includes("handheld unit") ||
+    searchText.includes("machine body") ||
+    searchText.includes("vacuum body") ||
     searchText.includes("body");
 
   let pricingMode = "Market median";
@@ -293,7 +361,7 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
 
   let conservativeMultiplier = 0.95;
   if (isOutsize) conservativeMultiplier = 0.97;
-  else if (isMainUnit) conservativeMultiplier = 0.95;
+  else if (isMainUnit) conservativeMultiplier = 0.98;
 
   let estimatedResale = roundMoney(baseline * conservativeMultiplier);
 
@@ -310,23 +378,23 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
   if (isMainUnit) {
     if (marketMedian && listingMedian) {
       estimatedResale = roundMoney(
-        Math.max(estimatedResale, marketMedian * 0.94, listingMedian * 0.9)
+        Math.max(estimatedResale, marketMedian * 0.97, listingMedian * 0.94)
       );
       pricingMode =
         pricingMode === "Low-comp fallback blend"
           ? "Main unit fallback blend"
           : "Main unit weighted median";
     } else if (marketMedian) {
-      estimatedResale = roundMoney(Math.max(estimatedResale, marketMedian * 0.95));
+      estimatedResale = roundMoney(Math.max(estimatedResale, marketMedian * 0.97));
       pricingMode = "Main unit fallback blend";
     } else if (listingMedian) {
-      estimatedResale = roundMoney(Math.max(estimatedResale, listingMedian * 0.9));
+      estimatedResale = roundMoney(Math.max(estimatedResale, listingMedian * 0.94));
       pricingMode = "Main unit listings fallback";
     }
   }
 
   const compCount = marketTotals.length;
-  let confidence = 22;
+  let confidence = 24;
   if (compCount >= 3) confidence = 55;
   if (compCount >= 5) confidence = 70;
   if (compCount >= 8) confidence = 84;
@@ -335,8 +403,12 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
   if (strongMarket.length >= 5) confidence += 4;
   if (usableListings.length >= 4) confidence += 3;
 
+  if (isMainUnit && compCount >= 3) {
+    confidence += 4;
+  }
+
   if (pricingMode.includes("fallback")) {
-    confidence = Math.min(confidence, 68);
+    confidence = Math.min(confidence, 72);
   }
 
   confidence = Math.min(92, confidence);
@@ -375,6 +447,11 @@ export const dysonEngine = {
       searchText.includes("main body") ||
       searchText.includes("body only") ||
       searchText.includes("motor unit") ||
+      searchText.includes("bare unit") ||
+      searchText.includes("unit only") ||
+      searchText.includes("handheld unit") ||
+      searchText.includes("machine body") ||
+      searchText.includes("vacuum body") ||
       searchText.includes("body");
 
     return {
@@ -403,6 +480,8 @@ export const dysonEngine = {
       q.includes("bare unit") ||
       q.includes("unit only") ||
       q.includes("handheld unit") ||
+      q.includes("machine body") ||
+      q.includes("vacuum body") ||
       q.includes("body");
 
     if (!isDyson) {
@@ -425,6 +504,8 @@ export const dysonEngine = {
         variants.push("dyson v11 bare unit");
         variants.push("dyson cordless v11 main body");
         variants.push("dyson cordless v11 motor unit");
+        variants.push("dyson v11 machine body");
+        variants.push("dyson v11 vacuum body");
         variants.push("dyson v11 body");
       } else {
         variants.push("dyson main unit");
@@ -433,6 +514,8 @@ export const dysonEngine = {
         variants.push("dyson body only");
         variants.push("dyson unit only");
         variants.push("dyson bare unit");
+        variants.push("dyson machine body");
+        variants.push("dyson vacuum body");
       }
     } else if (isV11) {
       variants.push("dyson v11");
