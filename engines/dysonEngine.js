@@ -46,6 +46,8 @@ function isDysonHardAccessoryOnly(text) {
     "spare parts",
     "for parts only",
     "parts only",
+    "shell only",
+    "cover only",
   ]);
 }
 
@@ -98,6 +100,10 @@ function isDysonMainUnitListing(text) {
     "unit only",
     "main machine",
     "motor body",
+    "housing body",
+    "body housing",
+    "cyclone body",
+    "main body unit",
     "body",
   ]);
 }
@@ -120,11 +126,9 @@ function isDysonHousingStyleListing(text) {
     "housing",
     "housing body",
     "body housing",
-    "shell",
-    "casing",
     "outer body",
     "plastic body",
-    "cover only",
+    "casing",
   ]);
 }
 
@@ -177,6 +181,7 @@ function hasStrongWorkingSignals(text) {
     "tested and working",
     "good working order",
     "in working order",
+    "fully operational",
   ]);
 }
 
@@ -184,6 +189,7 @@ function isLikelyValidDysonMainUnitListing(text) {
   if (!isDysonMainUnitListing(text)) return false;
   if (isDysonHardAccessoryOnly(text)) return false;
   if (isDysonFullMachineListing(text)) return false;
+  if (isDysonFaultyStyleListing(text)) return false;
   return true;
 }
 
@@ -222,6 +228,7 @@ function matchesDysonVariant(searchText, item) {
     if (!titleHasOutsize) return false;
     if (titleIsMainUnit) return false;
     if (isDysonPartsCategory(item)) return false;
+    if (isDysonFaultyStyleListing(titleText)) return false;
     return titleIsFullMachine;
   }
 
@@ -230,6 +237,7 @@ function matchesDysonVariant(searchText, item) {
     if (!isDysonMainUnitListing(titleText)) return false;
     if (isDysonHardAccessoryOnly(titleText)) return false;
     if (isDysonFullMachineListing(titleText)) return false;
+    if (isDysonFaultyStyleListing(titleText)) return false;
     return true;
   }
 
@@ -238,6 +246,7 @@ function matchesDysonVariant(searchText, item) {
     if (titleHasOutsize) return false;
     if (titleIsMainUnit) return false;
     if (isDysonPartsCategory(item)) return false;
+    if (isDysonFaultyStyleListing(titleText)) return false;
     return titleIsFullMachine;
   }
 
@@ -287,7 +296,7 @@ function scoreDysonTitleAgainstQuery(searchText, item) {
     searchText.includes("vacuum body") ||
     searchText.includes("body")
   ) {
-    score += isLikelyValidDysonMainUnitListing(titleText) ? 0.4 : -0.2;
+    score += isLikelyValidDysonMainUnitListing(titleText) ? 0.4 : -0.15;
   }
 
   if (
@@ -311,19 +320,19 @@ function scoreDysonTitleAgainstQuery(searchText, item) {
   }
 
   if (isDysonHousingStyleListing(titleText)) {
-    score -= 0.45;
+    score -= 0.18;
   }
 
   if (isDysonAssemblyStyleListing(titleText)) {
-    score -= 0.35;
+    score -= 0.15;
   }
 
   if (isDysonUnitPartStyleListing(titleText)) {
-    score -= 0.45;
+    score -= 0.18;
   }
 
   if (isDysonFaultyStyleListing(titleText)) {
-    score -= 0.7;
+    score -= 0.8;
   }
 
   return score;
@@ -395,10 +404,10 @@ function buildDysonPricingModel(searchText, marketItems = [], listingItems = [])
   const marketPool = enrichDysonCompPool(searchText, marketItems);
   const listingPool = enrichDysonCompPool(searchText, listingItems);
 
-  const strongMarket = marketPool.filter((entry) => entry.score >= 0.25);
+  const strongMarket = marketPool.filter((entry) => entry.score >= 0.2);
   const usableMarket = strongMarket.length >= 3 ? strongMarket : marketPool;
 
-  const strongListings = listingPool.filter((entry) => entry.score >= 0.25);
+  const strongListings = listingPool.filter((entry) => entry.score >= 0.2);
   const usableListings = strongListings.length >= 2 ? strongListings : listingPool;
 
   let marketTotals = removePriceOutliers(usableMarket.map((entry) => entry.total));
@@ -520,33 +529,34 @@ function getDysonListingWarnings(item, queryContext) {
   const warnings = [];
   let penalty = 0;
 
-  if (isDysonHousingStyleListing(titleText)) {
-    warnings.push("Title suggests housing or shell style parts, not a clean resale-ready main unit.");
-    penalty += 28;
-  }
-
-  if (isDysonAssemblyStyleListing(titleText)) {
-    warnings.push("Title suggests an assembly listing rather than a straightforward working main motor unit.");
-    penalty += 18;
-  }
-
-  if (isDysonUnitPartStyleListing(titleText)) {
-    warnings.push("Title reads like a part-number style component listing rather than a complete main unit.");
-    penalty += 28;
-  }
-
   if (isDysonFaultyStyleListing(titleText)) {
     warnings.push("Fault wording detected in the title, so resale risk is much higher.");
     penalty += 45;
   }
 
+  if (isDysonHousingStyleListing(titleText)) {
+    warnings.push("Title includes housing/body wording, so verify it is a usable main unit and not just shell parts.");
+    penalty += 10;
+  }
+
+  if (isDysonAssemblyStyleListing(titleText)) {
+    warnings.push("Title includes assembly wording, so check exactly what is included.");
+    penalty += 8;
+  }
+
+  if (isDysonUnitPartStyleListing(titleText)) {
+    warnings.push("Title includes part-style wording, so confirm it is a complete usable body unit.");
+    penalty += 10;
+  }
+
   if (
     queryContext?.isMainUnit &&
     isDysonPartsCategory(item) &&
-    !hasStrongWorkingSignals(titleText)
+    !hasStrongWorkingSignals(titleText) &&
+    !isDysonFaultyStyleListing(titleText)
   ) {
-    warnings.push("This is in a parts category and the title does not clearly confirm fully working condition.");
-    penalty += 10;
+    warnings.push("This sits in a parts category, so confirm the body unit is working and complete.");
+    penalty += 8;
   }
 
   return {
@@ -663,11 +673,11 @@ export const dysonEngine = {
     if (isDysonFaultyStyleListing(titleText)) {
       estimatedResale = roundMoney(baseEstimatedResale * 0.68);
     } else if (isDysonHousingStyleListing(titleText) || isDysonUnitPartStyleListing(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.72);
+      estimatedResale = roundMoney(baseEstimatedResale * 0.86);
     } else if (isDysonAssemblyStyleListing(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.8);
+      estimatedResale = roundMoney(baseEstimatedResale * 0.9);
     } else if (isDysonPartsCategory(item) && !hasStrongWorkingSignals(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.94);
+      estimatedResale = roundMoney(baseEstimatedResale * 0.96);
     }
 
     return {
