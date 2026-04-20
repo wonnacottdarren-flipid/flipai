@@ -219,6 +219,28 @@ function buildReasoningPrefix({ manualSoldComps, pricingMode, forcedEstimatedRes
   return "";
 }
 
+function buildFlipMetrics(result, pricingMode, manualSoldComps) {
+  const analysis = result?.flip_analysis || {};
+
+  let verdict = String(analysis.final_verdict || "").trim().toUpperCase();
+  if (verdict === "BUY") verdict = "GOOD DEAL";
+  else if (verdict === "MARGINAL") verdict = "OK DEAL";
+  else if (verdict === "SKIP") verdict = "AVOID";
+
+  return {
+    estimatedResale: roundMoney(analysis.sale_price || 0),
+    ebayFees: roundMoney(analysis.fees || 0),
+    totalCost: roundMoney(analysis.costs || 0),
+    profit: roundMoney(analysis.net_profit || 0),
+    verdict: verdict || "AVOID",
+    pricingMode: pricingMode || "Unknown",
+    soldComps: {
+      ...(manualSoldComps || {}),
+      pricingMode: pricingMode || "Unknown",
+    },
+  };
+}
+
 function normaliseOutput(parsed, context) {
   const manualSoldComps = context.manualSoldComps || {};
   const forcedEstimatedResale = Number(context.forcedEstimatedResale || 0);
@@ -284,6 +306,17 @@ function normaliseOutput(parsed, context) {
   while (parsed.ebay_listing.keywords.length < 8) {
     parsed.ebay_listing.keywords.push("uk ebay");
   }
+
+  parsed.manualSoldComps = {
+    ...(manualSoldComps || {}),
+    pricingMode: context.pricingMode || "Unknown",
+  };
+
+  parsed.flipMetrics = buildFlipMetrics(
+    parsed,
+    context.pricingMode,
+    manualSoldComps
+  );
 
   return parsed;
 }
