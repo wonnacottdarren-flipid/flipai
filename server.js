@@ -35,6 +35,12 @@ const port = process.env.PORT || 3000;
 const appUrl = process.env.APP_URL || `http://localhost:${port}`;
 const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 
+const EBAY_AFFILIATE_ENABLED =
+  String(process.env.EBAY_AFFILIATE_ENABLED || "").trim().toLowerCase() === "true";
+const EBAY_CAMPAIGN_ID = String(process.env.EBAY_CAMPAIGN_ID || "").trim();
+const EBAY_CUSTOM_ID = String(process.env.EBAY_CUSTOM_ID || "flipai").trim();
+const EBAY_AFFILIATE_TOOL_ID = String(process.env.EBAY_AFFILIATE_TOOL_ID || "10001").trim();
+
 app.use(cors({ origin: appUrl, credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
@@ -142,6 +148,53 @@ function extractItemTitle(item) {
 
 function extractTotalPrice(item) {
   return roundMoney(extractNumericPrice(item) + extractNumericShipping(item));
+}
+
+function extractItemUrl(item) {
+  return String(
+    item?.itemWebUrl ||
+      item?.viewItemURL ||
+      item?.url ||
+      item?.link ||
+      ""
+  ).trim();
+}
+
+function buildAffiliateUrl(rawUrl) {
+  const cleanUrl = String(rawUrl || "").trim();
+  if (!cleanUrl) return "";
+
+  if (!EBAY_AFFILIATE_ENABLED || !EBAY_CAMPAIGN_ID) {
+    return cleanUrl;
+  }
+
+  if (cleanUrl.includes("rover.ebay.com")) {
+    return cleanUrl;
+  }
+
+  try {
+    return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${encodeURIComponent(
+      EBAY_CAMPAIGN_ID
+    )}&customid=${encodeURIComponent(
+      EBAY_CUSTOM_ID
+    )}&toolid=${encodeURIComponent(
+      EBAY_AFFILIATE_TOOL_ID
+    )}&mpre=${encodeURIComponent(cleanUrl)}`;
+  } catch {
+    return cleanUrl;
+  }
+}
+
+function decorateItemWithAffiliate(item = {}) {
+  const originalUrl = extractItemUrl(item);
+  const affiliateUrl = buildAffiliateUrl(originalUrl);
+
+  return {
+    ...item,
+    originalUrl,
+    affiliateUrl,
+    url: affiliateUrl || originalUrl,
+  };
 }
 
 function itemMatchesCondition(item, conditionText) {
@@ -615,6 +668,8 @@ function evaluateDeal({
   const price = extractNumericPrice(item);
   const shipping = extractNumericShipping(item);
   const total = roundMoney(price + shipping);
+  const originalUrl = extractItemUrl(item);
+  const affiliateUrl = buildAffiliateUrl(originalUrl);
 
   const classified =
     engine && typeof engine.classifyItem === "function"
@@ -795,12 +850,9 @@ function evaluateDeal({
       offerProfit,
     }),
     reasonBreakdown,
-    url:
-      item?.itemWebUrl ||
-      item?.viewItemURL ||
-      item?.url ||
-      item?.link ||
-      "",
+    originalUrl,
+    affiliateUrl,
+    url: affiliateUrl || originalUrl,
     bundleType: adjusted?.bundleType || classified?.bundleType || "",
     bundleSignals: adjusted?.bundleSignals || classified?.bundleSignals || {},
     bundleValueBonus: roundMoney(adjusted?.bundleValueBonus || 0),
@@ -931,11 +983,16 @@ app.post("/api/search-ebay", async (req, res) => {
       filtered = filtered.filter((item) => engine.matchesItem(item, queryContext));
     }
 
+    const decoratedItems = filtered
+      .slice(0, Number(limit || 8))
+      .map((item) => decorateItemWithAffiliate(item));
+
     return res.json({
       ok: true,
       searchQuery: fetched.searchQuery,
       searchVariants: fetched.searchVariants,
-      items: filtered.slice(0, Number(limit || 8)),
+      affiliateEnabled: Boolean(EBAY_AFFILIATE_ENABLED && EBAY_CAMPAIGN_ID),
+      items: decoratedItems,
     });
   } catch (err) {
     console.error(err);
@@ -1088,6 +1145,7 @@ app.post("/api/find-deals", async (req, res) => {
       ok: true,
       searchQuery: fetchedListings.searchQuery,
       searchVariants: fetchedListings.searchVariants,
+      affiliateEnabled: Boolean(EBAY_AFFILIATE_ENABLED && EBAY_CAMPAIGN_ID),
       includeTightDeals: Boolean(includeTightDeals),
       deals: finalDeals,
       totalFetched: Array.isArray(fetchedListings.items) ? fetchedListings.items.length : 0,
