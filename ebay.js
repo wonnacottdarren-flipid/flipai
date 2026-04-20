@@ -89,6 +89,8 @@ function isDysonMainUnitQuery(text) {
       text.includes("bare unit") ||
       text.includes("unit only") ||
       text.includes("handheld unit") ||
+      text.includes("machine body") ||
+      text.includes("vacuum body") ||
       text.includes("body")
     )
   );
@@ -105,6 +107,68 @@ function isDysonPartsCategory(item) {
   );
 }
 
+function isDysonMainUnitTitle(text) {
+  return hasAny(text, [
+    "main unit",
+    "motor unit",
+    "body only",
+    "main body",
+    "machine body",
+    "vacuum body",
+    "body unit",
+    "handheld unit",
+    "main vacuum unit",
+    "bare unit",
+    "unit only",
+    "main machine",
+    "motor body",
+    "body",
+  ]);
+}
+
+function isDysonFullVacTitle(text) {
+  return hasAny(text, [
+    "vacuum cleaner",
+    "cordless vacuum",
+    "stick vacuum",
+    "complete vacuum",
+    "full vacuum",
+    "complete machine",
+    "complete set",
+    "full set",
+  ]);
+}
+
+function isDysonHardAccessoryOnlyTitle(text) {
+  return hasAny(text, [
+    "attachment only",
+    "attachments only",
+    "tool only",
+    "tools only",
+    "battery only",
+    "charger only",
+    "filter only",
+    "wand only",
+    "head only",
+    "roller head only",
+    "motorhead only",
+    "floor head only",
+    "bin only",
+    "canister only",
+    "hose only",
+    "dock only",
+    "wall dock only",
+    "nozzle only",
+    "crevice tool only",
+    "brush only",
+    "trigger only",
+    "spares",
+    "spare parts",
+    "for parts only",
+    "parts only",
+  ]);
+}
+
 function isDysonAccessoryOrPartsTitle(text) {
   return hasAny(text, [
     "parts",
@@ -118,9 +182,7 @@ function isDysonAccessoryOrPartsTitle(text) {
     "filter only",
     "wand only",
     "head only",
-    "battery",
-    "charger",
-    "dock",
+    "dock only",
     "wall dock",
     "filter",
     "filters",
@@ -141,32 +203,16 @@ function isDysonAccessoryOrPartsTitle(text) {
   ]);
 }
 
-function isDysonMainUnitTitle(text) {
-  return hasAny(text, [
-    "main unit",
-    "motor unit",
-    "body only",
-    "main body",
-    "machine body",
-    "body",
-    "handheld unit",
-    "main vacuum unit",
-    "bare unit",
-    "unit only",
-  ]);
-}
+function isLikelyValidDysonMainUnitTitle(text) {
+  const titleText = normalizeText(text);
+  const isMainUnit = isDysonMainUnitTitle(titleText);
 
-function isDysonFullVacTitle(text) {
-  return hasAny(text, [
-    "vacuum cleaner",
-    "cordless vacuum",
-    "stick vacuum",
-    "complete vacuum",
-    "full vacuum",
-    "complete machine",
-    "complete set",
-    "full set",
-  ]);
+  if (!isMainUnit) return false;
+
+  if (isDysonHardAccessoryOnlyTitle(titleText)) return false;
+  if (isDysonFullVacTitle(titleText)) return false;
+
+  return true;
 }
 
 function matchesDysonVariantForEbay(query, item) {
@@ -180,13 +226,12 @@ function matchesDysonVariantForEbay(query, item) {
 
   const titleHasV11 = titleText.includes("v11");
   const titleHasOutsize = titleText.includes("outsize");
-  const titleIsMainUnit = isDysonMainUnitTitle(titleText);
+  const titleIsMainUnit = isLikelyValidDysonMainUnitTitle(titleText);
   const titleIsParts = isDysonAccessoryOrPartsTitle(titleText);
   const titleIsFullMachine =
     isDysonFullVacTitle(titleText) || (!titleIsMainUnit && !titleIsParts);
 
-  if (isDysonPartsCategory(item)) return false;
-  if (titleIsParts) return false;
+  if (isDysonPartsCategory(item) && !titleIsMainUnit) return false;
   if (wantsV11 && !titleHasV11) return false;
 
   if (wantsOutsize) {
@@ -220,19 +265,24 @@ function scoreMainUnitCandidate(query, item) {
   let score = 0;
 
   if (titleText.includes("v11")) score += 3;
-  if (titleText.includes("main unit")) score += 5;
-  if (titleText.includes("main body")) score += 5;
-  if (titleText.includes("motor unit")) score += 5;
-  if (titleText.includes("body only")) score += 5;
-  if (titleText.includes("bare unit")) score += 4;
-  if (titleText.includes("unit only")) score += 4;
-  if (titleText.includes("handheld unit")) score += 4;
+  if (titleText.includes("main unit")) score += 6;
+  if (titleText.includes("main body")) score += 6;
+  if (titleText.includes("motor unit")) score += 6;
+  if (titleText.includes("body only")) score += 6;
+  if (titleText.includes("machine body")) score += 5;
+  if (titleText.includes("vacuum body")) score += 5;
+  if (titleText.includes("bare unit")) score += 5;
+  if (titleText.includes("unit only")) score += 5;
+  if (titleText.includes("handheld unit")) score += 5;
   if (titleText.includes("body")) score += 2;
 
-  if (titleText.includes("outsize")) score -= 8;
-  if (isDysonAccessoryOrPartsTitle(titleText)) score -= 10;
-  if (isDysonPartsCategory(item)) score -= 10;
-  if (isDysonFullVacTitle(titleText)) score -= 8;
+  if (titleText.includes("for spares")) score -= 8;
+  if (titleText.includes("for parts")) score -= 8;
+  if (titleText.includes("not working")) score -= 8;
+  if (titleText.includes("outsize")) score -= 10;
+  if (isDysonHardAccessoryOnlyTitle(titleText)) score -= 12;
+  if (isDysonPartsCategory(item) && !isLikelyValidDysonMainUnitTitle(titleText)) score -= 12;
+  if (isDysonFullVacTitle(titleText)) score -= 10;
 
   return score;
 }
@@ -456,6 +506,8 @@ function buildDysonSearchVariants(query) {
       variants.push("dyson v11 bare unit");
       variants.push("dyson cordless v11 main body");
       variants.push("dyson cordless v11 motor unit");
+      variants.push("dyson v11 machine body");
+      variants.push("dyson v11 vacuum body");
       variants.push("dyson v11 body");
     } else {
       variants.push("dyson main unit");
@@ -464,6 +516,8 @@ function buildDysonSearchVariants(query) {
       variants.push("dyson body only");
       variants.push("dyson unit only");
       variants.push("dyson bare unit");
+      variants.push("dyson machine body");
+      variants.push("dyson vacuum body");
     }
   } else if (isV11) {
     variants.push("dyson v11");
@@ -779,7 +833,8 @@ async function searchWithFallbacks({
   const shouldSearchAllVariants =
     isConsoleDiscDigitalSearch(searchText) ||
     searchText.includes("ps5") ||
-    searchText.includes("playstation 5");
+    searchText.includes("playstation 5") ||
+    isDysonMainUnitQuery(searchText);
 
   for (let i = 0; i < variants.length; i += 1) {
     const variant = variants[i];
@@ -799,7 +854,7 @@ async function searchWithFallbacks({
       break;
     }
 
-    if (shouldSearchAllVariants && i >= 5 && combined.length >= limit * 2) {
+    if (shouldSearchAllVariants && i >= 6 && combined.length >= limit * 2) {
       break;
     }
   }
@@ -851,7 +906,7 @@ async function searchWithFallbacks({
         break;
       }
 
-      if (shouldSearchAllVariants && i >= 5 && fallbackCombined.length >= limit * 2) {
+      if (shouldSearchAllVariants && i >= 6 && fallbackCombined.length >= limit * 2) {
         break;
       }
     }
