@@ -663,12 +663,31 @@
     }
 
     .deal-card {
-      background: rgba(255,255,255,0.04);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.035));
       padding: 18px;
-      border-radius: 18px;
-      margin-bottom: 14px;
+      border-radius: 22px;
+      margin-bottom: 16px;
       position: relative;
       overflow: hidden;
+      transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+    }
+
+    .deal-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(79,140,255,0.28);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.34);
+    }
+
+    .deal-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, rgba(79,140,255,0.8), rgba(34,197,94,0.7));
+      opacity: 0.9;
     }
 
     .deal-card-topline {
@@ -676,7 +695,7 @@
       align-items: center;
       gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
     }
 
     .deal-rank-banner,
@@ -729,32 +748,115 @@
       border: 1px solid rgba(255,255,255,0.12);
     }
 
-    .deal-title {
-      margin: 0 0 8px;
-      font-size: 18px;
-      line-height: 1.4;
-      color: #eff6ff;
+    .deal-shell {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 16px;
+      align-items: start;
     }
 
-    .deal-subtitle {
-      margin: 0 0 12px;
-      color: #cbd5e1;
-      font-size: 14px;
+    .deal-image-wrap {
+      width: 100%;
+    }
+
+    .deal-image-box {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .deal-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .deal-image-fallback {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 14px;
       line-height: 1.6;
     }
 
-    .deal-price-row {
+    .deal-main {
+      min-width: 0;
+    }
+
+    .deal-title-row {
       display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 12px;
-      align-items: center;
+      justify-content: space-between;
+      align-items: start;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+
+    .deal-title-wrap {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .deal-title {
+      margin: 0 0 8px;
+      font-size: 19px;
+      line-height: 1.45;
+      color: #eff6ff;
+      letter-spacing: -0.2px;
+    }
+
+    .deal-subtitle {
+      margin: 0;
+      color: #cbd5e1;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .deal-price-stack {
+      min-width: 148px;
+      text-align: right;
+      padding: 12px 14px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .deal-price-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
     }
 
     .deal-price {
-      font-size: 24px;
+      font-size: 28px;
       font-weight: 900;
       color: #ffffff;
+      letter-spacing: -0.8px;
+      line-height: 1.1;
+    }
+
+    .deal-price-sub {
+      margin-top: 6px;
+      color: #cbd5e1;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .deal-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 14px;
+      align-items: center;
     }
 
     .deal-shipping,
@@ -764,13 +866,16 @@
     .deal-badge,
     .deal-bucket,
     .deal-offer-chip,
-    .warning-chip {
+    .warning-chip,
+    .risk-pill,
+    .profit-pill {
       font-size: 12px;
       color: var(--muted);
-      padding: 6px 10px;
+      padding: 7px 11px;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: rgba(255,255,255,0.04);
+      font-weight: 700;
     }
 
     .deal-badge {
@@ -801,6 +906,94 @@
       color: #fde68a;
       background: rgba(245,158,11,0.14);
       border-color: rgba(245,158,11,0.3);
+    }
+
+    .profit-pill.strong {
+      color: #bbf7d0;
+      background: rgba(34,197,94,0.14);
+      border-color: rgba(34,197,94,0.3);
+    }
+
+    .profit-pill.mid {
+      color: #fde68a;
+      background: rgba(245,158,11,0.14);
+      border-color: rgba(245,158,11,0.3);
+    }
+
+    .profit-pill.weak {
+      color: #fecaca;
+      background: rgba(239,68,68,0.14);
+      border-color: rgba(239,68,68,0.3);
+    }
+
+    .risk-pill.low {
+      color: #bbf7d0;
+      background: rgba(34,197,94,0.14);
+      border-color: rgba(34,197,94,0.3);
+    }
+
+    .risk-pill.medium {
+      color: #fde68a;
+      background: rgba(245,158,11,0.14);
+      border-color: rgba(245,158,11,0.3);
+    }
+
+    .risk-pill.high {
+      color: #fecaca;
+      background: rgba(239,68,68,0.14);
+      border-color: rgba(239,68,68,0.3);
+    }
+
+    .deal-highlight-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .deal-highlight {
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .deal-highlight.primary {
+      background: linear-gradient(180deg, rgba(34,197,94,0.12), rgba(34,197,94,0.04));
+      border-color: rgba(34,197,94,0.2);
+    }
+
+    .deal-highlight.secondary {
+      background: linear-gradient(180deg, rgba(79,140,255,0.1), rgba(79,140,255,0.04));
+      border-color: rgba(79,140,255,0.2);
+    }
+
+    .deal-highlight.tertiary {
+      background: linear-gradient(180deg, rgba(245,158,11,0.1), rgba(245,158,11,0.04));
+      border-color: rgba(245,158,11,0.18);
+    }
+
+    .deal-highlight .label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .deal-highlight .value {
+      font-size: 22px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -0.5px;
+      line-height: 1.15;
+    }
+
+    .deal-highlight .subvalue {
+      margin-top: 5px;
+      font-size: 12px;
+      color: #cbd5e1;
+      line-height: 1.5;
     }
 
     .warning-box {
@@ -839,7 +1032,7 @@
     }
 
     .deal-metric {
-      padding: 12px;
+      padding: 13px;
       border-radius: 16px;
       background: rgba(255,255,255,0.04);
     }
@@ -861,6 +1054,10 @@
       line-height: 1.7;
       color: #dbeafe;
       margin-bottom: 12px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.035);
     }
 
     .deal-reasons {
@@ -894,13 +1091,18 @@
     .deal-actions button,
     .deal-actions a {
       width: auto;
-      min-width: 150px;
+      min-width: 170px;
       text-align: center;
       text-decoration: none;
-      padding: 12px 14px;
+      padding: 13px 16px;
       border-radius: 14px;
       font-size: 14px;
       font-weight: 800;
+    }
+
+    .deal-actions button {
+      background: linear-gradient(135deg, var(--blue), var(--blue-2));
+      box-shadow: 0 16px 28px rgba(79, 140, 255, 0.26);
     }
 
     .deal-actions a {
@@ -1034,20 +1236,6 @@
       margin-top: 2px;
     }
 
-    .deal-image-wrap {
-      margin-bottom: 12px;
-    }
-
-    .deal-image {
-      width: 100%;
-      max-width: 180px;
-      height: auto;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      display: block;
-      background: rgba(255,255,255,0.03);
-    }
-
     .finder-toolbar {
       display: flex;
       align-items: center;
@@ -1107,7 +1295,8 @@
       .deal-metrics,
       .button-row,
       .three-button-row,
-      .offer-grid {
+      .offer-grid,
+      .deal-highlight-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1126,6 +1315,34 @@
 
       .finder-toolbar {
         align-items: flex-start;
+      }
+
+      .deal-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .deal-image-wrap {
+        max-width: 220px;
+      }
+
+      .deal-title-row {
+        flex-direction: column;
+      }
+
+      .deal-price-stack {
+        width: 100%;
+        text-align: left;
+        min-width: 0;
+      }
+
+      .deal-actions {
+        flex-direction: column;
+      }
+
+      .deal-actions button,
+      .deal-actions a {
+        width: 100%;
+        min-width: 0;
       }
     }
   </style>
@@ -1661,6 +1878,20 @@
       return "buy";
     }
 
+    function getRiskClass(risk) {
+      const value = String(risk || "").toLowerCase();
+      if (value.includes("low")) return "low";
+      if (value.includes("medium")) return "medium";
+      return "high";
+    }
+
+    function getProfitClass(profit) {
+      const value = Number(profit || 0);
+      if (value >= 40) return "strong";
+      if (value >= 15) return "mid";
+      return "weak";
+    }
+
     function renderEmptyStateCard(title, lines = [], bullets = []) {
       return `
         <div class="empty-state">
@@ -2127,6 +2358,26 @@
       `;
     }
 
+    function renderDealImage(image, title) {
+      if (!image) {
+        return `
+          <div class="deal-image-wrap">
+            <div class="deal-image-box">
+              <div class="deal-image-fallback">No image available</div>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="deal-image-wrap">
+          <div class="deal-image-box">
+            <img class="deal-image" src="${escapeHtml(image)}" alt="${escapeHtml(title)}" />
+          </div>
+        </div>
+      `;
+    }
+
     window.useDealForAnalysis = useDealForAnalysis;
 
     function renderDealResults(data) {
@@ -2172,85 +2423,117 @@
                 ${renderOfferPriorityBanner(deal.offerOpportunityType)}
               </div>
 
-              ${deal.image ? `<div class="deal-image-wrap"><img class="deal-image" src="${escapeHtml(deal.image)}" alt="${escapeHtml(deal.title)}" /></div>` : ""}
+              <div class="deal-shell">
+                ${renderDealImage(deal.image, deal.title)}
 
-              <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
-              <p class="deal-subtitle">
-                ${
-                  deal.bestOffer && deal.bestOffer.hasBestOffer
-                    ? "Best Offer is available on this listing, so negotiation could improve the margin."
-                    : "This is a straightforward listing view, useful for checking price, shipping, and current margin assumptions."
-                }
-              </p>
+                <div class="deal-main">
+                  <div class="deal-title-row">
+                    <div class="deal-title-wrap">
+                      <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
+                      <p class="deal-subtitle">
+                        ${
+                          deal.bestOffer && deal.bestOffer.hasBestOffer
+                            ? "Best Offer is available on this listing, so negotiation could improve the margin."
+                            : "This is a straightforward listing view, useful for checking price, shipping, and current margin assumptions."
+                        }
+                      </p>
+                    </div>
 
-              <div class="deal-price-row">
-                <div class="deal-price">${currency(deal.price)}</div>
-                <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
-                <div class="deal-source">${escapeHtml(deal.source)}</div>
-                ${
-                  deal.condition
-                    ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
-                    : ""
-                }
-                <div class="deal-score">Score ${escapeHtml(deal.score)}</div>
-                ${
-                  Array.isArray(deal.warningFlags) && deal.warningFlags.length
-                    ? `<div class="warning-chip">${deal.warningFlags.length} warning${deal.warningFlags.length > 1 ? "s" : ""}</div>`
-                    : ""
-                }
-              </div>
+                    <div class="deal-price-stack">
+                      <div class="deal-price-label">Current price</div>
+                      <div class="deal-price">${currency(deal.price)}</div>
+                      <div class="deal-price-sub">Shipping ${currency(deal.shipping)}</div>
+                    </div>
+                  </div>
 
-              <div class="deal-metrics">
-                <div class="deal-metric">
-                  <div class="label">Estimated resale</div>
-                  <div class="value">${currency(deal.estimatedResale)}</div>
-                </div>
-                <div class="deal-metric">
-                  <div class="label">Estimated profit</div>
-                  <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
-                    ${currency(deal.estimatedProfit)}
+                  <div class="deal-chip-row">
+                    <div class="deal-source">${escapeHtml(deal.source)}</div>
+                    ${
+                      deal.condition
+                        ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
+                        : ""
+                    }
+                    <div class="deal-score">Score ${escapeHtml(deal.score)}</div>
+                    <div class="profit-pill ${getProfitClass(deal.estimatedProfit)}">Profit ${currency(deal.estimatedProfit)}</div>
+                    <div class="risk-pill ${getRiskClass(deal.risk)}">Risk ${escapeHtml(deal.risk)}</div>
+                    ${
+                      Array.isArray(deal.warningFlags) && deal.warningFlags.length
+                        ? `<div class="warning-chip">${deal.warningFlags.length} warning${deal.warningFlags.length > 1 ? "s" : ""}</div>`
+                        : ""
+                    }
+                  </div>
+
+                  <div class="deal-highlight-grid">
+                    <div class="deal-highlight primary">
+                      <div class="label">Estimated profit</div>
+                      <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
+                        ${currency(deal.estimatedProfit)}
+                      </div>
+                      <div class="subvalue">After estimated fees</div>
+                    </div>
+
+                    <div class="deal-highlight secondary">
+                      <div class="label">Estimated resale</div>
+                      <div class="value">${currency(deal.estimatedResale)}</div>
+                      <div class="subvalue">Modelled resale value</div>
+                    </div>
+
+                    <div class="deal-highlight tertiary">
+                      <div class="label">Total buy cost</div>
+                      <div class="value">${currency(deal.totalBuyPrice)}</div>
+                      <div class="subvalue">Price + shipping</div>
+                    </div>
+                  </div>
+
+                  <div class="panel" style="font-weight:800;color:${scannerVerdictColor(deal.verdict)};">
+                    Verdict: ${escapeHtml(deal.verdict)}
+                  </div>
+
+                  <div class="deal-metrics">
+                    <div class="deal-metric">
+                      <div class="label">eBay fees</div>
+                      <div class="value">${currency(deal.ebayFees)}</div>
+                    </div>
+                    <div class="deal-metric">
+                      <div class="label">Margin %</div>
+                      <div class="value">${Number(deal.marginPercent || 0).toFixed(2)}%</div>
+                    </div>
+                    <div class="deal-metric">
+                      <div class="label">Item price</div>
+                      <div class="value">${currency(deal.price)}</div>
+                    </div>
+                    <div class="deal-metric">
+                      <div class="label">Shipping</div>
+                      <div class="value">${currency(deal.shipping)}</div>
+                    </div>
+                  </div>
+
+                  ${
+                    Number(deal.warningScorePenalty || 0) > 0
+                      ? `
+                        <div class="panel">
+                          <strong>Warning penalty:</strong> -${Number(deal.warningScorePenalty || 0).toFixed(0)} points
+                        </div>
+                      `
+                      : ""
+                  }
+
+                  ${renderReasonBreakdown(deal)}
+                  ${renderWarningBox(deal.warningFlags, deal.warningScorePenalty)}
+
+                  <div class="deal-summary">${escapeHtml(deal.reason)}</div>
+
+                  ${renderBestOfferBox(deal.bestOffer, deal.offerOpportunityType)}
+
+                  <div class="deal-actions">
+                    <button onclick="useDealForAnalysis(${index}, '__lastDeals')">Send to Analyzer</button>
+                    ${
+                      deal.url
+                        ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
+                        : ""
+                    }
                   </div>
                 </div>
-                <div class="deal-metric">
-                  <div class="label">Total buy cost</div>
-                  <div class="value">${currency(deal.totalBuyPrice)}</div>
-                </div>
-                <div class="deal-metric">
-                  <div class="label">eBay fees</div>
-                  <div class="value">${currency(deal.ebayFees)}</div>
-                </div>
-              </div>
-
-              <div class="panel" style="font-weight:800;color:${scannerVerdictColor(deal.verdict)};">
-                Verdict: ${escapeHtml(deal.verdict)}
-              </div>
-
-              <div class="panel">
-                <strong>Risk:</strong> ${escapeHtml(deal.risk)}<br>
-                <strong>Margin %:</strong> ${Number(deal.marginPercent || 0).toFixed(2)}%<br>
-                <strong>Item price:</strong> ${currency(deal.price)}<br>
-                <strong>Shipping:</strong> ${currency(deal.shipping)}<br>
-                ${
-                  Number(deal.warningScorePenalty || 0) > 0
-                    ? `<strong>Warning penalty:</strong> -${Number(deal.warningScorePenalty || 0).toFixed(0)} points`
-                    : ""
-                }
-              </div>
-
-              ${renderReasonBreakdown(deal)}
-              ${renderWarningBox(deal.warningFlags, deal.warningScorePenalty)}
-
-              <div class="deal-summary">${escapeHtml(deal.reason)}</div>
-
-              ${renderBestOfferBox(deal.bestOffer, deal.offerOpportunityType)}
-
-              <div class="deal-actions">
-                <button onclick="useDealForAnalysis(${index}, '__lastDeals')">Send to Analyzer</button>
-                ${
-                  deal.url
-                    ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
-                    : ""
-                }
               </div>
             </div>
           `;
@@ -2366,96 +2649,127 @@
                   ${renderOfferPriorityBanner(deal.offerOpportunityType)}
                 </div>
 
-                ${deal.image ? `<div class="deal-image-wrap"><img class="deal-image" src="${escapeHtml(deal.image)}" alt="${escapeHtml(deal.title)}" /></div>` : ""}
+                <div class="deal-shell">
+                  ${renderDealImage(deal.image, deal.title)}
 
-                <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
-                <p class="deal-subtitle">${escapeHtml(buildDealSubtitle(deal))}</p>
+                  <div class="deal-main">
+                    <div class="deal-title-row">
+                      <div class="deal-title-wrap">
+                        <h3 class="deal-title">${escapeHtml(deal.title)}</h3>
+                        <p class="deal-subtitle">${escapeHtml(buildDealSubtitle(deal))}</p>
+                      </div>
 
-                <div class="deal-price-row">
-                  <div class="deal-price">${currency(deal.price)}</div>
-                  <div class="deal-shipping">Shipping ${currency(deal.shipping)}</div>
-                  <div class="deal-badge ${labelClass(deal.finderLabel)}">${escapeHtml(deal.finderLabel)}</div>
-                  ${
-                    deal.condition
-                      ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
-                      : ""
-                  }
-                  ${
-                    deal.marketBucket
-                      ? `<div class="deal-bucket">${escapeHtml(deal.marketBucket)}</div>`
-                      : ""
-                  }
-                  ${
-                    deal.bestOffer && deal.bestOffer.hasBestOffer
-                      ? `<div class="deal-offer-chip">Best offer</div>`
-                      : ""
-                  }
-                  <div class="deal-score">Deal score ${escapeHtml(deal.dealScore)}</div>
-                  ${
-                    Array.isArray(deal.warningFlags) && deal.warningFlags.length
-                      ? `<div class="warning-chip">${deal.warningFlags.length} warning${deal.warningFlags.length > 1 ? "s" : ""}</div>`
-                      : ""
-                  }
-                </div>
+                      <div class="deal-price-stack">
+                        <div class="deal-price-label">Current price</div>
+                        <div class="deal-price">${currency(deal.price)}</div>
+                        <div class="deal-price-sub">Shipping ${currency(deal.shipping)}</div>
+                      </div>
+                    </div>
 
-                <div class="deal-metrics">
-                  <div class="deal-metric">
-                    <div class="label">Estimated resale</div>
-                    <div class="value">${currency(deal.estimatedResale)}</div>
-                  </div>
-                  <div class="deal-metric">
-                    <div class="label">
+                    <div class="deal-chip-row">
+                      <div class="deal-badge ${labelClass(deal.finderLabel)}">${escapeHtml(deal.finderLabel)}</div>
                       ${
-                        getDealTypeClass(deal.finderLabel) === "offer"
-                          ? "Profit at current ask"
-                          : "Estimated profit"
+                        deal.condition
+                          ? `<div class="deal-condition">${escapeHtml(deal.condition)}</div>`
+                          : ""
+                      }
+                      ${
+                        deal.marketBucket
+                          ? `<div class="deal-bucket">${escapeHtml(deal.marketBucket)}</div>`
+                          : ""
+                      }
+                      ${
+                        deal.bestOffer && deal.bestOffer.hasBestOffer
+                          ? `<div class="deal-offer-chip">Best offer</div>`
+                          : ""
+                      }
+                      <div class="deal-score">Deal score ${escapeHtml(deal.dealScore)}</div>
+                      <div class="profit-pill ${getProfitClass(deal.estimatedProfit)}">Profit ${currency(deal.estimatedProfit)}</div>
+                      <div class="risk-pill ${getRiskClass(deal.risk)}">Risk ${escapeHtml(deal.risk)}</div>
+                      ${
+                        Array.isArray(deal.warningFlags) && deal.warningFlags.length
+                          ? `<div class="warning-chip">${deal.warningFlags.length} warning${deal.warningFlags.length > 1 ? "s" : ""}</div>`
+                          : ""
                       }
                     </div>
-                    <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
-                      ${currency(deal.estimatedProfit)}
+
+                    <div class="deal-highlight-grid">
+                      <div class="deal-highlight primary">
+                        <div class="label">
+                          ${
+                            getDealTypeClass(deal.finderLabel) === "offer"
+                              ? "Profit at current ask"
+                              : "Estimated profit"
+                          }
+                        </div>
+                        <div class="value" style="color:${scannerVerdictColor(deal.verdict)};">
+                          ${currency(deal.estimatedProfit)}
+                        </div>
+                        <div class="subvalue">Profit view right now</div>
+                      </div>
+
+                      <div class="deal-highlight secondary">
+                        <div class="label">Undervalued by</div>
+                        <div class="value">${currency(deal.undervaluedAmount)}</div>
+                        <div class="subvalue">${Number(deal.undervaluedPercent || 0).toFixed(2)}% under model</div>
+                      </div>
+
+                      <div class="deal-highlight tertiary">
+                        <div class="label">Estimated resale</div>
+                        <div class="value">${currency(deal.estimatedResale)}</div>
+                        <div class="subvalue">Modelled resale value</div>
+                      </div>
+                    </div>
+
+                    <div class="panel" style="font-weight:800;color:${scannerVerdictColor(deal.verdict)};">
+                      Verdict: ${escapeHtml(deal.verdict)}
+                    </div>
+
+                    <div class="deal-metrics">
+                      <div class="deal-metric">
+                        <div class="label">Total buy cost</div>
+                        <div class="value">${currency(deal.totalBuyPrice)}</div>
+                      </div>
+                      <div class="deal-metric">
+                        <div class="label">eBay fees</div>
+                        <div class="value">${currency(deal.ebayFees)}</div>
+                      </div>
+                      <div class="deal-metric">
+                        <div class="label">Margin %</div>
+                        <div class="value">${Number(deal.marginPercent || 0).toFixed(2)}%</div>
+                      </div>
+                      <div class="deal-metric">
+                        <div class="label">Comps used</div>
+                        <div class="value">${Number(deal.compCount || 0)}</div>
+                      </div>
+                    </div>
+
+                    ${
+                      Number(deal.warningScorePenalty || 0) > 0
+                        ? `
+                          <div class="panel">
+                            <strong>Warning penalty:</strong> -${Number(deal.warningScorePenalty || 0).toFixed(0)} points
+                          </div>
+                        `
+                        : ""
+                    }
+
+                    ${renderReasonBreakdown(deal)}
+                    ${renderWarningBox(deal.warningFlags, deal.warningScorePenalty)}
+
+                    <div class="deal-summary">${escapeHtml(deal.reason)}</div>
+
+                    ${renderBestOfferBox(deal.bestOffer, deal.offerOpportunityType)}
+
+                    <div class="deal-actions">
+                      <button onclick="useDealForAnalysis(${index}, '__lastFoundDeals')">Send to Analyzer</button>
+                      ${
+                        deal.url
+                          ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
+                          : ""
+                      }
                     </div>
                   </div>
-                  <div class="deal-metric">
-                    <div class="label">Undervalued by</div>
-                    <div class="value">${currency(deal.undervaluedAmount)}</div>
-                  </div>
-                  <div class="deal-metric">
-                    <div class="label">Undervalued %</div>
-                    <div class="value">${Number(deal.undervaluedPercent || 0).toFixed(2)}%</div>
-                  </div>
-                </div>
-
-                <div class="panel" style="font-weight:800;color:${scannerVerdictColor(deal.verdict)};">
-                  Verdict: ${escapeHtml(deal.verdict)}
-                </div>
-
-                <div class="panel">
-                  <strong>Risk:</strong> ${escapeHtml(deal.risk)}<br>
-                  <strong>Total buy cost:</strong> ${currency(deal.totalBuyPrice)}<br>
-                  <strong>eBay fees:</strong> ${currency(deal.ebayFees)}<br>
-                  <strong>Margin %:</strong> ${Number(deal.marginPercent || 0).toFixed(2)}%<br>
-                  <strong>Comps used:</strong> ${Number(deal.compCount || 0)}<br>
-                  ${
-                    Number(deal.warningScorePenalty || 0) > 0
-                      ? `<strong>Warning penalty:</strong> -${Number(deal.warningScorePenalty || 0).toFixed(0)} points`
-                      : ""
-                  }
-                </div>
-
-                ${renderReasonBreakdown(deal)}
-                ${renderWarningBox(deal.warningFlags, deal.warningScorePenalty)}
-
-                <div class="deal-summary">${escapeHtml(deal.reason)}</div>
-
-                ${renderBestOfferBox(deal.bestOffer, deal.offerOpportunityType)}
-
-                <div class="deal-actions">
-                  <button onclick="useDealForAnalysis(${index}, '__lastFoundDeals')">Send to Analyzer</button>
-                  ${
-                    deal.url
-                      ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
-                      : ""
-                  }
                 </div>
               </div>
             `;
