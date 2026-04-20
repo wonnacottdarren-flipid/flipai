@@ -863,6 +863,28 @@
       margin-bottom: 12px;
     }
 
+    .deal-reasons {
+      margin-bottom: 12px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(79,140,255,0.08);
+      border: 1px solid rgba(79,140,255,0.2);
+    }
+
+    .deal-reasons h4 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      color: #dbeafe;
+    }
+
+    .deal-reasons ul {
+      margin: 0;
+      padding-left: 18px;
+      color: #dbeafe;
+      line-height: 1.65;
+      font-size: 13px;
+    }
+
     .deal-actions {
       display: flex;
       gap: 10px;
@@ -1906,7 +1928,8 @@
           rawDeal.offerOpportunityType ||
           bestOffer?.offerOpportunityType ||
           bestOffer?.recommendedOfferType
-        )
+        ),
+        reasonBreakdown: rawDeal.reasonBreakdown || null
       };
     }
 
@@ -1964,6 +1987,61 @@
       const label = normalizeOfferType(offerOpportunityType);
       if (!label) return "";
       return `<div class="deal-priority-banner">Priority: ${escapeHtml(label)}</div>`;
+    }
+
+    function buildReasonBullets(deal) {
+      const backendBullets = Array.isArray(deal.reasonBreakdown?.bullets)
+        ? deal.reasonBreakdown.bullets.filter(Boolean)
+        : [];
+
+      if (backendBullets.length) {
+        return backendBullets.slice(0, 5);
+      }
+
+      const bullets = [];
+
+      if (Number(deal.estimatedProfit || 0) > 0) {
+        bullets.push(`Projected profit is about ${currency(deal.estimatedProfit)} after estimated fees.`);
+      }
+
+      if (Number(deal.undervaluedAmount || 0) > 0) {
+        bullets.push(`Current price looks about ${currency(deal.undervaluedAmount)} below the modelled resale value.`);
+      }
+
+      if (Number(deal.marginPercent || 0) > 0) {
+        bullets.push(`Estimated margin is ${Number(deal.marginPercent || 0).toFixed(2)}%.`);
+      }
+
+      if (Number(deal.compCount || 0) > 0) {
+        bullets.push(`${Number(deal.compCount || 0)} matching comps support this pricing estimate.`);
+      }
+
+      if (deal.offerOpportunityType) {
+        bullets.push(`Best Offer gives a negotiation route, currently favouring ${normalizeOfferType(deal.offerOpportunityType)}.`);
+      }
+
+      if (deal.risk) {
+        bullets.push(`Risk is currently rated ${deal.risk}.`);
+      }
+
+      return bullets.slice(0, 5);
+    }
+
+    function renderReasonBreakdown(deal) {
+      const bullets = buildReasonBullets(deal);
+
+      if (!bullets.length) {
+        return "";
+      }
+
+      return `
+        <div class="deal-reasons">
+          <h4>Why this is a deal</h4>
+          <ul>
+            ${bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}
+          </ul>
+        </div>
+      `;
     }
 
     function renderBestOfferBox(bestOffer, offerOpportunityType = "") {
@@ -2159,6 +2237,7 @@
                 }
               </div>
 
+              ${renderReasonBreakdown(deal)}
               ${renderWarningBox(deal.warningFlags, deal.warningScorePenalty)}
 
               <div class="deal-summary">${escapeHtml(deal.reason)}</div>
@@ -2223,7 +2302,8 @@
           rawDeal.offerOpportunityType ||
           bestOffer?.offerOpportunityType ||
           bestOffer?.recommendedOfferType
-        )
+        ),
+        reasonBreakdown: rawDeal.reasonBreakdown || null
       };
     }
 
@@ -2362,6 +2442,7 @@
                   }
                 </div>
 
+                ${renderReasonBreakdown(deal)}
                 ${renderWarningBox(deal.warningFlags, deal.warningScorePenalty)}
 
                 <div class="deal-summary">${escapeHtml(deal.reason)}</div>
@@ -2373,7 +2454,7 @@
                   ${
                     deal.url
                       ? `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer">Open Listing</a>`
-                    : ""
+                      : ""
                   }
                 </div>
               </div>
