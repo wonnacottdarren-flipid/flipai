@@ -439,6 +439,31 @@ function dedupeItems(items = []) {
   return out;
 }
 
+function limitVariantsForFindDeals(variants = [], query = "") {
+  const clean = Array.isArray(variants)
+    ? [...new Set(variants.map((v) => String(v || "").trim()).filter(Boolean))]
+    : [];
+
+  const normalizedQuery = normalizeText(query);
+
+  if (!clean.length) return [];
+
+  if (normalizedQuery.includes("dyson") && normalizedQuery.includes("main unit")) {
+    return clean.slice(0, 4);
+  }
+
+  if (
+    normalizedQuery.includes("ps5") ||
+    normalizedQuery.includes("playstation 5") ||
+    normalizedQuery.includes("xbox") ||
+    normalizedQuery.includes("switch")
+  ) {
+    return clean.slice(0, 5);
+  }
+
+  return clean.slice(0, 4);
+}
+
 async function fetchListingsAcrossVariants({
   engine,
   query,
@@ -446,10 +471,16 @@ async function fetchListingsAcrossVariants({
   filterPriceMax = 0,
   freeShippingOnly = false,
   limit = 30,
+  maxVariants = null,
 }) {
-  const variants = getEngineSearchVariants(engine, query);
-  const resultsPerVariant = Math.max(limit, 30);
-  const cap = Math.max(limit * 3, 90);
+  let variants = getEngineSearchVariants(engine, query);
+
+  if (Number.isFinite(maxVariants) && maxVariants > 0) {
+    variants = variants.slice(0, maxVariants);
+  }
+
+  const resultsPerVariant = Math.max(limit, 20);
+  const cap = Math.max(limit * 2, 60);
 
   let merged = [];
 
@@ -481,10 +512,16 @@ async function fetchMarketAcrossVariants({
   query,
   condition = "",
   limit = 50,
+  maxVariants = null,
 }) {
-  const variants = getEngineSearchVariants(engine, query);
-  const resultsPerVariant = Math.max(limit, 40);
-  const cap = Math.max(limit * 2, 80);
+  let variants = getEngineSearchVariants(engine, query);
+
+  if (Number.isFinite(maxVariants) && maxVariants > 0) {
+    variants = variants.slice(0, maxVariants);
+  }
+
+  const resultsPerVariant = Math.max(limit, 20);
+  const cap = Math.max(limit * 2, 50);
 
   let merged = [];
 
@@ -829,7 +866,7 @@ function evaluateDeal({
     risk = offerProfit >= 28 ? "Medium" : "High";
   } else if (
     (hasTightAsk || hasTightOffer) &&
-    (compCount >= 3 || confidence >= 55)
+    (compCount >= 2 || confidence >= 45)
   ) {
     finderLabel = "Tight";
     verdict = "TIGHT CHECK";
@@ -1037,9 +1074,9 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
       return (
         estimatedProfit >= 10 &&
         marginPercent >= 7 &&
-        score >= 48 &&
+        score >= 45 &&
         warningCount <= 2 &&
-        (compCount >= 3 || confidence >= 55)
+        (compCount >= 2 || confidence >= 45)
       );
     }
 
@@ -1202,21 +1239,34 @@ app.post("/api/find-deals", async (req, res) => {
         ? engine.classifyQuery(query)
         : { rawQuery: query, normalizedQuery: normalizeText(query) };
 
-    const fetchedListings = await fetchListingsAcrossVariants({
-      engine,
-      query,
-      condition,
-      filterPriceMax,
-      freeShippingOnly,
-      limit: Math.max(Number(limit || 30), 30),
-    });
+    const allVariants = getEngineSearchVariants(engine, query);
+    const findDealsVariants = limitVariantsForFindDeals(allVariants, query);
+    const variantCountForFindDeals = Math.max(1, findDealsVariants.length);
 
-    const fetchedMarket = await fetchMarketAcrossVariants({
-      engine,
-      query,
-      condition,
-      limit: 50,
-    });
+    const listingMaxVariants = variantCountForFindDeals;
+    const marketMaxVariants = Math.min(3, variantCountForFindDeals);
+
+    const listingLimit = Math.min(Math.max(Number(limit || 30), 20), 24);
+    const marketLimit = 24;
+
+    const [fetchedListings, fetchedMarket] = await Promise.all([
+      fetchListingsAcrossVariants({
+        engine,
+        query,
+        condition,
+        filterPriceMax,
+        freeShippingOnly,
+        limit: listingLimit,
+        maxVariants: listingMaxVariants,
+      }),
+      fetchMarketAcrossVariants({
+        engine,
+        query,
+        condition,
+        limit: marketLimit,
+        maxVariants: marketMaxVariants,
+      }),
+    ]);
 
     let cleanListings = Array.isArray(fetchedListings.items) ? fetchedListings.items : [];
     let cleanMarket = Array.isArray(fetchedMarket.items) ? fetchedMarket.items : [];
