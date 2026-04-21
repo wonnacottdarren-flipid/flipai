@@ -563,6 +563,36 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
   return false;
 }
 
+function getAudioPricingFloor(queryContext = {}) {
+  const family = String(queryContext?.family || "");
+  const brand = String(queryContext?.brand || "");
+
+  if (family === "airpods_pro_2") return 70;
+  if (family === "airpods_pro") return 55;
+  if (family === "airpods_3") return 45;
+  if (family === "airpods_2") return 30;
+  if (family === "airpods_max") return 150;
+
+  if (family === "sony_wf_1000xm5") return 70;
+  if (family === "sony_wf_1000xm4") return 45;
+  if (family === "sony_wf_1000xm3") return 30;
+
+  if (family === "bose_qc_earbuds_2") return 65;
+  if (family === "bose_qc_earbuds") return 40;
+
+  if (family === "galaxy_buds3_pro") return 65;
+  if (family === "galaxy_buds3") return 45;
+  if (family === "galaxy_buds2_pro") return 45;
+  if (family === "galaxy_buds2") return 28;
+  if (family === "galaxy_buds_pro") return 30;
+  if (family === "galaxy_buds_live") return 22;
+  if (family === "galaxy_buds_plus") return 20;
+  if (family === "galaxy_buds_fe") return 22;
+
+  if (brand === "apple" && isEarbudFamily(queryContext)) return 30;
+  return 0;
+}
+
 function scoreAudioCandidate(item, queryContext) {
   const text = normalizeText(
     [
@@ -674,13 +704,32 @@ function buildAudioPricingModel(queryContext, marketItems = [], listingItems = [
 
   const desiredConditionState = allowDamaged ? null : "clean_working";
 
-  const marketConditionPool = desiredConditionState
+  let marketConditionPool = desiredConditionState
     ? marketPool.filter((entry) => entry.conditionState === desiredConditionState)
     : marketPool;
 
-  const listingConditionPool = desiredConditionState
+  let listingConditionPool = desiredConditionState
     ? listingPool.filter((entry) => entry.conditionState === desiredConditionState)
     : listingPool;
+
+  const pricingFloor = getAudioPricingFloor(queryContext);
+
+  if (pricingFloor > 0) {
+    const filteredMarketConditionPool = marketConditionPool.filter(
+      (entry) => entry.total >= pricingFloor
+    );
+    const filteredListingConditionPool = listingConditionPool.filter(
+      (entry) => entry.total >= pricingFloor
+    );
+
+    if (filteredMarketConditionPool.length >= 3) {
+      marketConditionPool = filteredMarketConditionPool;
+    }
+
+    if (filteredListingConditionPool.length >= 2) {
+      listingConditionPool = filteredListingConditionPool;
+    }
+  }
 
   const exactMarket = marketConditionPool.filter((entry) => entry.score >= 6);
   const usableMarket =
