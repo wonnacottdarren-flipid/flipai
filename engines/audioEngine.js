@@ -262,6 +262,33 @@ function isPartialItem(text) {
   ]);
 }
 
+function looksLikeSingleSideEarbud(text) {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "left earbud",
+    "right earbud",
+    "left ear bud",
+    "right ear bud",
+    "left earphone",
+    "right earphone",
+    "left earpiece",
+    "right earpiece",
+    "left piece",
+    "right piece",
+    "left pod",
+    "right pod",
+    "left side",
+    "right side",
+    "left ear",
+    "right ear",
+    "left unit",
+    "right unit",
+    "lhs only",
+    "rhs only",
+  ]);
+}
+
 function isBrokenOrFaulty(text) {
   return hasAny(text, [
     "for parts",
@@ -530,6 +557,7 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
   if (!isEarbudFamily(queryContext)) return false;
   if (isAccessoryOnly(t)) return true;
   if (isPartialItem(t)) return true;
+  if (looksLikeSingleSideEarbud(t)) return true;
   if (looksLikeCaseOnlyListing(t)) return true;
 
   if (
@@ -608,6 +636,7 @@ function scoreAudioCandidate(item, queryContext) {
   if (!text) return -10;
   if (isAccessoryOnly(text)) return -10;
   if (isPartialItem(text)) return -10;
+  if (looksLikeSingleSideEarbud(text)) return -10;
   if (looksLikeCaseOnlyListing(text)) return -10;
   if (looksLikeIncompleteEarbudListing(text, queryContext)) return -10;
   if (isBrokenOrFaulty(text) && !shouldAllowDamagedListings(queryContext)) return -10;
@@ -665,6 +694,7 @@ function scoreAudioCandidate(item, queryContext) {
     if (hasFullSetSignals(text)) score += 2.5;
     if (looksLikeCaseOnlyListing(text)) score -= 8;
     if (isPartialItem(text)) score -= 8;
+    if (looksLikeSingleSideEarbud(text)) score -= 8;
     if (looksLikeIncompleteEarbudListing(text, queryContext)) score -= 8;
   }
 
@@ -929,6 +959,7 @@ export const audioEngine = {
     if (!text) return false;
     if (isAccessoryOnly(text)) return false;
     if (isPartialItem(text)) return false;
+    if (looksLikeSingleSideEarbud(text)) return false;
     if (looksLikeCaseOnlyListing(text)) return false;
     if (looksLikeIncompleteEarbudListing(text, queryContext)) return false;
     if (isDirtyListing(text)) return false;
@@ -966,6 +997,7 @@ export const audioEngine = {
 
     if (isEarbuds) {
       if (isPartialItem(text)) return false;
+      if (looksLikeSingleSideEarbud(text)) return false;
       if (looksLikeCaseOnlyListing(text)) return false;
       if (looksLikeIncompleteEarbudListing(text, queryContext)) return false;
     }
