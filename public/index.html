@@ -730,7 +730,9 @@
     .analysis-side-card,
     .analysis-stat-card,
     .analysis-note-card,
-    .analysis-title-card {
+    .analysis-title-card,
+    .comps-helper-card,
+    .comps-helper-stat {
       border: 1px solid var(--border);
       border-radius: 18px;
       background: rgba(255,255,255,0.04);
@@ -742,7 +744,9 @@
     .analysis-side-card::after,
     .analysis-stat-card::after,
     .analysis-note-card::after,
-    .analysis-title-card::after {
+    .analysis-title-card::after,
+    .comps-helper-card::after,
+    .comps-helper-stat::after {
       content: "";
       position: absolute;
       right: -18px;
@@ -757,7 +761,8 @@
     .analysis-main-card,
     .analysis-side-card,
     .analysis-note-card,
-    .analysis-title-card {
+    .analysis-title-card,
+    .comps-helper-card {
       padding: 18px;
     }
 
@@ -768,6 +773,106 @@
 
     .analysis-side-card {
       background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+    }
+
+    .comps-helper-card {
+      margin-top: 12px;
+      background: linear-gradient(180deg, rgba(79,140,255,0.08), rgba(255,255,255,0.03));
+      border-color: rgba(79,140,255,0.2);
+    }
+
+    .comps-helper-card.warning-state {
+      background: linear-gradient(180deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04));
+      border-color: rgba(245,158,11,0.24);
+    }
+
+    .comps-helper-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .comps-helper-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #dbeafe;
+      letter-spacing: 0.2px;
+    }
+
+    .comps-helper-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      border: 1px solid rgba(79,140,255,0.25);
+      background: rgba(79,140,255,0.12);
+      color: #dbeafe;
+    }
+
+    .comps-helper-badge.warning {
+      border-color: rgba(245,158,11,0.3);
+      background: rgba(245,158,11,0.14);
+      color: #fde68a;
+    }
+
+    .comps-helper-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .comps-helper-stat {
+      padding: 14px;
+    }
+
+        .comps-helper-stat-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.38px;
+      margin-bottom: 6px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .comps-helper-stat-value {
+      font-size: 20px;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: -0.4px;
+      line-height: 1.1;
+      position: relative;
+      z-index: 1;
+    }
+
+    .comps-helper-stat-subvalue {
+      margin-top: 5px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #cbd5e1;
+      position: relative;
+      z-index: 1;
+    }
+
+    .comps-helper-note {
+      font-size: 13px;
+      line-height: 1.65;
+      color: #dbeafe;
+      position: relative;
+      z-index: 1;
+    }
+
+    .comps-helper-note strong {
+      color: #ffffff;
     }
 
     .analysis-kicker {
@@ -880,7 +985,7 @@
       z-index: 1;
     }
 
-        .analysis-title-card {
+    .analysis-title-card {
       margin-top: 12px;
     }
 
@@ -1161,7 +1266,7 @@
       background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
     }
 
-    .decision-label,
+        .decision-label,
     .verdict-label {
       font-size: 11px;
       color: var(--muted);
@@ -1433,7 +1538,7 @@
       color: #fff;
     }
 
-        .deal-summary {
+    .deal-summary {
       font-size: 14px;
       line-height: 1.7;
       color: #dbeafe;
@@ -1565,7 +1670,7 @@
       color: #dbeafe;
     }
 
-    .offer-box-header {
+        .offer-box-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -1727,7 +1832,8 @@
       .deal-decision-strip,
       .analysis-hero,
       .analysis-note-grid,
-      .analysis-stat-grid {
+      .analysis-stat-grid,
+      .comps-helper-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1810,7 +1916,8 @@
       .deal-subtitle,
       .deal-summary,
       .account-subline,
-      .finder-toolbar-note {
+      .finder-toolbar-note,
+      .comps-helper-note {
         font-size: 13px;
       }
 
@@ -1839,7 +1946,8 @@
         font-size: 20px;
       }
 
-      .analysis-stat-value {
+      .analysis-stat-value,
+      .comps-helper-stat-value {
         font-size: 20px;
       }
     }
@@ -2106,7 +2214,7 @@
       </div>
     </div>
 
-        <div class="card" id="dealHunter">
+    <div class="card" id="dealHunter">
       <h2>Deal Finder</h2>
       <p class="account-subline" style="margin-top:0;">
         This uses FlipAI’s scoring to surface likely opportunities first, instead of just listing search results.
@@ -2177,6 +2285,7 @@
             id="manualSoldPrices"
             placeholder="Auto-filled comps will appear here, or enter your own prices"
           ></textarea>
+          <div id="compsHelperArea"></div>
         </div>
 
         <div class="button-row">
@@ -2184,7 +2293,7 @@
           <button id="analyzeBtn" type="button">Analyze Flip</button>
         </div>
 
-        <div id="autoCompsStatus"></div>
+                <div id="autoCompsStatus"></div>
         <div id="status"></div>
 
         <div class="field" style="margin-top: 16px;">
@@ -2226,6 +2335,7 @@
     const statusEl = document.getElementById("status");
     const autoCompsStatusEl = document.getElementById("autoCompsStatus");
     const resultArea = document.getElementById("resultArea");
+    const compsHelperArea = document.getElementById("compsHelperArea");
 
     const authArea = document.getElementById("authArea");
     const userArea = document.getElementById("userArea");
@@ -2522,6 +2632,63 @@
           }
         </div>
       `;
+    }
+
+    function renderCompsHelperCard(options = {}) {
+      const title = options.title || "Auto comps summary";
+      const compCount = Number(options.compCount || 0);
+      const confidence = Number(options.confidence || 0);
+      const confidenceLabel = options.confidenceLabel || "Low";
+      const pricingMode = options.pricingMode || "Auto comps estimate";
+      const searchQuery = options.searchQuery || "N/A";
+      const avgSoldPrice = Number(options.avgSoldPrice || 0);
+      const medianSoldPrice = Number(options.medianSoldPrice || 0);
+      const minSoldPrice = Number(options.minSoldPrice || 0);
+      const maxSoldPrice = Number(options.maxSoldPrice || 0);
+      const isWarning = Boolean(options.isWarning);
+      const helperNote = isWarning
+        ? "No sold comps were connected on this run. Try a shorter product title, remove extra condition wording from the product name, or manually review likely sold prices before trusting the estimate."
+        : "These sold comps were connected and copied into the comp prices box. You can still edit them manually before running the analyzer.";
+
+      return `
+        <div class="comps-helper-card ${isWarning ? "warning" : "success"}">
+          <div class="comps-helper-kicker">${escapeHtml(title)}</div>
+
+          <div class="comps-helper-grid">
+            <div class="comps-helper-stat">
+              <div class="comps-helper-stat-label">Comps found</div>
+              <div class="comps-helper-stat-value">${compCount}</div>
+              <div class="comps-helper-stat-subvalue">${escapeHtml(pricingMode)}</div>
+            </div>
+
+            <div class="comps-helper-stat">
+              <div class="comps-helper-stat-label">Confidence</div>
+              <div class="comps-helper-stat-value">${escapeHtml(confidenceLabel)} (${confidence})</div>
+              <div class="comps-helper-stat-subvalue">Query used: ${escapeHtml(searchQuery)}</div>
+            </div>
+
+            <div class="comps-helper-stat">
+              <div class="comps-helper-stat-label">Median sold</div>
+              <div class="comps-helper-stat-value">${currency(medianSoldPrice)}</div>
+              <div class="comps-helper-stat-subvalue">Average sold: ${currency(avgSoldPrice)}</div>
+            </div>
+
+            <div class="comps-helper-stat">
+              <div class="comps-helper-stat-label">Sold range</div>
+              <div class="comps-helper-stat-value">${currency(minSoldPrice)} - ${currency(maxSoldPrice)}</div>
+              <div class="comps-helper-stat-subvalue">${compCount > 0 ? "Connected sold comps" : "No connected comps yet"}</div>
+            </div>
+          </div>
+
+          <div class="comps-helper-note">
+            <strong>What this means:</strong> ${escapeHtml(helperNote)}
+          </div>
+        </div>
+      `;
+    }
+
+    function clearCompsHelper() {
+      compsHelperArea.innerHTML = "";
     }
 
     function setAuthStatus(message, type) {
@@ -2858,6 +3025,8 @@
       document.getElementById("manualSoldPrices").value = "";
       document.getElementById("extras").value = deal.originalUrl || deal.url || "";
       document.getElementById("goal").value = "Fast sale";
+
+      clearCompsHelper();
 
       document.getElementById("analyzer").scrollIntoView({
         behavior: "smooth",
@@ -3292,7 +3461,7 @@
         .join("");
     }
 
-        function mapFinderDeal(rawDeal = {}) {
+    function mapFinderDeal(rawDeal = {}) {
       const scanner = rawDeal.scanner || {};
       const bestOffer = rawDeal.bestOffer || null;
 
@@ -3544,11 +3713,13 @@
       const payload = getAutoCompsPayload();
 
       if (!payload.product) {
+        clearCompsHelper();
         setAutoCompsStatus("Enter a product first, then click Auto-fill comps.", "error");
         return;
       }
 
       autoCompsBtn.disabled = true;
+      clearCompsHelper();
       setAutoCompsStatus("Finding similar comps...", "loading");
 
       try {
@@ -3564,6 +3735,7 @@
         const { data } = await safeReadResponse(res);
 
         if (res.status === 401) {
+          clearCompsHelper();
           setAutoCompsStatus("Please sign in to auto-fill comps.", "error");
           return;
         }
@@ -3583,6 +3755,20 @@
         document.getElementById("manualSoldPrices").value = manualSoldPricesText;
 
         if (compCount <= 0) {
+          compsHelperArea.innerHTML = renderCompsHelperCard({
+            title: "Auto comps warning",
+            compCount,
+            confidence,
+            confidenceLabel,
+            pricingMode,
+            searchQuery,
+            avgSoldPrice: autoComps.avgSoldPrice,
+            medianSoldPrice: autoComps.medianSoldPrice,
+            minSoldPrice: autoComps.minSoldPrice,
+            maxSoldPrice: autoComps.maxSoldPrice,
+            isWarning: true
+          });
+
           setAutoCompsStatus(
             `No sold comps found. Query used: ${searchQuery}. ` +
             `Mode: ${pricingMode}. Confidence: ${confidenceLabel} (${confidence}). ` +
@@ -3592,6 +3778,20 @@
           return;
         }
 
+        compsHelperArea.innerHTML = renderCompsHelperCard({
+          title: "Auto comps connected",
+          compCount,
+          confidence,
+          confidenceLabel,
+          pricingMode,
+          searchQuery,
+          avgSoldPrice: autoComps.avgSoldPrice,
+          medianSoldPrice: autoComps.medianSoldPrice,
+          minSoldPrice: autoComps.minSoldPrice,
+          maxSoldPrice: autoComps.maxSoldPrice,
+          isWarning: false
+        });
+
         setAutoCompsStatus(
           `Auto comps filled. Query used: ${searchQuery}. ` +
           `Mode: ${pricingMode}. Confidence: ${confidenceLabel} (${confidence}). ` +
@@ -3599,6 +3799,7 @@
           "success"
         );
       } catch (err) {
+        clearCompsHelper();
         setAutoCompsStatus(`Error: ${err.message}`, "error");
       } finally {
         autoCompsBtn.disabled = false;
@@ -3925,6 +4126,7 @@
         dealResultsEl.innerHTML = 'Search eBay listings and matching results will appear here.';
         finderResultsEl.innerHTML = 'Use the “Find Best Deals” button above and your ranked deal results will appear here.';
         document.getElementById("manualSoldPrices").value = "";
+        clearCompsHelper();
         setAnalyzeStatus("", "");
         setAutoCompsStatus("", "");
         setDealStatus("", "");
