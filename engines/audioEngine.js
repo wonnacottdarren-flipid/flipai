@@ -84,8 +84,19 @@ const SAMSUNG_BUDS_PATTERNS = [
   ["galaxy_buds_fe", ["galaxy buds fe"]],
 ];
 
+function squashSpaces(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
 function hasAny(text, phrases = []) {
-  return phrases.some((phrase) => text.includes(phrase));
+  const rawHaystack = String(text || "");
+  const haystack = squashSpaces(rawHaystack);
+
+  return phrases.some((phrase) => {
+    const rawNeedle = String(phrase || "");
+    const needle = squashSpaces(rawNeedle);
+    return rawHaystack.includes(rawNeedle) || haystack.includes(needle);
+  });
 }
 
 function parseFamilyFromPatterns(text, patterns = []) {
