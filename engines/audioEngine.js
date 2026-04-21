@@ -686,17 +686,34 @@ function getAudioPricingFloor(queryContext = {}) {
   if (family === "bose_qc_earbuds_2") return 65;
   if (family === "bose_qc_earbuds") return 40;
 
-  if (family === "galaxy_buds3_pro") return 65;
-  if (family === "galaxy_buds3") return 45;
-  if (family === "galaxy_buds2_pro") return 45;
-  if (family === "galaxy_buds2") return 28;
-  if (family === "galaxy_buds_pro") return 30;
-  if (family === "galaxy_buds_live") return 22;
-  if (family === "galaxy_buds_plus") return 20;
-  if (family === "galaxy_buds_fe") return 22;
+  if (family === "galaxy_buds3_pro") return 75;
+  if (family === "galaxy_buds3") return 52;
+  if (family === "galaxy_buds2_pro") return 55;
+  if (family === "galaxy_buds2") return 32;
+  if (family === "galaxy_buds_pro") return 36;
+  if (family === "galaxy_buds_live") return 24;
+  if (family === "galaxy_buds_plus") return 22;
+  if (family === "galaxy_buds_fe") return 26;
 
   if (brand === "apple" && isEarbudFamily(queryContext)) return 30;
   return 0;
+}
+
+function getAudioResaleMultiplier(queryContext = {}, exactMarketCount = 0) {
+  const family = String(queryContext?.family || "");
+  const brand = String(queryContext?.brand || "");
+
+  let multiplier = 0.94;
+
+  if (family) multiplier = 0.95;
+  if (exactMarketCount >= 5) multiplier = 0.96;
+
+  if (brand === "samsung" && family.startsWith("galaxy_buds")) {
+    multiplier = 0.97;
+    if (exactMarketCount >= 5) multiplier = 0.98;
+  }
+
+  return multiplier;
 }
 
 function scoreAudioCandidate(item, queryContext) {
@@ -882,10 +899,7 @@ function buildAudioPricingModel(queryContext, marketItems = [], listingItems = [
   if (!marketMedian && listingMedian) pricingMode = "Audio listings fallback";
   if (!marketMedian && !listingMedian && marketLow) pricingMode = "Audio low-band fallback";
 
-  let conservativeMultiplier = 0.94;
-
-  if (queryContext.family) conservativeMultiplier = 0.95;
-  if (exactMarket.length >= 5) conservativeMultiplier = 0.96;
+  const conservativeMultiplier = getAudioResaleMultiplier(queryContext, exactMarket.length);
 
   const estimatedResale = roundMoney(baseline * conservativeMultiplier);
 
