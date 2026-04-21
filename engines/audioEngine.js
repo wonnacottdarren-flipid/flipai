@@ -1,0 +1,698 @@
+import {
+  baseEngine,
+  normalizeText,
+  roundMoney,
+  median,
+  percentile,
+  removePriceOutliers,
+  extractTotalPrice,
+} from "./baseEngine.js";
+
+const AIRPODS_FAMILY_PATTERNS = [
+  ["airpods_pro_2", ["airpods pro 2", "airpods pro 2nd", "airpods pro second generation", "airpods pro gen 2"]],
+  ["airpods_pro", ["airpods pro"]],
+  ["airpods_3", ["airpods 3", "airpods 3rd", "airpods third generation", "airpods gen 3"]],
+  ["airpods_2", ["airpods 2", "airpods 2nd", "airpods second generation", "airpods gen 2"]],
+  ["airpods_max", ["airpods max"]],
+];
+
+const SONY_FAMILY_PATTERNS = [
+  ["sony_wh_1000xm5", ["wh-1000xm5", "wh1000xm5", "sony xm5", "sony wh xm5"]],
+  ["sony_wh_1000xm4", ["wh-1000xm4", "wh1000xm4", "sony xm4", "sony wh xm4"]],
+  ["sony_wh_1000xm3", ["wh-1000xm3", "wh1000xm3", "sony xm3", "sony wh xm3"]],
+  ["sony_wf_1000xm5", ["wf-1000xm5", "wf1000xm5", "sony wf xm5"]],
+  ["sony_wf_1000xm4", ["wf-1000xm4", "wf1000xm4", "sony wf xm4"]],
+  ["sony_wf_1000xm3", ["wf-1000xm3", "wf1000xm3", "sony wf xm3"]],
+];
+
+const BOSE_FAMILY_PATTERNS = [
+  ["bose_qc_ultra", ["qc ultra", "quietcomfort ultra", "bose ultra headphones", "bose qc ultra"]],
+  ["bose_qc_45", ["qc45", "qc 45", "quietcomfort 45", "bose qc45"]],
+  ["bose_qc_35_ii", ["qc35 ii", "qc 35 ii", "qc35ii", "quietcomfort 35 ii", "bose qc35 ii"]],
+  ["bose_qc_35", ["qc35", "qc 35", "quietcomfort 35", "bose qc35"]],
+  ["bose_700", ["bose 700", "noise cancelling 700", "nc 700"]],
+  ["bose_qc_earbuds_2", ["qc earbuds ii", "qc earbuds 2", "quietcomfort earbuds ii", "quietcomfort earbuds 2"]],
+  ["bose_qc_earbuds", ["qc earbuds", "quietcomfort earbuds"]],
+];
+
+const SAMSUNG_BUDS_PATTERNS = [
+  ["galaxy_buds3_pro", ["galaxy buds3 pro", "galaxy buds 3 pro", "buds3 pro", "buds 3 pro"]],
+  ["galaxy_buds3", ["galaxy buds3", "galaxy buds 3", "buds3", "buds 3"]],
+  ["galaxy_buds2_pro", ["galaxy buds2 pro", "galaxy buds 2 pro", "buds2 pro", "buds 2 pro"]],
+  ["galaxy_buds2", ["galaxy buds2", "galaxy buds 2", "buds2", "buds 2"]],
+  ["galaxy_buds_pro", ["galaxy buds pro", "buds pro"]],
+  ["galaxy_buds_live", ["galaxy buds live", "buds live"]],
+  ["galaxy_buds_plus", ["galaxy buds+", "galaxy buds plus", "buds+", "buds plus"]],
+  ["galaxy_buds_fe", ["galaxy buds fe", "buds fe"]],
+];
+
+function hasAny(text, phrases = []) {
+  return phrases.some((phrase) => text.includes(phrase));
+}
+
+function parseFamilyFromPatterns(text, patterns = []) {
+  const haystack = normalizeText(text);
+
+  for (const [slug, phrases] of patterns) {
+    if (phrases.some((phrase) => haystack.includes(phrase))) {
+      return slug;
+    }
+  }
+
+  return "";
+}
+
+function detectAudioBrand(text) {
+  const haystack = normalizeText(text);
+
+  if (haystack.includes("airpods") || haystack.includes("apple")) return "apple";
+  if (haystack.includes("sony")) return "sony";
+  if (haystack.includes("bose")) return "bose";
+  if (haystack.includes("samsung") || haystack.includes("galaxy buds") || haystack.includes("buds")) return "samsung";
+
+  if (parseFamilyFromPatterns(haystack, AIRPODS_FAMILY_PATTERNS)) return "apple";
+  if (parseFamilyFromPatterns(haystack, SONY_FAMILY_PATTERNS)) return "sony";
+  if (parseFamilyFromPatterns(haystack, BOSE_FAMILY_PATTERNS)) return "bose";
+  if (parseFamilyFromPatterns(haystack, SAMSUNG_BUDS_PATTERNS)) return "samsung";
+
+  return "";
+}
+
+function parseAudioFamily(text, brand = "") {
+  const haystack = normalizeText(text);
+
+  if (brand === "apple") return parseFamilyFromPatterns(haystack, AIRPODS_FAMILY_PATTERNS);
+  if (brand === "sony") return parseFamilyFromPatterns(haystack, SONY_FAMILY_PATTERNS);
+  if (brand === "bose") return parseFamilyFromPatterns(haystack, BOSE_FAMILY_PATTERNS);
+  if (brand === "samsung") return parseFamilyFromPatterns(haystack, SAMSUNG_BUDS_PATTERNS);
+
+  const detectedBrand = detectAudioBrand(haystack);
+  if (detectedBrand === "apple") return parseFamilyFromPatterns(haystack, AIRPODS_FAMILY_PATTERNS);
+  if (detectedBrand === "sony") return parseFamilyFromPatterns(haystack, SONY_FAMILY_PATTERNS);
+  if (detectedBrand === "bose") return parseFamilyFromPatterns(haystack, BOSE_FAMILY_PATTERNS);
+  if (detectedBrand === "samsung") return parseFamilyFromPatterns(haystack, SAMSUNG_BUDS_PATTERNS);
+
+  return "";
+}
+
+function getCategoryTexts(item = {}) {
+  const names = Array.isArray(item?.categories)
+    ? item.categories.map((category) => category?.categoryName).filter(Boolean)
+    : [];
+
+  return names.map((name) => normalizeText(name));
+}
+
+function isAudioCategory(item = {}) {
+  const categoryTexts = getCategoryTexts(item);
+
+  return categoryTexts.some((text) =>
+    hasAny(text, [
+      "headphones",
+      "headsets",
+      "portable audio",
+      "mp3 player accessories",
+      "earbud",
+      "earbuds",
+      "in-ear headphones",
+      "over-ear headphones",
+      "on-ear headphones",
+      "home headphones",
+      "mobile phone accessories",
+    ])
+  );
+}
+
+function isAccessoryCategory(item = {}) {
+  const categoryTexts = getCategoryTexts(item);
+
+  return categoryTexts.some((text) =>
+    hasAny(text, [
+      "cases",
+      "covers",
+      "skins",
+      "chargers",
+      "cables",
+      "adapters",
+      "replacement parts",
+      "parts",
+      "ear tips",
+      "tips",
+      "pads",
+      "ear pads",
+      "headbands",
+      "holder",
+      "holders",
+      "accessories",
+    ])
+  );
+}
+
+function isAccessoryOnly(text) {
+  return hasAny(text, [
+    "case only",
+    "charging case only",
+    "box only",
+    "empty box",
+    "manual only",
+    "sleeve only",
+    "ear tips only",
+    "tips only",
+    "ear pads only",
+    "pads only",
+    "headband only",
+    "replacement case",
+    "replacement charger",
+    "charging cable only",
+    "usb cable only",
+    "wire only",
+    "cover only",
+    "skin only",
+  ]);
+}
+
+function isPartialItem(text) {
+  return hasAny(text, [
+    "left only",
+    "right only",
+    "single ear",
+    "one ear",
+    "single bud",
+    "one bud",
+    "left bud only",
+    "right bud only",
+    "one headphone only",
+    "single headphone",
+    "replacement earbud",
+    "replacement bud",
+    "replacement left",
+    "replacement right",
+    "missing left",
+    "missing right",
+    "no left",
+    "no right",
+    "without left",
+    "without right",
+    "does not include left",
+    "does not include right",
+  ]);
+}
+
+function isBrokenOrFaulty(text) {
+  return hasAny(text, [
+    "for parts",
+    "for spares",
+    "spares or repairs",
+    "spares/repairs",
+    "not working",
+    "faulty",
+    "broken",
+    "dead",
+    "no power",
+    "won't charge",
+    "will not charge",
+    "battery issue",
+    "battery fault",
+    "distorted sound",
+    "sound issue",
+    "not pairing",
+    "pairing issue",
+    "one side not working",
+    "one ear not working",
+    "speaker fault",
+    "charging issue",
+    "water damaged",
+  ]);
+}
+
+function isDirtyListing(text) {
+  return hasAny(text, [
+    "replica",
+    "fake",
+    "counterfeit",
+    "dummy",
+    "display model only",
+    "not genuine",
+  ]);
+}
+
+function hasHeadphoneSignals(text) {
+  return hasAny(text, [
+    "headphones",
+    "earbuds",
+    "earphones",
+    "wireless",
+    "bluetooth",
+    "noise cancelling",
+    "noise canceling",
+    "anc",
+    "charging case",
+    "boxed",
+    "fully working",
+    "working order",
+    "used",
+  ]);
+}
+
+function isOverlyGenericAudioTitle(text, queryContext) {
+  const t = normalizeText(text);
+  const family = String(queryContext?.family || "");
+
+  if (!family) return false;
+
+  const genericTitles = [
+    "headphones",
+    "earbuds",
+    "wireless earbuds",
+    "wireless headphones",
+    "apple airpods",
+    "sony headphones",
+    "bose headphones",
+    "samsung buds",
+  ];
+
+  return genericTitles.includes(t);
+}
+
+function shouldAllowDamagedListings(queryContext) {
+  const q = normalizeText(queryContext?.normalizedQuery || "");
+
+  return hasAny(q, [
+    "faulty",
+    "broken",
+    "damaged",
+    "for parts",
+    "for spares",
+    "spares",
+    "repairs",
+    "not working",
+  ]);
+}
+
+function classifyAudioConditionState(text) {
+  const t = normalizeText(text);
+
+  if (
+    hasAny(t, [
+      "for parts",
+      "for spares",
+      "spares or repairs",
+      "spares/repairs",
+      "not working",
+      "faulty",
+      "broken",
+      "dead",
+      "no power",
+      "won't charge",
+      "will not charge",
+      "battery issue",
+      "battery fault",
+      "distorted sound",
+      "sound issue",
+      "not pairing",
+      "pairing issue",
+      "speaker fault",
+      "charging issue",
+      "water damaged",
+    ])
+  ) {
+    return "faulty_or_parts";
+  }
+
+  if (
+    hasAny(t, [
+      "heavy wear",
+      "heavily worn",
+      "poor condition",
+      "bad condition",
+      "fair condition",
+      "deep scratches",
+      "scratched heavily",
+      "missing tips",
+      "missing ear tips",
+      "missing pads",
+      "replacement pads needed",
+    ])
+  ) {
+    return "minor_fault";
+  }
+
+  return "clean_working";
+}
+
+function isDamagedConditionState(conditionState) {
+  return conditionState === "minor_fault" || conditionState === "faulty_or_parts";
+}
+
+function estimateAudioRepairCost(queryContext, conditionState, text) {
+  const t = normalizeText(text);
+  const family = String(queryContext?.family || "");
+  const brand = String(queryContext?.brand || "");
+
+  if (conditionState === "faulty_or_parts") {
+    if (family.includes("airpods_max")) return 70;
+    if (family.includes("xm5") || family.includes("qc_ultra")) return 65;
+    if (brand === "apple") return 55;
+    if (brand === "sony") return 50;
+    if (brand === "bose") return 50;
+    if (brand === "samsung") return 35;
+    return 40;
+  }
+
+  if (conditionState === "minor_fault") {
+    if (t.includes("missing ear tips") || t.includes("missing tips")) return 8;
+    if (t.includes("missing pads") || t.includes("replacement pads needed")) return 15;
+    return 12;
+  }
+
+  return 0;
+}
+
+function scoreAudioCandidate(item, queryContext) {
+  const text = normalizeText(
+    [
+      item?.title,
+      item?.condition,
+      item?.conditionDisplayName,
+      item?.subtitle,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+
+  if (!text) return -10;
+  if (isAccessoryOnly(text)) return -10;
+  if (isPartialItem(text)) return -10;
+  if (isBrokenOrFaulty(text) && !shouldAllowDamagedListings(queryContext)) return -10;
+  if (isDirtyListing(text)) return -10;
+  if (isAccessoryCategory(item)) return -10;
+
+  const conditionState = classifyAudioConditionState(text);
+  const allowDamaged = shouldAllowDamagedListings(queryContext);
+
+  if (!allowDamaged && isDamagedConditionState(conditionState)) {
+    return -10;
+  }
+
+  let score = 0;
+
+  const itemBrand = detectAudioBrand(text);
+  const itemFamily = parseAudioFamily(text, queryContext.brand);
+  const titleText = normalizeText(item?.title || "");
+  const inAudioCategory = isAudioCategory(item);
+
+  if (queryContext.brand) {
+    if (itemBrand === queryContext.brand) score += 1.5;
+    else return -10;
+  }
+
+  if (queryContext.family) {
+    if (itemFamily === queryContext.family) score += 5;
+    else if (itemFamily && itemFamily !== queryContext.family) score -= 6;
+    else score -= 1.5;
+  }
+
+  if (conditionState === "clean_working") score += 1.5;
+  if (conditionState === "minor_fault") score -= 2;
+  if (conditionState === "faulty_or_parts") score -= 7;
+
+  if (queryContext.brand === "apple" && text.includes("airpods")) score += 0.5;
+  if (queryContext.brand === "sony" && text.includes("sony")) score += 0.5;
+  if (queryContext.brand === "bose" && text.includes("bose")) score += 0.5;
+  if (queryContext.brand === "samsung" && (text.includes("samsung") || text.includes("galaxy buds") || text.includes("buds"))) score += 0.5;
+
+  if (inAudioCategory) score += 2.5;
+  else if (hasHeadphoneSignals(text)) score += 0.8;
+  else score -= 3;
+
+  if (isOverlyGenericAudioTitle(titleText, queryContext) && !inAudioCategory) {
+    score -= 4;
+  }
+
+  return score;
+}
+
+function enrichAudioCompPool(queryContext, items = []) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const text = normalizeText(
+        [
+          item?.title,
+          item?.condition,
+          item?.conditionDisplayName,
+          item?.subtitle,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      );
+
+      return {
+        item,
+        total: extractTotalPrice(item),
+        score: scoreAudioCandidate(item, queryContext),
+        conditionState: classifyAudioConditionState(text),
+      };
+    })
+    .filter((entry) => entry.total > 0 && entry.score > -5)
+    .sort((a, b) => b.score - a.score);
+}
+
+function buildAudioPricingModel(queryContext, marketItems = [], listingItems = []) {
+  const allowDamaged = shouldAllowDamagedListings(queryContext);
+
+  const marketPool = enrichAudioCompPool(queryContext, marketItems);
+  const listingPool = enrichAudioCompPool(queryContext, listingItems);
+
+  const desiredConditionState = allowDamaged ? null : "clean_working";
+
+  const marketConditionPool = desiredConditionState
+    ? marketPool.filter((entry) => entry.conditionState === desiredConditionState)
+    : marketPool;
+
+  const listingConditionPool = desiredConditionState
+    ? listingPool.filter((entry) => entry.conditionState === desiredConditionState)
+    : listingPool;
+
+  const exactMarket = marketConditionPool.filter((entry) => entry.score >= 6);
+  const usableMarket =
+    exactMarket.length >= 3
+      ? exactMarket
+      : marketConditionPool.filter((entry) => entry.score >= 3);
+
+  const exactListings = listingConditionPool.filter((entry) => entry.score >= 6);
+  const usableListings =
+    exactListings.length >= 2
+      ? exactListings
+      : listingConditionPool.filter((entry) => entry.score >= 3);
+
+  let marketTotals = removePriceOutliers(
+    (usableMarket.length ? usableMarket : marketConditionPool)
+      .slice(0, 20)
+      .map((entry) => entry.total)
+  );
+
+  let listingTotals = removePriceOutliers(
+    (usableListings.length ? usableListings : listingConditionPool)
+      .slice(0, 14)
+      .map((entry) => entry.total)
+  );
+
+  if (marketTotals.length < 3 && listingTotals.length >= 2) {
+    marketTotals = removePriceOutliers([...marketTotals, ...listingTotals]);
+  }
+
+  if (listingTotals.length < 2 && marketTotals.length >= 2) {
+    listingTotals = marketTotals.slice(0, 12);
+  }
+
+  const marketMedian = median(marketTotals);
+  const marketLow = percentile(marketTotals, 0.35);
+  const listingMedian = median(listingTotals);
+
+  let pricingMode = "Audio model median";
+  let baseline = marketMedian || marketLow || listingMedian || 0;
+
+  if (!marketMedian && listingMedian) pricingMode = "Audio listings fallback";
+  if (!marketMedian && !listingMedian && marketLow) pricingMode = "Audio low-band fallback";
+
+  let conservativeMultiplier = 0.94;
+
+  if (queryContext.family) conservativeMultiplier = 0.95;
+  if (exactMarket.length >= 5) conservativeMultiplier = 0.96;
+
+  const estimatedResale = roundMoney(baseline * conservativeMultiplier);
+
+  const compCount = marketTotals.length;
+
+  let confidence = 24;
+  if (compCount >= 3) confidence = 55;
+  if (compCount >= 5) confidence = 70;
+  if (compCount >= 8) confidence = 84;
+
+  if (exactMarket.length >= 3) confidence += 4;
+  if (exactMarket.length >= 5) confidence += 4;
+  if (exactListings.length >= 3) confidence += 3;
+  if (queryContext.family) confidence += 2;
+
+  confidence = Math.min(92, confidence);
+
+  let confidenceLabel = "Low";
+  if (confidence >= 80) confidenceLabel = "High";
+  else if (confidence >= 55) confidenceLabel = "Medium";
+
+  return {
+    estimatedResale,
+    compCount,
+    confidence,
+    confidenceLabel,
+    pricingMode,
+    marketMedian: roundMoney(marketMedian),
+    marketLow: roundMoney(marketLow),
+    listingMedian: roundMoney(listingMedian),
+  };
+}
+
+export const audioEngine = {
+  ...baseEngine,
+  id: "audio",
+
+  detect(query = "") {
+    const text = normalizeText(query);
+
+    return (
+      text.includes("airpods") ||
+      text.includes("headphones") ||
+      text.includes("earbuds") ||
+      text.includes("earphones") ||
+      text.includes("galaxy buds") ||
+      text.includes("buds pro") ||
+      text.includes("buds live") ||
+      text.includes("buds fe") ||
+      text.includes("sony wh") ||
+      text.includes("sony wf") ||
+      text.includes("xm4") ||
+      text.includes("xm5") ||
+      text.includes("bose") ||
+      text.includes("qc45") ||
+      text.includes("qc 45") ||
+      text.includes("qc35") ||
+      text.includes("qc 35") ||
+      text.includes("qc ultra")
+    );
+  },
+
+  classifyQuery(query = "") {
+    const rawQuery = String(query || "").trim();
+    const normalizedQuery = normalizeText(rawQuery);
+    const brand = detectAudioBrand(normalizedQuery);
+    const family = parseAudioFamily(normalizedQuery, brand);
+    const allowDamaged = shouldAllowDamagedListings({ normalizedQuery });
+
+    return {
+      rawQuery,
+      normalizedQuery,
+      brand,
+      family,
+      allowDamaged,
+    };
+  },
+
+  expandSearchVariants(query = "") {
+    const rawQuery = String(query || "").trim();
+    const ctx = this.classifyQuery(rawQuery);
+    const variants = [rawQuery];
+
+    if (ctx.family) {
+      const niceFamily = ctx.family.replaceAll("_", " ");
+      variants.push(niceFamily);
+
+      if (ctx.brand === "apple" && !niceFamily.includes("airpods")) {
+        variants.push(`airpods ${niceFamily}`);
+      }
+
+      if (ctx.brand === "sony" && !niceFamily.includes("sony")) {
+        variants.push(`sony ${niceFamily}`);
+      }
+
+      if (ctx.brand === "bose" && !niceFamily.includes("bose")) {
+        variants.push(`bose ${niceFamily}`);
+      }
+
+      if (ctx.brand === "samsung" && !niceFamily.includes("galaxy")) {
+        variants.push(`galaxy ${niceFamily}`);
+      }
+    }
+
+    return [...new Set(variants.filter(Boolean))];
+  },
+
+  matchesItem(item, queryContext) {
+    const text = normalizeText(
+      [
+        item?.title,
+        item?.condition,
+        item?.conditionDisplayName,
+        item?.subtitle,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
+
+    if (!text) return false;
+    if (isAccessoryOnly(text)) return false;
+    if (isPartialItem(text)) return false;
+    if (isDirtyListing(text)) return false;
+    if (isAccessoryCategory(item)) return false;
+
+    const conditionState = classifyAudioConditionState(text);
+    const allowDamaged = Boolean(queryContext?.allowDamaged);
+
+    if (!allowDamaged && isDamagedConditionState(conditionState)) {
+      return false;
+    }
+
+    const itemBrand = detectAudioBrand(text);
+    if (queryContext.brand && itemBrand !== queryContext.brand) return false;
+
+    const itemFamily = parseAudioFamily(text, queryContext.brand);
+    if (queryContext.family && itemFamily && itemFamily !== queryContext.family) {
+      return false;
+    }
+
+    const inAudioCategory = isAudioCategory(item);
+    if (!inAudioCategory && !hasHeadphoneSignals(text)) {
+      return false;
+    }
+
+    if (isOverlyGenericAudioTitle(item?.title || "", queryContext) && !inAudioCategory) {
+      return false;
+    }
+
+    return true;
+  },
+
+  buildPricingModel({ queryContext, marketItems = [], listingItems = [] }) {
+    return buildAudioPricingModel(queryContext, marketItems, listingItems);
+  },
+
+  classifyItem(item, queryContext) {
+    const text = normalizeText(
+      [
+        item?.title,
+        item?.condition,
+        item?.conditionDisplayName,
+        item?.subtitle,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
+
+    const conditionState = classifyAudioConditionState(text);
+    const repairCost = estimateAudioRepairCost(queryContext, conditionState, text);
+
+    return {
+      conditionState,
+      repairCost,
+    };
+  },
+};
