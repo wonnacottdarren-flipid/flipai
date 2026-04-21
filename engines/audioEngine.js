@@ -602,6 +602,73 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
   return false;
 }
 
+function isSonyAccessoryListing(text, queryContext = {}) {
+  const t = normalizeText(text);
+  const family = String(queryContext?.family || "");
+  const brand = String(queryContext?.brand || "");
+
+  const isSonyEarbudQuery =
+    brand === "sony" &&
+    (family.startsWith("sony_wf_") || t.includes("wf-1000xm") || t.includes("wf1000xm"));
+
+  if (!isSonyEarbudQuery) return false;
+
+  if (
+    hasAny(t, [
+      "ear tips",
+      "ear tip",
+      "foam tips",
+      "foam tip",
+      "replacement tips",
+      "replacement tip",
+      "silicone tips",
+      "silicone tip",
+      "memory foam tips",
+      "memory foam tip",
+      "anti-slip replacement ear tips",
+      "anti slip replacement ear tips",
+      "buds tips",
+      "earbud tips",
+      "tip set",
+      "tips set",
+      "tips for sony",
+    ])
+  ) {
+    return true;
+  }
+
+  if (
+    hasAny(t, [
+      "battery",
+      "batteries",
+      "battery replacement",
+      "replacement battery",
+      "case battery",
+      "charging case battery",
+      "zenipower",
+      "z55h",
+      "cp1254",
+    ])
+  ) {
+    return true;
+  }
+
+  if (
+    hasAny(t, [
+      "charging case",
+      "changing case",
+      "case only",
+      "replacement case",
+      "case replacement",
+      "charging case replacement",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function getAudioPricingFloor(queryContext = {}) {
   const family = String(queryContext?.family || "");
   const brand = String(queryContext?.brand || "");
@@ -650,6 +717,7 @@ function scoreAudioCandidate(item, queryContext) {
   if (looksLikeSingleSideEarbud(text)) return -10;
   if (looksLikeCaseOnlyListing(text)) return -10;
   if (looksLikeIncompleteEarbudListing(text, queryContext)) return -10;
+  if (isSonyAccessoryListing(text, queryContext)) return -10;
   if (isBrokenOrFaulty(text) && !shouldAllowDamagedListings(queryContext)) return -10;
   if (isDirtyListing(text)) return -10;
 
@@ -973,6 +1041,7 @@ export const audioEngine = {
     if (looksLikeSingleSideEarbud(text)) return false;
     if (looksLikeCaseOnlyListing(text)) return false;
     if (looksLikeIncompleteEarbudListing(text, queryContext)) return false;
+    if (isSonyAccessoryListing(text, queryContext)) return false;
     if (isDirtyListing(text)) return false;
 
     const conditionState = classifyAudioConditionState(text);
