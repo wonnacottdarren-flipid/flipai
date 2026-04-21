@@ -619,6 +619,9 @@ function hasStrongCompleteSignals(text, queryContext = {}) {
       "both earbuds",
       "left and right",
       "left & right",
+      "boxed",
+      "box and case",
+      "with box",
     ])
   ) {
     return true;
@@ -631,6 +634,8 @@ function hasStrongCompleteSignals(text, queryContext = {}) {
       "wf-1000xm4 earbuds and case",
       "sony wf 1000xm4 earbuds and case",
       "wf 1000xm4 earbuds and case",
+      "sony wf-1000xm4 box and case",
+      "sony wf 1000xm4 box and case",
     ])
   ) {
     return true;
@@ -656,7 +661,8 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
       "usb c charging case",
       "lightning charging case",
     ]) &&
-    !hasFullSetSignals(t)
+    !hasFullSetSignals(t) &&
+    !hasStrongCompleteSignals(t, queryContext)
   ) {
     return true;
   }
@@ -827,7 +833,7 @@ function getAudioPricingFloor(queryContext = {}) {
   if (family === "airpods_max") return 150;
 
   if (family === "sony_wf_1000xm5") return 70;
-  if (family === "sony_wf_1000xm4") return queryContext?.wantsCompleteSet ? 55 : 45;
+  if (family === "sony_wf_1000xm4") return queryContext?.wantsCompleteSet ? 50 : 45;
   if (family === "sony_wf_1000xm3") return 30;
 
   if (family === "bose_qc_earbuds_2") return 65;
@@ -955,7 +961,6 @@ function scoreAudioCandidate(item, queryContext) {
   if (queryContext.family === "sony_wf_1000xm4") {
     if (hasFullSetSignals(text)) score += 2;
     if (text.includes("wf-1000xm4") || text.includes("wf1000xm4")) score += 1.5;
-    if (text.includes("charging case")) score -= 6;
     if (text.includes("battery")) score -= 8;
     if (text.includes("ear tips") || text.includes("foam tips")) score -= 8;
 
@@ -971,12 +976,16 @@ function scoreAudioCandidate(item, queryContext) {
           "both buds",
           "left and right",
           "left & right",
+          "boxed",
+          "with box",
         ])
       ) {
         score += 4;
       } else {
-        score -= 7;
+        score -= 4;
       }
+
+      if (looksLikeCaseOnlyListing(text)) score -= 10;
     }
   }
 
@@ -1277,6 +1286,7 @@ export const audioEngine = {
         variants.push("sony wf-1000xm4 full set");
         variants.push("sony wf-1000xm4 complete set");
         variants.push("sony wf-1000xm4 with charging case");
+        variants.push("sony wf-1000xm4 boxed");
       }
     }
 
@@ -1392,6 +1402,7 @@ export const audioEngine = {
       if (text.includes("battery")) return false;
       if (text.includes("ear tips") || text.includes("foam tips")) return false;
       if (text.includes("charging case only")) return false;
+      if (text.includes("compatible") && !text.includes("sony")) return false;
 
       if (queryContext.wantsCompleteSet && !hasStrongCompleteSignals(text, queryContext)) {
         return false;
