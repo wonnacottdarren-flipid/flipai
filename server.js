@@ -752,6 +752,60 @@ function getTightClassificationThresholds(queryContext = {}) {
     normalized.includes("xbox") ||
     normalized.includes("switch");
 
+  const isAudio =
+    normalized.includes("airpods") ||
+    normalized.includes("earbuds") ||
+    normalized.includes("earphones") ||
+    normalized.includes("headphones") ||
+    normalized.includes("galaxy buds") ||
+    normalized.includes("sony wf") ||
+    normalized.includes("sony wh") ||
+    normalized.includes("wf-1000xm") ||
+    normalized.includes("wh-1000xm") ||
+    normalized.includes("xm3") ||
+    normalized.includes("xm4") ||
+    normalized.includes("xm5") ||
+    normalized.includes("bose") ||
+    normalized.includes("qc45") ||
+    normalized.includes("qc 45") ||
+    normalized.includes("qc35") ||
+    normalized.includes("qc 35") ||
+    normalized.includes("qc ultra");
+
+  const isSonyWfXm4 =
+    normalized.includes("sony wf-1000xm4") ||
+    normalized.includes("sony wf 1000xm4") ||
+    normalized.includes("wf-1000xm4") ||
+    normalized.includes("wf1000xm4");
+
+  if (isSonyWfXm4) {
+    return {
+      strongAskProfit: 14,
+      strongAskMargin: 10,
+      solidAskProfit: 9,
+      solidAskMargin: 6,
+      strongOfferProfit: 14,
+      strongOfferMarginFloor: 5,
+      tightAskProfit: 5,
+      tightAskMargin: 3,
+      tightOfferProfit: 8,
+    };
+  }
+
+  if (isAudio) {
+    return {
+      strongAskProfit: 18,
+      strongAskMargin: 12,
+      solidAskProfit: 12,
+      solidAskMargin: 7,
+      strongOfferProfit: 16,
+      strongOfferMarginFloor: 6,
+      tightAskProfit: 6,
+      tightAskMargin: 4,
+      tightOfferProfit: 10,
+    };
+  }
+
   if (isPhone) {
     return {
       strongAskProfit: 28,
@@ -1153,7 +1207,43 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
     const marginPercent = Number(item?.scanner?.marginPercent || item?.marginPercent || 0);
     const offerProfit = Number(item?.offerProfit || item?.scanner?.offerProfit || 0);
 
+    const titleText = normalizeText(
+      item?.title ||
+      item?.scanner?.title ||
+      ""
+    );
+
+    const isAudio =
+      titleText.includes("airpods") ||
+      titleText.includes("earbuds") ||
+      titleText.includes("earphones") ||
+      titleText.includes("headphones") ||
+      titleText.includes("galaxy buds") ||
+      titleText.includes("sony wf") ||
+      titleText.includes("sony wh") ||
+      titleText.includes("wf-1000xm") ||
+      titleText.includes("wh-1000xm") ||
+      titleText.includes("xm3") ||
+      titleText.includes("xm4") ||
+      titleText.includes("xm5") ||
+      titleText.includes("bose") ||
+      titleText.includes("qc45") ||
+      titleText.includes("qc 45") ||
+      titleText.includes("qc35") ||
+      titleText.includes("qc 35") ||
+      titleText.includes("qc ultra");
+
     if (label.includes("buy")) {
+      if (isAudio) {
+        return (
+          estimatedProfit >= 9 &&
+          marginPercent >= 6 &&
+          score >= 90 &&
+          warningCount <= 2 &&
+          (compCount >= 3 || confidence >= 55)
+        );
+      }
+
       return (
         estimatedProfit >= 22 &&
         marginPercent >= 10 &&
@@ -1164,6 +1254,15 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
     }
 
     if (label.includes("offer")) {
+      if (isAudio) {
+        return (
+          offerProfit >= 12 &&
+          score >= 70 &&
+          warningCount <= 2 &&
+          (compCount >= 3 || confidence >= 55)
+        );
+      }
+
       return (
         offerProfit >= 20 &&
         score >= 64 &&
@@ -1173,6 +1272,18 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
     }
 
     if (includeTightDeals && label.includes("tight")) {
+      if (isAudio) {
+        return (
+          (
+            (estimatedProfit >= 5 && marginPercent >= 3) ||
+            offerProfit >= 8
+          ) &&
+          score >= 45 &&
+          warningCount <= 2 &&
+          (compCount >= 2 || confidence >= 45)
+        );
+      }
+
       return (
         (
           (estimatedProfit >= 8 && marginPercent >= 5) ||
@@ -1199,7 +1310,43 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
     const marginPercent = Number(item?.scanner?.marginPercent || item?.marginPercent || 0);
     const offerProfit = Number(item?.offerProfit || item?.scanner?.offerProfit || 0);
 
+    const titleText = normalizeText(
+      item?.title ||
+      item?.scanner?.title ||
+      ""
+    );
+
+    const isAudio =
+      titleText.includes("airpods") ||
+      titleText.includes("earbuds") ||
+      titleText.includes("earphones") ||
+      titleText.includes("headphones") ||
+      titleText.includes("galaxy buds") ||
+      titleText.includes("sony wf") ||
+      titleText.includes("sony wh") ||
+      titleText.includes("wf-1000xm") ||
+      titleText.includes("wh-1000xm") ||
+      titleText.includes("xm3") ||
+      titleText.includes("xm4") ||
+      titleText.includes("xm5") ||
+      titleText.includes("bose") ||
+      titleText.includes("qc45") ||
+      titleText.includes("qc 45") ||
+      titleText.includes("qc35") ||
+      titleText.includes("qc 35") ||
+      titleText.includes("qc ultra");
+
     if (label.includes("buy")) {
+      if (isAudio) {
+        return (
+          estimatedProfit >= 7 &&
+          marginPercent >= 5 &&
+          score >= 70 &&
+          warningCount <= 2 &&
+          (compCount >= 2 || confidence >= 45)
+        );
+      }
+
       return (
         estimatedProfit >= 18 &&
         marginPercent >= 8 &&
@@ -1210,6 +1357,15 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
     }
 
     if (label.includes("offer")) {
+      if (isAudio) {
+        return (
+          offerProfit >= 10 &&
+          score >= 58 &&
+          warningCount <= 2 &&
+          (compCount >= 2 || confidence >= 45)
+        );
+      }
+
       return (
         offerProfit >= 18 &&
         score >= 50 &&
@@ -1219,6 +1375,18 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
     }
 
     if (includeTightDeals && label.includes("tight")) {
+      if (isAudio) {
+        return (
+          (
+            (estimatedProfit >= 4 && marginPercent >= 2.5) ||
+            offerProfit >= 7
+          ) &&
+          score >= 38 &&
+          warningCount <= 2 &&
+          (compCount >= 1 || confidence >= 35)
+        );
+      }
+
       return (
         (
           (estimatedProfit >= 6 && marginPercent >= 4) ||
