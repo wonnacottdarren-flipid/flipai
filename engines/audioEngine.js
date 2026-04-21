@@ -361,22 +361,6 @@ function shouldAllowDamagedListings(queryContext) {
   ]);
 }
 
-function queryWantsFullSet(queryContext) {
-  const q = normalizeText(queryContext?.normalizedQuery || "");
-
-  return hasAny(q, [
-    "full set",
-    "complete set",
-    "complete",
-    "complete pair",
-    "pair",
-    "with case",
-    "with charging case",
-    "boxed complete",
-    "full kit",
-  ]);
-}
-
 function classifyAudioConditionState(text) {
   const t = normalizeText(text);
 
@@ -572,13 +556,6 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
       "left replacement",
       "right replacement",
     ])
-  ) {
-    return true;
-  }
-
-  if (
-    queryWantsFullSet(queryContext) &&
-    !hasFullSetSignals(t)
   ) {
     return true;
   }
