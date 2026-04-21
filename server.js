@@ -162,7 +162,6 @@ function extractItemUrl(item) {
 function buildAffiliateUrl(rawUrl) {
   const cleanUrl = String(rawUrl || "").trim();
   if (!cleanUrl) return "";
-
   return cleanUrl;
 }
 
@@ -346,15 +345,24 @@ function resolveEngineForQuery(query) {
       return engineRegistry.detectEngine(query);
     }
 
-    if (engineRegistry.default && typeof engineRegistry.default.detectEngineForQuery === "function") {
+    if (
+      engineRegistry.default &&
+      typeof engineRegistry.default.detectEngineForQuery === "function"
+    ) {
       return engineRegistry.default.detectEngineForQuery(query);
     }
 
-    if (engineRegistry.default && typeof engineRegistry.default.getEngineForQuery === "function") {
+    if (
+      engineRegistry.default &&
+      typeof engineRegistry.default.getEngineForQuery === "function"
+    ) {
       return engineRegistry.default.getEngineForQuery(query);
     }
 
-    if (engineRegistry.default && typeof engineRegistry.default.detectEngine === "function") {
+    if (
+      engineRegistry.default &&
+      typeof engineRegistry.default.detectEngine === "function"
+    ) {
       return engineRegistry.default.detectEngine(query);
     }
 
@@ -371,6 +379,7 @@ function resolveEngineForQuery(query) {
           return engine;
         }
       } catch {
+        // ignore engine errors and keep checking
       }
     }
 
@@ -592,11 +601,11 @@ function buildDealReasonBreakdown({
     );
   } else if (label.includes("offer")) {
     bullets.push(
-      `Not quite strong enough as a straight buy, but it improves if you negotiate lower.`
+      "Not quite strong enough as a straight buy, but it improves if you negotiate lower."
     );
   } else if (label.includes("tight")) {
     bullets.push(
-      `Borderline setup. This only makes sense if condition checks and comps still hold up after review.`
+      "Borderline setup. This only makes sense if condition checks and comps still hold up after review."
     );
   }
 
@@ -716,7 +725,7 @@ function buildReasonText({
   }
 
   if (label.includes("tight")) {
-    return `This is only a tight check. Profit is thinner here, so verify condition and comps before buying.`;
+    return "This is only a tight check. Profit is thinner here, so verify condition and comps before buying.";
   }
 
   if (offerOpportunity) {
@@ -1434,7 +1443,7 @@ app.post("/api/find-deals", async (req, res) => {
     console.log("After Clean Listings:", cleanListings.length);
     console.log("Market Items:", cleanMarket.length);
 
-      const pricingModel =
+    const pricingModel =
       engine && typeof engine.buildPricingModel === "function"
         ? engine.buildPricingModel({
             queryContext,
