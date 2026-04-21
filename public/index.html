@@ -642,6 +642,12 @@
       border-color: rgba(34, 197, 94, 0.22);
     }
 
+    .warning {
+      background: var(--amber-soft);
+      color: #fde68a;
+      border-color: rgba(245, 158, 11, 0.24);
+    }
+
     .placeholder {
       color: var(--muted);
       font-size: 14px;
@@ -707,6 +713,183 @@
       white-space: pre-wrap;
       line-height: 1.7;
       color: #e2e8f0;
+    }
+
+    .analysis-shell {
+      display: grid;
+      gap: 12px;
+    }
+
+    .analysis-hero {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 12px;
+    }
+
+    .analysis-main-card,
+    .analysis-side-card,
+    .analysis-stat-card,
+    .analysis-note-card,
+    .analysis-title-card {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .analysis-main-card::after,
+    .analysis-side-card::after,
+    .analysis-stat-card::after,
+    .analysis-note-card::after,
+    .analysis-title-card::after {
+      content: "";
+      position: absolute;
+      right: -18px;
+      bottom: -18px;
+      width: 84px;
+      height: 84px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(255,255,255,0.05), transparent 72%);
+      pointer-events: none;
+    }
+
+    .analysis-main-card,
+    .analysis-side-card,
+    .analysis-note-card,
+    .analysis-title-card {
+      padding: 18px;
+    }
+
+    .analysis-main-card {
+      background: linear-gradient(180deg, rgba(79,140,255,0.12), rgba(79,140,255,0.04));
+      border-color: rgba(79,140,255,0.22);
+    }
+
+    .analysis-side-card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+    }
+
+    .analysis-kicker {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.45px;
+      margin-bottom: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .analysis-profit-value {
+      font-size: 34px;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: -0.9px;
+      line-height: 1.05;
+      margin-bottom: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .analysis-profit-subline {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #dbeafe;
+      position: relative;
+      z-index: 1;
+    }
+
+    .analysis-verdict-value {
+      font-size: 24px;
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: -0.35px;
+      margin-bottom: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .analysis-verdict-subline {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #dbeafe;
+      position: relative;
+      z-index: 1;
+    }
+
+    .analysis-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .analysis-stat-card {
+      padding: 16px;
+    }
+
+    .analysis-stat-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.38px;
+      margin-bottom: 6px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .analysis-stat-value {
+      font-size: 22px;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: -0.45px;
+      line-height: 1.1;
+      position: relative;
+      z-index: 1;
+    }
+
+    .analysis-stat-subvalue {
+      margin-top: 5px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #cbd5e1;
+      position: relative;
+      z-index: 1;
+    }
+
+    .analysis-note-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .analysis-note-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #dbeafe;
+      margin-bottom: 8px;
+      letter-spacing: 0.2px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .analysis-note-body {
+      font-size: 14px;
+      line-height: 1.65;
+      color: #dbeafe;
+      position: relative;
+      z-index: 1;
+    }
+
+        .analysis-title-card {
+      margin-top: 12px;
+    }
+
+    .analysis-title-body {
+      font-size: 14px;
+      line-height: 1.7;
+      color: #e2e8f0;
+      position: relative;
+      z-index: 1;
     }
 
     .user-email {
@@ -1250,7 +1433,7 @@
       color: #fff;
     }
 
-    .deal-summary {
+        .deal-summary {
       font-size: 14px;
       line-height: 1.7;
       color: #dbeafe;
@@ -1541,7 +1724,10 @@
       .offer-grid,
       .deal-highlight-grid,
       .finder-summary-strip,
-      .deal-decision-strip {
+      .deal-decision-strip,
+      .analysis-hero,
+      .analysis-note-grid,
+      .analysis-stat-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1643,6 +1829,18 @@
 
       .deal-highlight .value {
         font-size: 21px;
+      }
+
+      .analysis-profit-value {
+        font-size: 28px;
+      }
+
+      .analysis-verdict-value {
+        font-size: 20px;
+      }
+
+      .analysis-stat-value {
+        font-size: 20px;
       }
     }
   </style>
@@ -1908,7 +2106,7 @@
       </div>
     </div>
 
-    <div class="card" id="dealHunter">
+        <div class="card" id="dealHunter">
       <h2>Deal Finder</h2>
       <p class="account-subline" style="margin-top:0;">
         This uses FlipAI’s scoring to surface likely opportunities first, instead of just listing search results.
@@ -2392,65 +2590,123 @@
       const analysis = result.flip_analysis || {};
       const listing = result.ebay_listing || {};
 
+      const verdictText = metrics.verdict || analysis.final_verdict || "Unknown";
+      const profitValue = Number(metrics.profit || 0);
+      const compCount = Number(sold.compCount || 0);
+      const confidenceValue = Number(sold.confidence || 0);
+      const confidenceLabel = sold.confidenceLabel || "Low";
+      const pricingMode = metrics.pricingMode || sold.pricingMode || "Unknown";
+      const riskText = analysis.risk_level || "N/A";
+      const sellSpeedText = analysis.time_to_sell_estimate || "N/A";
+
+      const confidenceDisplay = `${confidenceLabel} (${confidenceValue})`;
+      const compSummary =
+        compCount > 0
+          ? `${compCount} comp${compCount === 1 ? "" : "s"} used`
+          : "No sold comps found";
+
       resultArea.innerHTML = `
-        <div class="results-grid">
-          <div class="metric">
-            <div class="label">Profit</div>
-            <div class="value">${currency(metrics.profit)}</div>
-          </div>
-
-          <div class="metric">
-            <div class="label">Total Cost</div>
-            <div class="value">${currency(metrics.totalCost)}</div>
-          </div>
-
-          <div class="metric">
-            <div class="label">Resale Value</div>
-            <div class="value">${currency(metrics.estimatedResale)}</div>
-          </div>
-
-          <div class="metric">
-            <div class="label">eBay Fees</div>
-            <div class="value">${currency(metrics.ebayFees)}</div>
-          </div>
-        </div>
-
-        <div class="panel" style="font-weight:800;color:${verdictColor(metrics.verdict || analysis.final_verdict)};">
-          Verdict: ${escapeHtml(metrics.verdict || analysis.final_verdict || "Unknown")}
-        </div>
-
-        <div class="panel">
-          <strong>Pricing mode:</strong> ${escapeHtml(metrics.pricingMode || sold.pricingMode || "Unknown")}<br>
-          <strong>Confidence:</strong> ${escapeHtml(sold.confidenceLabel || "Low")} (${Number(sold.confidence || 0)})<br>
-          <strong>Comps used:</strong> ${Number(sold.compCount || 0)}<br>
-          <strong>Risk:</strong> ${escapeHtml(analysis.risk_level || "N/A")}<br>
-          <strong>Time to sell:</strong> ${escapeHtml(analysis.time_to_sell_estimate || "N/A")}
-        </div>
-
-        ${
-          Number(sold.compCount || 0) > 0
-            ? `
-              <div class="panel">
-                <strong>Median sold:</strong> ${currency(sold.medianSoldPrice)}<br>
-                <strong>Average sold:</strong> ${currency(sold.avgSoldPrice)}<br>
-                <strong>Range:</strong> ${currency(sold.minSoldPrice)} - ${currency(sold.maxSoldPrice)}
+        <div class="analysis-shell">
+          <div class="analysis-hero">
+            <div class="analysis-main-card">
+              <div class="analysis-kicker">Projected profit</div>
+              <div class="analysis-profit-value">${currency(profitValue)}</div>
+              <div class="analysis-profit-subline">
+                Based on estimated resale, fees, buy price, and repair cost.
               </div>
-            `
-            : ""
-        }
+            </div>
 
-        <div class="reasoning">${escapeHtml(analysis.brief_reasoning || "No analysis provided.")}</div>
-
-        ${
-          listing.title
-            ? `
-              <div class="panel" style="margin-top:12px;">
-                <strong>Suggested eBay title:</strong><br>
-                ${escapeHtml(listing.title)}
+            <div class="analysis-side-card">
+              <div class="analysis-kicker">Current verdict</div>
+              <div class="analysis-verdict-value" style="color:${verdictColor(verdictText)};">
+                ${escapeHtml(verdictText)}
               </div>
-            `
-            : ""
-        }
+              <div class="analysis-verdict-subline">
+                FlipAI’s overall read using profit, pricing confidence, risk, and resale assumptions.
+              </div>
+            </div>
+          </div>
+
+          <div class="analysis-stat-grid">
+            <div class="analysis-stat-card">
+              <div class="analysis-stat-label">Total cost</div>
+              <div class="analysis-stat-value">${currency(metrics.totalCost)}</div>
+              <div class="analysis-stat-subvalue">Buy price plus repair cost</div>
+            </div>
+
+            <div class="analysis-stat-card">
+              <div class="analysis-stat-label">Estimated resale</div>
+              <div class="analysis-stat-value">${currency(metrics.estimatedResale)}</div>
+              <div class="analysis-stat-subvalue">Modelled resale value</div>
+            </div>
+
+            <div class="analysis-stat-card">
+              <div class="analysis-stat-label">eBay fees</div>
+              <div class="analysis-stat-value">${currency(metrics.ebayFees)}</div>
+              <div class="analysis-stat-subvalue">Estimated platform fees</div>
+            </div>
+
+            <div class="analysis-stat-card">
+              <div class="analysis-stat-label">Pricing mode</div>
+              <div class="analysis-stat-value">${escapeHtml(pricingMode)}</div>
+              <div class="analysis-stat-subvalue">${escapeHtml(compSummary)}</div>
+            </div>
+          </div>
+
+          <div class="analysis-note-grid">
+            <div class="analysis-note-card">
+              <div class="analysis-note-title">Risk and speed</div>
+              <div class="analysis-note-body">
+                <strong>Risk:</strong> ${escapeHtml(riskText)}<br>
+                <strong>Time to sell:</strong> ${escapeHtml(sellSpeedText)}
+              </div>
+            </div>
+
+            <div class="analysis-note-card">
+              <div class="analysis-note-title">Comp confidence</div>
+              <div class="analysis-note-body">
+                <strong>Confidence:</strong> ${escapeHtml(confidenceDisplay)}<br>
+                <strong>Comps used:</strong> ${compCount}
+              </div>
+            </div>
+          </div>
+
+          ${
+            compCount > 0
+              ? `
+                <div class="analysis-note-card">
+                  <div class="analysis-note-title">Sold comp range</div>
+                  <div class="analysis-note-body">
+                    <strong>Median sold:</strong> ${currency(sold.medianSoldPrice)}<br>
+                    <strong>Average sold:</strong> ${currency(sold.avgSoldPrice)}<br>
+                    <strong>Range:</strong> ${currency(sold.minSoldPrice)} - ${currency(sold.maxSoldPrice)}
+                  </div>
+                </div>
+              `
+              : `
+                <div class="analysis-note-card">
+                  <div class="analysis-note-title">Comp warning</div>
+                  <div class="analysis-note-body">
+                    No sold comps were found for this run, so this result is based on a weaker estimate.
+                    Treat the resale number more cautiously and try simpler product wording if needed.
+                  </div>
+                </div>
+              `
+          }
+
+          <div class="reasoning">${escapeHtml(analysis.brief_reasoning || "No analysis provided.")}</div>
+
+          ${
+            listing.title
+              ? `
+                <div class="analysis-title-card">
+                  <div class="analysis-note-title">Suggested eBay title</div>
+                  <div class="analysis-title-body">${escapeHtml(listing.title)}</div>
+                </div>
+              `
+              : ""
+          }
+        </div>
       `;
     }
 
@@ -3036,7 +3292,7 @@
         .join("");
     }
 
-    function mapFinderDeal(rawDeal = {}) {
+        function mapFinderDeal(rawDeal = {}) {
       const scanner = rawDeal.scanner || {};
       const bestOffer = rawDeal.bestOffer || null;
 
@@ -3318,14 +3574,28 @@
 
         const autoComps = data.autoComps || {};
         const manualSoldPricesText = autoComps.manualSoldPricesText || "";
+        const compCount = Number(autoComps.compCount || 0);
+        const confidence = Number(autoComps.confidence || 0);
+        const confidenceLabel = autoComps.confidenceLabel || "Low";
+        const pricingMode = autoComps.pricingMode || "Auto comps estimate";
+        const searchQuery = data.searchQuery || "N/A";
 
         document.getElementById("manualSoldPrices").value = manualSoldPricesText;
 
+        if (compCount <= 0) {
+          setAutoCompsStatus(
+            `No sold comps found. Query used: ${searchQuery}. ` +
+            `Mode: ${pricingMode}. Confidence: ${confidenceLabel} (${confidence}). ` +
+            `Try simplifying the product title and keeping condition details out of the product name.`,
+            "warning"
+          );
+          return;
+        }
+
         setAutoCompsStatus(
-          `Auto comps filled. Query used: ${data.searchQuery || "N/A"}. ` +
-          `Mode: ${autoComps.pricingMode || "Auto comps estimate"}. ` +
-          `Confidence: ${autoComps.confidenceLabel || "Low"} (${Number(autoComps.confidence || 0)}). ` +
-          `Comps: ${Number(autoComps.compCount || 0)}.`,
+          `Auto comps filled. Query used: ${searchQuery}. ` +
+          `Mode: ${pricingMode}. Confidence: ${confidenceLabel} (${confidence}). ` +
+          `Comps: ${compCount}.`,
           "success"
         );
       } catch (err) {
