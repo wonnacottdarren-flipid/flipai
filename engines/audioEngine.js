@@ -9,20 +9,58 @@ import {
 } from "./baseEngine.js";
 
 const AIRPODS_FAMILY_PATTERNS = [
-  ["airpods_pro_2", ["airpods pro 2", "airpods pro 2nd", "airpods pro second generation", "airpods pro gen 2"]],
+  [
+    "airpods_pro_2",
+    [
+      "airpods pro 2",
+      "airpods pro 2nd",
+      "airpods pro second generation",
+      "airpods pro gen 2",
+      "airpods pro generation 2",
+      "airpods pro 2nd gen",
+      "airpods pro 2nd generation",
+      "airpods pro second gen",
+      "airpods pro (2nd gen)",
+      "airpods pro 2ndgen",
+      "airpods pro 2 generation",
+      "apple airpods pro 2",
+      "apple airpods pro 2nd",
+      "apple airpods pro second generation",
+    ],
+  ],
   ["airpods_pro", ["airpods pro"]],
-  ["airpods_3", ["airpods 3", "airpods 3rd", "airpods third generation", "airpods gen 3"]],
-  ["airpods_2", ["airpods 2", "airpods 2nd", "airpods second generation", "airpods gen 2"]],
+  [
+    "airpods_3",
+    [
+      "airpods 3",
+      "airpods 3rd",
+      "airpods third generation",
+      "airpods gen 3",
+      "airpods 3rd gen",
+      "airpods 3rd generation",
+    ],
+  ],
+  [
+    "airpods_2",
+    [
+      "airpods 2",
+      "airpods 2nd",
+      "airpods second generation",
+      "airpods gen 2",
+      "airpods 2nd gen",
+      "airpods 2nd generation",
+    ],
+  ],
   ["airpods_max", ["airpods max"]],
 ];
 
 const SONY_FAMILY_PATTERNS = [
-  ["sony_wh_1000xm5", ["wh-1000xm5", "wh1000xm5", "sony xm5", "sony wh xm5"]],
-  ["sony_wh_1000xm4", ["wh-1000xm4", "wh1000xm4", "sony xm4", "sony wh xm4"]],
-  ["sony_wh_1000xm3", ["wh-1000xm3", "wh1000xm3", "sony xm3", "sony wh xm3"]],
-  ["sony_wf_1000xm5", ["wf-1000xm5", "wf1000xm5", "sony wf xm5"]],
-  ["sony_wf_1000xm4", ["wf-1000xm4", "wf1000xm4", "sony wf xm4"]],
-  ["sony_wf_1000xm3", ["wf-1000xm3", "wf1000xm3", "sony wf xm3"]],
+  ["sony_wh_1000xm5", ["wh-1000xm5", "wh1000xm5", "sony xm5", "sony wh xm5", "sony wh-1000xm5"]],
+  ["sony_wh_1000xm4", ["wh-1000xm4", "wh1000xm4", "sony xm4", "sony wh xm4", "sony wh-1000xm4"]],
+  ["sony_wh_1000xm3", ["wh-1000xm3", "wh1000xm3", "sony xm3", "sony wh xm3", "sony wh-1000xm3"]],
+  ["sony_wf_1000xm5", ["wf-1000xm5", "wf1000xm5", "sony wf xm5", "sony wf-1000xm5"]],
+  ["sony_wf_1000xm4", ["wf-1000xm4", "wf1000xm4", "sony wf xm4", "sony wf-1000xm4"]],
+  ["sony_wf_1000xm3", ["wf-1000xm3", "wf1000xm3", "sony wf xm3", "sony wf-1000xm3"]],
 ];
 
 const BOSE_FAMILY_PATTERNS = [
@@ -37,13 +75,13 @@ const BOSE_FAMILY_PATTERNS = [
 
 const SAMSUNG_BUDS_PATTERNS = [
   ["galaxy_buds3_pro", ["galaxy buds3 pro", "galaxy buds 3 pro", "buds3 pro", "buds 3 pro"]],
-  ["galaxy_buds3", ["galaxy buds3", "galaxy buds 3", "buds3", "buds 3"]],
+  ["galaxy_buds3", ["galaxy buds3", "galaxy buds 3"]],
   ["galaxy_buds2_pro", ["galaxy buds2 pro", "galaxy buds 2 pro", "buds2 pro", "buds 2 pro"]],
-  ["galaxy_buds2", ["galaxy buds2", "galaxy buds 2", "buds2", "buds 2"]],
-  ["galaxy_buds_pro", ["galaxy buds pro", "buds pro"]],
-  ["galaxy_buds_live", ["galaxy buds live", "buds live"]],
-  ["galaxy_buds_plus", ["galaxy buds+", "galaxy buds plus", "buds+", "buds plus"]],
-  ["galaxy_buds_fe", ["galaxy buds fe", "buds fe"]],
+  ["galaxy_buds2", ["galaxy buds2", "galaxy buds 2"]],
+  ["galaxy_buds_pro", ["galaxy buds pro"]],
+  ["galaxy_buds_live", ["galaxy buds live"]],
+  ["galaxy_buds_plus", ["galaxy buds+", "galaxy buds plus"]],
+  ["galaxy_buds_fe", ["galaxy buds fe"]],
 ];
 
 function hasAny(text, phrases = []) {
@@ -65,10 +103,10 @@ function parseFamilyFromPatterns(text, patterns = []) {
 function detectAudioBrand(text) {
   const haystack = normalizeText(text);
 
-  if (haystack.includes("airpods") || haystack.includes("apple")) return "apple";
+  if (haystack.includes("airpods") || haystack.includes("apple airpods")) return "apple";
   if (haystack.includes("sony")) return "sony";
   if (haystack.includes("bose")) return "bose";
-  if (haystack.includes("samsung") || haystack.includes("galaxy buds") || haystack.includes("buds")) return "samsung";
+  if (haystack.includes("samsung") || haystack.includes("galaxy buds")) return "samsung";
 
   if (parseFamilyFromPatterns(haystack, AIRPODS_FAMILY_PATTERNS)) return "apple";
   if (parseFamilyFromPatterns(haystack, SONY_FAMILY_PATTERNS)) return "sony";
@@ -143,7 +181,6 @@ function isAccessoryCategory(item = {}) {
       "headbands",
       "holder",
       "holders",
-      "accessories",
     ])
   );
 }
@@ -168,6 +205,8 @@ function isAccessoryOnly(text) {
     "wire only",
     "cover only",
     "skin only",
+    "case replacement",
+    "charging dock only",
   ]);
 }
 
@@ -195,6 +234,8 @@ function isPartialItem(text) {
     "without right",
     "does not include left",
     "does not include right",
+    "left airpod only",
+    "right airpod only",
   ]);
 }
 
@@ -233,6 +274,8 @@ function isDirtyListing(text) {
     "dummy",
     "display model only",
     "not genuine",
+    "clone",
+    "copy",
   ]);
 }
 
@@ -251,6 +294,13 @@ function hasHeadphoneSignals(text) {
     "fully working",
     "working order",
     "used",
+    "airpods",
+    "galaxy buds",
+    "sony",
+    "bose",
+    "xm4",
+    "xm5",
+    "qc",
   ]);
 }
 
@@ -385,7 +435,6 @@ function scoreAudioCandidate(item, queryContext) {
   if (isPartialItem(text)) return -10;
   if (isBrokenOrFaulty(text) && !shouldAllowDamagedListings(queryContext)) return -10;
   if (isDirtyListing(text)) return -10;
-  if (isAccessoryCategory(item)) return -10;
 
   const conditionState = classifyAudioConditionState(text);
   const allowDamaged = shouldAllowDamagedListings(queryContext);
@@ -400,6 +449,7 @@ function scoreAudioCandidate(item, queryContext) {
   const itemFamily = parseAudioFamily(text, queryContext.brand);
   const titleText = normalizeText(item?.title || "");
   const inAudioCategory = isAudioCategory(item);
+  const inAccessoryCategory = isAccessoryCategory(item);
 
   if (queryContext.brand) {
     if (itemBrand === queryContext.brand) score += 1.5;
@@ -419,11 +469,15 @@ function scoreAudioCandidate(item, queryContext) {
   if (queryContext.brand === "apple" && text.includes("airpods")) score += 0.5;
   if (queryContext.brand === "sony" && text.includes("sony")) score += 0.5;
   if (queryContext.brand === "bose" && text.includes("bose")) score += 0.5;
-  if (queryContext.brand === "samsung" && (text.includes("samsung") || text.includes("galaxy buds") || text.includes("buds"))) score += 0.5;
+  if (queryContext.brand === "samsung" && (text.includes("samsung") || text.includes("galaxy buds"))) score += 0.5;
 
   if (inAudioCategory) score += 2.5;
   else if (hasHeadphoneSignals(text)) score += 0.8;
   else score -= 3;
+
+  if (inAccessoryCategory && !inAudioCategory) {
+    score -= 3.5;
+  }
 
   if (isOverlyGenericAudioTitle(titleText, queryContext) && !inAudioCategory) {
     score -= 4;
@@ -565,11 +619,9 @@ export const audioEngine = {
       text.includes("earbuds") ||
       text.includes("earphones") ||
       text.includes("galaxy buds") ||
-      text.includes("buds pro") ||
-      text.includes("buds live") ||
-      text.includes("buds fe") ||
       text.includes("sony wh") ||
       text.includes("sony wf") ||
+      text.includes("xm3") ||
       text.includes("xm4") ||
       text.includes("xm5") ||
       text.includes("bose") ||
@@ -600,7 +652,33 @@ export const audioEngine = {
   expandSearchVariants(query = "") {
     const rawQuery = String(query || "").trim();
     const ctx = this.classifyQuery(rawQuery);
+    const normalized = normalizeText(rawQuery);
     const variants = [rawQuery];
+
+    if (ctx.family === "airpods_pro_2") {
+      variants.push("airpods pro 2");
+      variants.push("airpods pro 2nd gen");
+      variants.push("airpods pro 2nd generation");
+      variants.push("airpods pro gen 2");
+      variants.push("apple airpods pro 2");
+    }
+
+    if (ctx.family === "airpods_pro") {
+      variants.push("airpods pro");
+      variants.push("apple airpods pro");
+    }
+
+    if (ctx.family === "airpods_3") {
+      variants.push("airpods 3");
+      variants.push("airpods 3rd gen");
+      variants.push("airpods 3rd generation");
+    }
+
+    if (ctx.family === "airpods_2") {
+      variants.push("airpods 2");
+      variants.push("airpods 2nd gen");
+      variants.push("airpods 2nd generation");
+    }
 
     if (ctx.family) {
       const niceFamily = ctx.family.replaceAll("_", " ");
@@ -623,7 +701,13 @@ export const audioEngine = {
       }
     }
 
-    return [...new Set(variants.filter(Boolean))];
+    if (normalized === "airpods pro 2") {
+      variants.push("airpods pro 2nd gen");
+      variants.push("airpods pro gen 2");
+      variants.push("airpods pro 2nd generation");
+    }
+
+    return [...new Set(variants.map((v) => String(v || "").trim()).filter(Boolean))];
   },
 
   matchesItem(item, queryContext) {
@@ -642,7 +726,6 @@ export const audioEngine = {
     if (isAccessoryOnly(text)) return false;
     if (isPartialItem(text)) return false;
     if (isDirtyListing(text)) return false;
-    if (isAccessoryCategory(item)) return false;
 
     const conditionState = classifyAudioConditionState(text);
     const allowDamaged = Boolean(queryContext?.allowDamaged);
@@ -660,7 +743,13 @@ export const audioEngine = {
     }
 
     const inAudioCategory = isAudioCategory(item);
+    const inAccessoryCategory = isAccessoryCategory(item);
+
     if (!inAudioCategory && !hasHeadphoneSignals(text)) {
+      return false;
+    }
+
+    if (inAccessoryCategory && !inAudioCategory && !hasHeadphoneSignals(text)) {
       return false;
     }
 
