@@ -156,7 +156,6 @@ function isAudioCategory(item = {}) {
       "over-ear headphones",
       "on-ear headphones",
       "home headphones",
-      "mobile phone accessories",
     ])
   );
 }
@@ -189,6 +188,14 @@ function isAccessoryOnly(text) {
   return hasAny(text, [
     "case only",
     "charging case only",
+    "magsafe case only",
+    "usb c case only",
+    "lightning case only",
+    "charging case -",
+    "charging case ",
+    "case replacement",
+    "replacement case",
+    "replacement charger",
     "box only",
     "empty box",
     "manual only",
@@ -198,14 +205,11 @@ function isAccessoryOnly(text) {
     "ear pads only",
     "pads only",
     "headband only",
-    "replacement case",
-    "replacement charger",
     "charging cable only",
     "usb cable only",
     "wire only",
     "cover only",
     "skin only",
-    "case replacement",
     "charging dock only",
   ]);
 }
@@ -236,6 +240,8 @@ function isPartialItem(text) {
     "does not include right",
     "left airpod only",
     "right airpod only",
+    "left ear only",
+    "right ear only",
   ]);
 }
 
@@ -289,7 +295,6 @@ function hasHeadphoneSignals(text) {
     "noise cancelling",
     "noise canceling",
     "anc",
-    "charging case",
     "boxed",
     "fully working",
     "working order",
@@ -418,6 +423,75 @@ function estimateAudioRepairCost(queryContext, conditionState, text) {
   return 0;
 }
 
+function isEarbudFamily(queryContext = {}) {
+  const family = String(queryContext?.family || "");
+
+  return (
+    family.startsWith("airpods_") ||
+    family.startsWith("galaxy_buds") ||
+    family.startsWith("sony_wf_") ||
+    family.startsWith("bose_qc_earbuds")
+  );
+}
+
+function looksLikeCaseOnlyListing(text) {
+  const t = normalizeText(text);
+
+  if (
+    hasAny(t, [
+      "charging case",
+      "magsafe charging case",
+      "wireless charging case",
+      "usb c charging case",
+      "lightning charging case",
+      "case a2968",
+      "case only",
+      "charging case only",
+    ])
+  ) {
+    if (
+      !hasAny(t, [
+        "with earbuds",
+        "with buds",
+        "with both earbuds",
+        "left and right",
+        "full set",
+        "complete set",
+        "complete",
+        "pair of earbuds",
+        "both earbuds",
+        "earbuds included",
+      ])
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasFullSetSignals(text) {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "full set",
+    "complete set",
+    "complete",
+    "pair",
+    "both earbuds",
+    "left and right",
+    "left & right",
+    "with case",
+    "with charging case",
+    "earbuds and case",
+    "buds and case",
+    "includes case",
+    "includes charging case",
+    "2 earbuds",
+    "two earbuds",
+  ]);
+}
+
 function scoreAudioCandidate(item, queryContext) {
   const text = normalizeText(
     [
@@ -433,6 +507,7 @@ function scoreAudioCandidate(item, queryContext) {
   if (!text) return -10;
   if (isAccessoryOnly(text)) return -10;
   if (isPartialItem(text)) return -10;
+  if (looksLikeCaseOnlyListing(text)) return -10;
   if (isBrokenOrFaulty(text) && !shouldAllowDamagedListings(queryContext)) return -10;
   if (isDirtyListing(text)) return -10;
 
@@ -450,6 +525,7 @@ function scoreAudioCandidate(item, queryContext) {
   const titleText = normalizeText(item?.title || "");
   const inAudioCategory = isAudioCategory(item);
   const inAccessoryCategory = isAccessoryCategory(item);
+  const isEarbuds = isEarbudFamily(queryContext);
 
   if (queryContext.brand) {
     if (itemBrand === queryContext.brand) score += 1.5;
@@ -481,6 +557,12 @@ function scoreAudioCandidate(item, queryContext) {
 
   if (isOverlyGenericAudioTitle(titleText, queryContext) && !inAudioCategory) {
     score -= 4;
+  }
+
+  if (isEarbuds) {
+    if (hasFullSetSignals(text)) score += 2.5;
+    if (looksLikeCaseOnlyListing(text)) score -= 8;
+    if (isPartialItem(text)) score -= 8;
   }
 
   return score;
@@ -725,6 +807,7 @@ export const audioEngine = {
     if (!text) return false;
     if (isAccessoryOnly(text)) return false;
     if (isPartialItem(text)) return false;
+    if (looksLikeCaseOnlyListing(text)) return false;
     if (isDirtyListing(text)) return false;
 
     const conditionState = classifyAudioConditionState(text);
@@ -744,17 +827,23 @@ export const audioEngine = {
 
     const inAudioCategory = isAudioCategory(item);
     const inAccessoryCategory = isAccessoryCategory(item);
+    const isEarbuds = isEarbudFamily(queryContext);
 
     if (!inAudioCategory && !hasHeadphoneSignals(text)) {
       return false;
     }
 
-    if (inAccessoryCategory && !inAudioCategory && !hasHeadphoneSignals(text)) {
+    if (inAccessoryCategory && !inAudioCategory) {
       return false;
     }
 
     if (isOverlyGenericAudioTitle(item?.title || "", queryContext) && !inAudioCategory) {
       return false;
+    }
+
+    if (isEarbuds) {
+      if (isPartialItem(text)) return false;
+      if (looksLikeCaseOnlyListing(text)) return false;
     }
 
     return true;
