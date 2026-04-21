@@ -709,8 +709,8 @@ function getAudioResaleMultiplier(queryContext = {}, exactMarketCount = 0) {
   if (exactMarketCount >= 5) multiplier = 0.96;
 
   if (brand === "samsung" && family.startsWith("galaxy_buds")) {
-    multiplier = 0.97;
-    if (exactMarketCount >= 5) multiplier = 0.98;
+    multiplier = 0.98;
+    if (exactMarketCount >= 5) multiplier = 0.99;
   }
 
   return multiplier;
@@ -1005,6 +1005,63 @@ export const audioEngine = {
       variants.push("airpods 2");
       variants.push("airpods 2nd gen");
       variants.push("airpods 2nd generation");
+    }
+
+    if (ctx.family === "galaxy_buds2_pro") {
+      variants.push("galaxy buds2 pro");
+      variants.push("galaxy buds 2 pro");
+      variants.push("samsung galaxy buds2 pro");
+      variants.push("samsung galaxy buds 2 pro");
+      variants.push("buds2 pro");
+      variants.push("buds 2 pro");
+    }
+
+    if (ctx.family === "galaxy_buds3_pro") {
+      variants.push("galaxy buds3 pro");
+      variants.push("galaxy buds 3 pro");
+      variants.push("samsung galaxy buds3 pro");
+      variants.push("samsung galaxy buds 3 pro");
+      variants.push("buds3 pro");
+      variants.push("buds 3 pro");
+    }
+
+    if (ctx.family === "galaxy_buds3") {
+      variants.push("galaxy buds3");
+      variants.push("galaxy buds 3");
+      variants.push("samsung galaxy buds3");
+      variants.push("samsung galaxy buds 3");
+      variants.push("buds3");
+      variants.push("buds 3");
+    }
+
+    if (ctx.family === "galaxy_buds2") {
+      variants.push("galaxy buds2");
+      variants.push("galaxy buds 2");
+      variants.push("samsung galaxy buds2");
+      variants.push("samsung galaxy buds 2");
+      variants.push("buds2");
+      variants.push("buds 2");
+    }
+
+    if (ctx.family === "galaxy_buds_pro") {
+      variants.push("galaxy buds pro");
+      variants.push("samsung galaxy buds pro");
+    }
+
+    if (ctx.family === "galaxy_buds_live") {
+      variants.push("galaxy buds live");
+      variants.push("samsung galaxy buds live");
+    }
+
+    if (ctx.family === "galaxy_buds_plus") {
+      variants.push("galaxy buds plus");
+      variants.push("galaxy buds+");
+      variants.push("samsung galaxy buds plus");
+    }
+
+    if (ctx.family === "galaxy_buds_fe") {
+      variants.push("galaxy buds fe");
+      variants.push("samsung galaxy buds fe");
     }
 
     if (ctx.family) {
