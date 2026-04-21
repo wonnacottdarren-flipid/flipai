@@ -644,7 +644,34 @@ function hasStrongCompleteSignals(text, queryContext = {}) {
   return false;
 }
 
-function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
+function looksLikeLikelyCompleteSonyListing(text, queryContext = {}, item = {}) {
+  const t = normalizeText(text);
+  const family = String(queryContext?.family || "");
+  const wantsCompleteSet = Boolean(queryContext?.wantsCompleteSet);
+
+  if (!wantsCompleteSet) return false;
+  if (family !== "sony_wf_1000xm4") return false;
+
+  if (!hasAny(t, ["wf-1000xm4", "wf1000xm4"])) return false;
+  if (!hasAny(t, ["sony", "earbuds", "wireless", "bluetooth", "noise cancelling", "noise canceling"])) {
+    return false;
+  }
+
+  if (isAccessoryOnly(t)) return false;
+  if (isPartialItem(t)) return false;
+  if (looksLikeSingleSideEarbud(t)) return false;
+  if (looksLikeCaseOnlyListing(t)) return false;
+  if (isSonyAccessoryListing(t, queryContext)) return false;
+
+  const inAudioCategory = isAudioCategory(item);
+  const inAccessoryCategory = isAccessoryCategory(item);
+
+  if (inAccessoryCategory && !inAudioCategory) return false;
+
+  return true;
+}
+
+function looksLikeIncompleteEarbudListing(text, queryContext = {}, item = {}) {
   const t = normalizeText(text);
 
   if (!isEarbudFamily(queryContext)) return false;
@@ -682,8 +709,13 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
     return true;
   }
 
-  if (queryContext?.wantsCompleteSet && !hasStrongCompleteSignals(t, queryContext)) {
-    return true;
+  if (queryContext?.wantsCompleteSet) {
+    const strongComplete = hasStrongCompleteSignals(t, queryContext);
+    const likelyCompleteSony = looksLikeLikelyCompleteSonyListing(t, queryContext, item);
+
+    if (!strongComplete && !likelyCompleteSony) {
+      return true;
+    }
   }
 
   return false;
@@ -891,7 +923,7 @@ function scoreAudioCandidate(item, queryContext) {
   if (isPartialItem(text)) return -10;
   if (looksLikeSingleSideEarbud(text)) return -10;
   if (looksLikeCaseOnlyListing(text)) return -10;
-  if (looksLikeIncompleteEarbudListing(text, queryContext)) return -10;
+  if (looksLikeIncompleteEarbudListing(text, queryContext, item)) return -10;
   if (isSonyAccessoryListing(text, queryContext)) return -10;
   if (isGenericSamsungCloneListing(text, queryContext)) return -10;
   if (isBrokenOrFaulty(text) && !shouldAllowDamagedListings(queryContext)) return -10;
@@ -950,12 +982,17 @@ function scoreAudioCandidate(item, queryContext) {
     if (looksLikeCaseOnlyListing(text)) score -= 8;
     if (isPartialItem(text)) score -= 8;
     if (looksLikeSingleSideEarbud(text)) score -= 8;
-    if (looksLikeIncompleteEarbudListing(text, queryContext)) score -= 8;
+    if (looksLikeIncompleteEarbudListing(text, queryContext, item)) score -= 8;
   }
 
   if (queryContext.wantsCompleteSet) {
-    if (hasStrongCompleteSignals(text, queryContext)) score += 3.5;
-    else score -= 6;
+    if (hasStrongCompleteSignals(text, queryContext)) {
+      score += 3.5;
+    } else if (looksLikeLikelyCompleteSonyListing(text, queryContext, item)) {
+      score += 1.5;
+    } else {
+      score -= 2;
+    }
   }
 
   if (queryContext.family === "sony_wf_1000xm4") {
@@ -981,8 +1018,10 @@ function scoreAudioCandidate(item, queryContext) {
         ])
       ) {
         score += 4;
+      } else if (looksLikeLikelyCompleteSonyListing(text, queryContext, item)) {
+        score += 2;
       } else {
-        score -= 4;
+        score -= 2;
       }
 
       if (looksLikeCaseOnlyListing(text)) score -= 10;
@@ -1011,7 +1050,9 @@ function enrichAudioCompPool(queryContext, items = []) {
         total: extractTotalPrice(item),
         score: scoreAudioCandidate(item, queryContext),
         conditionState: classifyAudioConditionState(text),
-        fullSet: hasStrongCompleteSignals(text, queryContext),
+        fullSet:
+          hasStrongCompleteSignals(text, queryContext) ||
+          looksLikeLikelyCompleteSonyListing(text, queryContext, item),
       };
     })
     .filter((entry) => entry.total > 0 && entry.score > -5)
@@ -1351,7 +1392,7 @@ export const audioEngine = {
     if (isPartialItem(text)) return false;
     if (looksLikeSingleSideEarbud(text)) return false;
     if (looksLikeCaseOnlyListing(text)) return false;
-    if (looksLikeIncompleteEarbudListing(text, queryContext)) return false;
+    if (looksLikeIncompleteEarbudListing(text, queryContext, item)) return false;
     if (isSonyAccessoryListing(text, queryContext)) return false;
     if (isGenericSamsungCloneListing(text, queryContext)) return false;
     if (isDirtyListing(text)) return false;
@@ -1391,11 +1432,7 @@ export const audioEngine = {
       if (isPartialItem(text)) return false;
       if (looksLikeSingleSideEarbud(text)) return false;
       if (looksLikeCaseOnlyListing(text)) return false;
-      if (looksLikeIncompleteEarbudListing(text, queryContext)) return false;
-    }
-
-    if (queryContext.wantsCompleteSet && !hasStrongCompleteSignals(text, queryContext)) {
-      return false;
+      if (looksLikeIncompleteEarbudListing(text, queryContext, item)) return false;
     }
 
     if (queryContext.family === "sony_wf_1000xm4") {
@@ -1403,10 +1440,6 @@ export const audioEngine = {
       if (text.includes("ear tips") || text.includes("foam tips")) return false;
       if (text.includes("charging case only")) return false;
       if (text.includes("compatible") && !text.includes("sony")) return false;
-
-      if (queryContext.wantsCompleteSet && !hasStrongCompleteSignals(text, queryContext)) {
-        return false;
-      }
     }
 
     return true;
