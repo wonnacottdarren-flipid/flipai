@@ -277,6 +277,14 @@ function looksLikeSingleSideEarbud(text) {
   const t = normalizeText(text);
 
   return hasAny(t, [
+    "(left)",
+    "(right)",
+    "[left]",
+    "[right]",
+    "left only",
+    "right only",
+    "left side only",
+    "right side only",
     "left earbud",
     "right earbud",
     "left ear bud",
@@ -297,6 +305,18 @@ function looksLikeSingleSideEarbud(text) {
     "right unit",
     "lhs only",
     "rhs only",
+    "replacement earbud",
+    "replacement earbuds",
+    "replacement bud",
+    "replacement buds",
+    "replacement left",
+    "replacement right",
+    "left replacement",
+    "right replacement",
+    "earbud replacement",
+    "single bud",
+    "single earbud",
+    "single airpod",
   ]);
 }
 
@@ -602,6 +622,69 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
   return false;
 }
 
+function isGenericSamsungCloneListing(text, queryContext = {}) {
+  const t = normalizeText(text);
+  const brand = String(queryContext?.brand || "");
+  const family = String(queryContext?.family || "");
+
+  if (brand !== "samsung" && !family.startsWith("galaxy_buds")) {
+    return false;
+  }
+
+  const genericCloneSignals = [
+    "for samsung galaxy",
+    "for samsung",
+    "for galaxy",
+    "compatible with samsung",
+    "compatible with galaxy",
+    "wireless bluetooth earbuds",
+    "wireless bluetooth earphones",
+    "bliss anit-noise",
+    "anit-noise",
+    "3color",
+    "3 color",
+    "earphones for samsung",
+    "buds for samsung",
+  ];
+
+  const officialSignals = [
+    "samsung galaxy buds",
+    "galaxy buds2 pro",
+    "galaxy buds 2 pro",
+    "galaxy buds3 pro",
+    "galaxy buds 3 pro",
+    "galaxy buds3",
+    "galaxy buds 3",
+    "sm-r510",
+    "sm-r530",
+    "sm-r630",
+    "official samsung",
+    "genuine samsung",
+  ];
+
+  const hasGenericCloneSignal = hasAny(t, genericCloneSignals);
+  const hasOfficialSignal = hasAny(t, officialSignals);
+
+  if (hasGenericCloneSignal && !hasOfficialSignal) {
+    return true;
+  }
+
+  if (
+    hasAny(t, [
+      "buds 2 pro for samsung",
+      "buds2pro for samsung",
+      "buds 3 pro for samsung",
+      "buds3 pro for samsung",
+      "buds 3 for samsung",
+      "buds3 for samsung",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function isSonyAccessoryListing(text, queryContext = {}) {
   const t = normalizeText(text);
   const family = String(queryContext?.family || "");
@@ -735,6 +818,7 @@ function scoreAudioCandidate(item, queryContext) {
   if (looksLikeCaseOnlyListing(text)) return -10;
   if (looksLikeIncompleteEarbudListing(text, queryContext)) return -10;
   if (isSonyAccessoryListing(text, queryContext)) return -10;
+  if (isGenericSamsungCloneListing(text, queryContext)) return -10;
   if (isBrokenOrFaulty(text) && !shouldAllowDamagedListings(queryContext)) return -10;
   if (isDirtyListing(text)) return -10;
 
@@ -900,7 +984,6 @@ function buildAudioPricingModel(queryContext, marketItems = [], listingItems = [
   if (!marketMedian && !listingMedian && marketLow) pricingMode = "Audio low-band fallback";
 
   const conservativeMultiplier = getAudioResaleMultiplier(queryContext, exactMarket.length);
-
   const estimatedResale = roundMoney(baseline * conservativeMultiplier);
 
   const compCount = marketTotals.length;
@@ -1113,6 +1196,7 @@ export const audioEngine = {
     if (looksLikeCaseOnlyListing(text)) return false;
     if (looksLikeIncompleteEarbudListing(text, queryContext)) return false;
     if (isSonyAccessoryListing(text, queryContext)) return false;
+    if (isGenericSamsungCloneListing(text, queryContext)) return false;
     if (isDirtyListing(text)) return false;
 
     const conditionState = classifyAudioConditionState(text);
