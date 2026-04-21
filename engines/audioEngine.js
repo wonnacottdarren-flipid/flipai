@@ -191,8 +191,6 @@ function isAccessoryOnly(text) {
     "magsafe case only",
     "usb c case only",
     "lightning case only",
-    "charging case -",
-    "charging case ",
     "case replacement",
     "replacement case",
     "replacement charger",
@@ -218,6 +216,8 @@ function isPartialItem(text) {
   return hasAny(text, [
     "left only",
     "right only",
+    "left side only",
+    "right side only",
     "single ear",
     "one ear",
     "single bud",
