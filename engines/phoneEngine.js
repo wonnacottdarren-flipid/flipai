@@ -124,6 +124,69 @@ function parsePhoneFamily(text, brand) {
   return "";
 }
 
+function getCategoryTexts(item = {}) {
+  const names = Array.isArray(item?.categories)
+    ? item.categories.map((category) => category?.categoryName).filter(Boolean)
+    : [];
+
+  return names.map((name) => normalizeText(name));
+}
+
+function isPhoneCategory(item = {}) {
+  const categoryTexts = getCategoryTexts(item);
+
+  return categoryTexts.some((text) =>
+    hasAny(text, [
+      "mobile & smart phones",
+      "mobile phones",
+      "smartphones",
+      "cell phones",
+      "cell phones & smartphones",
+      "mobile phones & communication",
+    ])
+  );
+}
+
+function isAccessoryCategory(item = {}) {
+  const categoryTexts = getCategoryTexts(item);
+
+  return categoryTexts.some((text) =>
+    hasAny(text, [
+      "cases, covers & skins",
+      "cases covers & skins",
+      "mobile phone accessories",
+      "phone accessories",
+      "chargers & docks",
+      "cables & adapters",
+      "replacement parts",
+      "parts",
+      "screen protectors",
+      "mounts & holders",
+      "holders",
+      "battery cases",
+      "accessories",
+    ])
+  );
+}
+
+function isPartsCategory(item = {}) {
+  const categoryTexts = getCategoryTexts(item);
+
+  return categoryTexts.some((text) =>
+    hasAny(text, [
+      "replacement parts",
+      "parts",
+      "lcds",
+      "digitizers",
+      "screens",
+      "batteries",
+      "housing",
+      "flex cables",
+      "logic boards",
+    ])
+  );
+}
+
 function isAccessoryOnly(text) {
   return hasAny(text, [
     "case only",
@@ -193,6 +256,76 @@ function isExplicitlyUnlocked(text) {
     "factory unlocked",
     "open network",
   ]);
+}
+
+function hasHandsetSignals(text) {
+  return hasAny(text, [
+    "smartphone",
+    "mobile phone",
+    "handset",
+    "phone",
+    "boxed",
+    "original box",
+    "battery health",
+    "face id",
+    "fully working",
+    "working order",
+    "used",
+    "grade a",
+    "grade b",
+    "grade c",
+    "sim free",
+    "unlocked",
+    "64gb",
+    "128gb",
+    "256gb",
+    "512gb",
+    "1tb",
+  ]);
+}
+
+function isOverlyGenericPhoneTitle(text, queryContext) {
+  const t = normalizeText(text);
+  const family = String(queryContext?.family || "");
+
+  if (!family) return false;
+
+  const genericIphoneTitles = [
+    "iphone",
+    "apple iphone",
+  ];
+
+  const genericSamsungTitles = [
+    "samsung",
+    "samsung galaxy",
+    "galaxy",
+  ];
+
+  if (queryContext.brand === "iphone" && genericIphoneTitles.includes(t)) return true;
+  if (queryContext.brand === "samsung" && genericSamsungTitles.includes(t)) return true;
+
+  if (
+    family === "iphone_13" &&
+    t === "iphone 13"
+  ) {
+    return false;
+  }
+
+  if (
+    family === "iphone_12" &&
+    t === "iphone 12"
+  ) {
+    return false;
+  }
+
+  if (
+    family === "iphone_11" &&
+    t === "iphone 11"
+  ) {
+    return false;
+  }
+
+  return false;
 }
 
 function classifyPhoneConditionState(text) {
@@ -352,6 +485,8 @@ function scorePhoneCandidate(item, queryContext) {
   if (!text) return -10;
   if (isAccessoryOnly(text)) return -10;
   if (isSeverelyLocked(text)) return -10;
+  if (isAccessoryCategory(item)) return -10;
+  if (isPartsCategory(item)) return -10;
 
   const conditionState = classifyPhoneConditionState(text);
   const allowDamaged = shouldAllowDamagedListings(queryContext);
@@ -365,6 +500,8 @@ function scorePhoneCandidate(item, queryContext) {
   const itemBrand = detectPhoneBrand(text);
   const itemFamily = parsePhoneFamily(text, queryContext.brand);
   const itemStorageGb = extractStorageGb(text);
+  const titleText = normalizeText(item?.title || "");
+  const inPhoneCategory = isPhoneCategory(item);
 
   if (queryContext.brand) {
     if (itemBrand === queryContext.brand) score += 1.5;
@@ -396,6 +533,14 @@ function scorePhoneCandidate(item, queryContext) {
 
   if (queryContext.brand === "iphone" && text.includes("iphone")) score += 0.5;
   if (queryContext.brand === "samsung" && (text.includes("samsung") || text.includes("galaxy"))) score += 0.5;
+
+  if (inPhoneCategory) score += 2.5;
+  else if (hasHandsetSignals(text)) score += 0.8;
+  else score -= 3;
+
+  if (isOverlyGenericPhoneTitle(titleText, queryContext) && !inPhoneCategory) {
+    score -= 4;
+  }
 
   return score;
 }
@@ -604,11 +749,12 @@ export const phoneEngine = {
     if (!text) return false;
     if (isAccessoryOnly(text)) return false;
     if (isSeverelyLocked(text)) return false;
+    if (isAccessoryCategory(item)) return false;
+    if (isPartsCategory(item)) return false;
 
     const conditionState = classifyPhoneConditionState(text);
     const allowDamaged = Boolean(queryContext?.allowDamaged);
 
-    // HARD EXCLUSION: normal phone searches must not include damaged stock.
     if (!allowDamaged && isDamagedConditionState(conditionState)) {
       return false;
     }
@@ -635,6 +781,15 @@ export const phoneEngine = {
     }
 
     if (queryContext.wantsUnlocked && isNetworkLocked(text)) {
+      return false;
+    }
+
+    const inPhoneCategory = isPhoneCategory(item);
+    if (!inPhoneCategory && !hasHandsetSignals(text)) {
+      return false;
+    }
+
+    if (isOverlyGenericPhoneTitle(item?.title || "", queryContext) && !inPhoneCategory) {
       return false;
     }
 
