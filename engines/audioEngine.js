@@ -696,6 +696,9 @@ function isSonyAccessoryListing(text, queryContext = {}) {
 
   if (!isSonyEarbudQuery) return false;
 
+  if (looksLikeSingleSideEarbud(t)) return true;
+  if (looksLikeCaseOnlyListing(t)) return true;
+
   if (
     hasAny(t, [
       "ear tips",
@@ -738,12 +741,12 @@ function isSonyAccessoryListing(text, queryContext = {}) {
 
   if (
     hasAny(t, [
-      "charging case",
-      "changing case",
       "case only",
       "replacement case",
       "case replacement",
       "charging case replacement",
+      "charging case only",
+      "changing case",
     ])
   ) {
     return true;
@@ -876,6 +879,14 @@ function scoreAudioCandidate(item, queryContext) {
     if (isPartialItem(text)) score -= 8;
     if (looksLikeSingleSideEarbud(text)) score -= 8;
     if (looksLikeIncompleteEarbudListing(text, queryContext)) score -= 8;
+  }
+
+  if (queryContext.family === "sony_wf_1000xm4") {
+    if (hasFullSetSignals(text)) score += 2;
+    if (text.includes("wf-1000xm4") || text.includes("wf1000xm4")) score += 1.5;
+    if (text.includes("charging case")) score -= 6;
+    if (text.includes("battery")) score -= 8;
+    if (text.includes("ear tips") || text.includes("foam tips")) score -= 8;
   }
 
   return score;
@@ -1147,6 +1158,30 @@ export const audioEngine = {
       variants.push("samsung galaxy buds fe");
     }
 
+    if (ctx.family === "sony_wf_1000xm4") {
+      variants.push("sony wf-1000xm4");
+      variants.push("sony wf 1000xm4");
+      variants.push("wf-1000xm4");
+      variants.push("wf1000xm4");
+      variants.push("sony wf-1000xm4 earbuds");
+      variants.push("sony wf-1000xm4 complete");
+      variants.push("sony wf-1000xm4 full set");
+    }
+
+    if (ctx.family === "sony_wf_1000xm5") {
+      variants.push("sony wf-1000xm5");
+      variants.push("sony wf 1000xm5");
+      variants.push("wf-1000xm5");
+      variants.push("wf1000xm5");
+    }
+
+    if (ctx.family === "sony_wf_1000xm3") {
+      variants.push("sony wf-1000xm3");
+      variants.push("sony wf 1000xm3");
+      variants.push("wf-1000xm3");
+      variants.push("wf1000xm3");
+    }
+
     if (ctx.family) {
       const niceFamily = ctx.family.replaceAll("_", " ");
       variants.push(niceFamily);
@@ -1235,6 +1270,12 @@ export const audioEngine = {
       if (looksLikeSingleSideEarbud(text)) return false;
       if (looksLikeCaseOnlyListing(text)) return false;
       if (looksLikeIncompleteEarbudListing(text, queryContext)) return false;
+    }
+
+    if (queryContext.family === "sony_wf_1000xm4") {
+      if (text.includes("battery")) return false;
+      if (text.includes("ear tips") || text.includes("foam tips")) return false;
+      if (text.includes("charging case only")) return false;
     }
 
     return true;
