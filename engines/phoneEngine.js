@@ -776,12 +776,9 @@ export const phoneEngine = {
       return false;
     }
 
-    if (queryContext.wantsUnlocked && !isExplicitlyUnlocked(text)) {
-      return false;
-    }
-
-    if (queryContext.wantsUnlocked && isNetworkLocked(text)) {
-      return false;
+    if (queryContext.wantsUnlocked) {
+      if (isSeverelyLocked(text)) return false;
+      if (isNetworkLocked(text)) return false;
     }
 
     const inPhoneCategory = isPhoneCategory(item);
