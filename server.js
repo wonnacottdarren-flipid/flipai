@@ -1418,8 +1418,14 @@ app.post("/api/find-deals", async (req, res) => {
       }),
     ]);
 
+    const fetchedListingsCount = Array.isArray(fetchedListings.items) ? fetchedListings.items.length : 0;
+    const fetchedMarketCount = Array.isArray(fetchedMarket.items) ? fetchedMarket.items.length : 0;
+
     let cleanListings = Array.isArray(fetchedListings.items) ? fetchedListings.items : [];
     let cleanMarket = Array.isArray(fetchedMarket.items) ? fetchedMarket.items : [];
+
+    const listingsBeforeBasicFilters = cleanListings.length;
+    const marketBeforeBasicFilters = cleanMarket.length;
 
     cleanListings = cleanListings.filter((item) => itemMatchesCondition(item, condition));
     cleanListings = cleanListings.filter((item) => itemMatchesPrice(item, filterPriceMax));
@@ -1431,17 +1437,28 @@ app.post("/api/find-deals", async (req, res) => {
       cleanMarket = cleanMarket.filter((item) => itemMatchesCondition(item, condition));
     }
 
+    const listingsAfterBasicFilters = cleanListings.length;
+    const marketAfterBasicFilters = cleanMarket.length;
+
     if (engine && typeof engine.matchesItem === "function") {
       cleanListings = cleanListings.filter((item) => engine.matchesItem(item, queryContext));
       cleanMarket = cleanMarket.filter((item) => engine.matchesItem(item, queryContext));
     }
 
+    const listingsAfterEngineMatch = cleanListings.length;
+    const marketAfterEngineMatch = cleanMarket.length;
+
     console.log("=== DEBUG: PIPELINE START ===");
     console.log("Query:", query);
     console.log("Search Variants:", fetchedListings.searchVariants);
-    console.log("Fetched Listings:", Array.isArray(fetchedListings.items) ? fetchedListings.items.length : 0);
-    console.log("After Clean Listings:", cleanListings.length);
-    console.log("Market Items:", cleanMarket.length);
+    console.log("Fetched Listings:", fetchedListingsCount);
+    console.log("Fetched Market:", fetchedMarketCount);
+    console.log("Listings Before Basic Filters:", listingsBeforeBasicFilters);
+    console.log("Listings After Basic Filters:", listingsAfterBasicFilters);
+    console.log("Listings After Engine Match:", listingsAfterEngineMatch);
+    console.log("Market Before Basic Filters:", marketBeforeBasicFilters);
+    console.log("Market After Basic Filters:", marketAfterBasicFilters);
+    console.log("Market After Engine Match:", marketAfterEngineMatch);
 
     const pricingModel =
       engine && typeof engine.buildPricingModel === "function"
@@ -1469,6 +1486,7 @@ app.post("/api/find-deals", async (req, res) => {
       console.log(`#${i + 1}`, {
         title: d.title,
         price: d.price,
+        shipping: d.shipping,
         total: d.scanner?.totalBuyPrice,
         resale: d.scanner?.estimatedResale,
         profit: d.scanner?.estimatedProfit,
@@ -1504,8 +1522,23 @@ app.post("/api/find-deals", async (req, res) => {
       affiliateEnabled: Boolean(EBAY_AFFILIATE_ENABLED && EBAY_CAMPAIGN_ID),
       includeTightDeals: Boolean(includeTightDeals),
       deals: finalDeals,
-      totalFetched: Array.isArray(fetchedListings.items) ? fetchedListings.items.length : 0,
-      totalMatched: preferredDeals.length,
+      totalFetched: fetchedListingsCount,
+      totalMatched: listingsAfterEngineMatch,
+      totalQualifiedDeals: preferredDeals.length,
+      pipeline: {
+        fetchedListings: fetchedListingsCount,
+        fetchedMarket: fetchedMarketCount,
+        listingsBeforeBasicFilters,
+        listingsAfterBasicFilters,
+        listingsAfterEngineMatch,
+        marketBeforeBasicFilters,
+        marketAfterBasicFilters,
+        marketAfterEngineMatch,
+        evaluatedDeals: evaluatedDeals.length,
+        strictDeals: strictDeals.length,
+        fallbackDeals: fallbackDeals.length,
+        finalDeals: finalDeals.length,
+      },
     });
   } catch (err) {
     console.error(err);
