@@ -834,7 +834,17 @@
       padding: 14px;
     }
 
-        .comps-helper-stat-label {
+    .comps-helper-kicker {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.42px;
+      margin-bottom: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .comps-helper-stat-label {
       font-size: 11px;
       color: var(--muted);
       text-transform: uppercase;
@@ -855,24 +865,12 @@
     }
 
     .comps-helper-stat-subvalue {
-      margin-top: 5px;
+            margin-top: 5px;
       font-size: 12px;
       line-height: 1.5;
       color: #cbd5e1;
       position: relative;
       z-index: 1;
-    }
-
-    .comps-helper-note {
-      font-size: 13px;
-      line-height: 1.65;
-      color: #dbeafe;
-      position: relative;
-      z-index: 1;
-    }
-
-    .comps-helper-note strong {
-      color: #ffffff;
     }
 
     .analysis-kicker {
@@ -1266,7 +1264,7 @@
       background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
     }
 
-        .decision-label,
+    .decision-label,
     .verdict-label {
       font-size: 11px;
       color: var(--muted);
@@ -1670,7 +1668,7 @@
       color: #dbeafe;
     }
 
-        .offer-box-header {
+    .offer-box-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -2235,7 +2233,7 @@
       </div>
     </div>
 
-    <div class="grid" id="analyzer">
+       <div class="grid" id="analyzer">
       <div class="card">
         <h2>Flip Details</h2>
 
@@ -2293,7 +2291,7 @@
           <button id="analyzeBtn" type="button">Analyze Flip</button>
         </div>
 
-                <div id="autoCompsStatus"></div>
+        <div id="autoCompsStatus"></div>
         <div id="status"></div>
 
         <div class="field" style="margin-top: 16px;">
@@ -2691,7 +2689,7 @@
       compsHelperArea.innerHTML = "";
     }
 
-    function setAuthStatus(message, type) {
+        function setAuthStatus(message, type) {
       if (!message) {
         authStatusEl.innerHTML = "";
         return;
@@ -3709,7 +3707,7 @@
           .join("");
     }
 
-    async function autoFillComps() {
+        async function autoFillComps() {
       const payload = getAutoCompsPayload();
 
       if (!payload.product) {
@@ -4226,3 +4224,4 @@
   </script>
 </body>
 </html>
+      
