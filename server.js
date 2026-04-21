@@ -726,6 +726,64 @@ function buildReasonText({
   return `Estimated profit is about £${roundMoney(estimatedProfit).toFixed(2)} with ${Number(compCount || 0)} comps and ${confidenceLabel || "Low"} confidence.`;
 }
 
+function getTightClassificationThresholds(queryContext = {}) {
+  const normalized = normalizeText(
+    queryContext?.rawQuery || queryContext?.normalizedQuery || ""
+  );
+
+  const isPhone =
+    normalized.includes("iphone") ||
+    normalized.includes("samsung") ||
+    normalized.includes("galaxy") ||
+    normalized.includes("pixel");
+
+  const isConsole =
+    normalized.includes("ps5") ||
+    normalized.includes("playstation 5") ||
+    normalized.includes("xbox") ||
+    normalized.includes("switch");
+
+  if (isPhone) {
+    return {
+      strongAskProfit: 28,
+      strongAskMargin: 16,
+      solidAskProfit: 20,
+      solidAskMargin: 10,
+      strongOfferProfit: 24,
+      strongOfferMarginFloor: 8,
+      tightAskProfit: 8,
+      tightAskMargin: 5,
+      tightOfferProfit: 14,
+    };
+  }
+
+  if (isConsole) {
+    return {
+      strongAskProfit: 35,
+      strongAskMargin: 14,
+      solidAskProfit: 25,
+      solidAskMargin: 9,
+      strongOfferProfit: 22,
+      strongOfferMarginFloor: 6,
+      tightAskProfit: 10,
+      tightAskMargin: 5,
+      tightOfferProfit: 15,
+    };
+  }
+
+  return {
+    strongAskProfit: 30,
+    strongAskMargin: 15,
+    solidAskProfit: 22,
+    solidAskMargin: 10,
+    strongOfferProfit: 22,
+    strongOfferMarginFloor: 7,
+    tightAskProfit: 9,
+    tightAskMargin: 5,
+    tightOfferProfit: 14,
+  };
+}
+
 function evaluateDeal({
   item,
   pricingModel,
@@ -828,49 +886,80 @@ function evaluateDeal({
   const undervaluedPercent =
     total > 0 ? roundMoney((undervaluedAmount / total) * 100) : 0;
 
-  const hasStrongAsk =
-    estimatedProfit >= 35 &&
-    marginPercent >= 18 &&
-    warningFlags.length <= 1 &&
-    (compCount >= 3 || confidence >= 55);
+  const thresholds = getTightClassificationThresholds(queryContext);
 
-  const hasSolidAsk =
-    estimatedProfit >= 22 &&
-    marginPercent >= 12 &&
-    warningFlags.length <= 2 &&
-    (compCount >= 3 || confidence >= 55);
+  const askIsHealthy =
+    estimatedProfit >= thresholds.solidAskProfit &&
+    marginPercent >= thresholds.solidAskMargin;
 
-  const hasStrongOffer =
+  const askIsStrong =
+    estimatedProfit >= thresholds.strongAskProfit &&
+    marginPercent >= thresholds.strongAskMargin;
+
+  const askIsBorderline =
+    estimatedProfit >= thresholds.tightAskProfit &&
+    marginPercent >= thresholds.tightAskMargin;
+
+  const offerBeatsAskClearly =
     offerOpportunity &&
-    offerProfit >= 20 &&
-    warningFlags.length <= 2 &&
-    (compCount >= 3 || confidence >= 55);
+    offerProfit >= estimatedProfit + 10;
 
-  const hasTightAsk =
-    estimatedProfit >= 10 &&
-    marginPercent >= 7 &&
-    warningFlags.length <= 2;
-
-  const hasTightOffer =
+  const offerIsStrong =
     offerOpportunity &&
-    offerProfit >= 12 &&
-    warningFlags.length <= 2;
+    offerProfit >= thresholds.strongOfferProfit &&
+    marginPercent >= thresholds.strongOfferMarginFloor;
+
+  const offerIsBorderline =
+    offerOpportunity &&
+    offerProfit >= thresholds.tightOfferProfit;
+
+  const dataSupportStrong =
+    compCount >= 3 || confidence >= 55;
+
+  const dataSupportTight =
+    compCount >= 2 || confidence >= 45;
+
+  const warningsAreLight = warningFlags.length <= 1;
+  const warningsAreAcceptable = warningFlags.length <= 2;
 
   let finderLabel = "Skip";
   let verdict = "SKIP";
   let risk = "High";
 
-  if (hasStrongAsk || hasSolidAsk) {
+  if (
+    askIsStrong &&
+    warningsAreLight &&
+    dataSupportStrong
+  ) {
     finderLabel = "Buy";
-    verdict = hasStrongAsk ? "BUY NOW" : "BUY";
-    risk = estimatedProfit >= 35 ? "Low" : "Medium";
-  } else if (hasStrongOffer) {
+    verdict = "BUY NOW";
+    risk = estimatedProfit >= thresholds.strongAskProfit + 10 ? "Low" : "Medium";
+  } else if (
+    askIsHealthy &&
+    warningsAreAcceptable &&
+    dataSupportStrong &&
+    estimatedProfit >= 22
+  ) {
+    finderLabel = "Buy";
+    verdict = "BUY";
+    risk = estimatedProfit >= 30 ? "Low" : "Medium";
+  } else if (
+    offerIsStrong &&
+    offerBeatsAskClearly &&
+    warningsAreAcceptable &&
+    dataSupportStrong &&
+    (
+      estimatedProfit < thresholds.solidAskProfit ||
+      marginPercent < thresholds.solidAskMargin
+    )
+  ) {
     finderLabel = "Offer";
     verdict = "OFFER TARGET";
-    risk = offerProfit >= 28 ? "Medium" : "High";
+    risk = offerProfit >= 30 ? "Medium" : "High";
   } else if (
-    (hasTightAsk || hasTightOffer) &&
-    (compCount >= 2 || confidence >= 45)
+    (askIsBorderline || offerIsBorderline) &&
+    warningsAreAcceptable &&
+    dataSupportTight
   ) {
     finderLabel = "Tight";
     verdict = "TIGHT CHECK";
@@ -1053,11 +1142,12 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
     const score = Number(item?.dealScore || 0);
     const estimatedProfit = Number(item?.scanner?.estimatedProfit || item?.estimatedProfit || 0);
     const marginPercent = Number(item?.scanner?.marginPercent || item?.marginPercent || 0);
+    const offerProfit = Number(item?.offerProfit || item?.scanner?.offerProfit || 0);
 
     if (label.includes("buy")) {
       return (
         estimatedProfit >= 22 &&
-        marginPercent >= 12 &&
+        marginPercent >= 10 &&
         score >= 78 &&
         warningCount <= 2 &&
         (compCount >= 3 || confidence >= 55)
@@ -1065,9 +1155,8 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
     }
 
     if (label.includes("offer")) {
-      const offerProfit = Number(item?.offerProfit || item?.scanner?.offerProfit || 0);
       return (
-        offerProfit >= 18 &&
+        offerProfit >= 20 &&
         score >= 64 &&
         warningCount <= 2 &&
         (compCount >= 3 || confidence >= 55)
@@ -1076,9 +1165,11 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
 
     if (includeTightDeals && label.includes("tight")) {
       return (
-        estimatedProfit >= 10 &&
-        marginPercent >= 7 &&
-        score >= 45 &&
+        (
+          (estimatedProfit >= 8 && marginPercent >= 5) ||
+          offerProfit >= 14
+        ) &&
+        score >= 42 &&
         warningCount <= 2 &&
         (compCount >= 2 || confidence >= 45)
       );
@@ -1102,7 +1193,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
     if (label.includes("buy")) {
       return (
         estimatedProfit >= 18 &&
-        marginPercent >= 9 &&
+        marginPercent >= 8 &&
         score >= 55 &&
         warningCount <= 2 &&
         (compCount >= 2 || confidence >= 45)
@@ -1111,7 +1202,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
 
     if (label.includes("offer")) {
       return (
-        offerProfit >= 15 &&
+        offerProfit >= 18 &&
         score >= 50 &&
         warningCount <= 2 &&
         (compCount >= 2 || confidence >= 45)
@@ -1120,9 +1211,11 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
 
     if (includeTightDeals && label.includes("tight")) {
       return (
-        estimatedProfit >= 8 &&
-        marginPercent >= 5 &&
-        score >= 36 &&
+        (
+          (estimatedProfit >= 6 && marginPercent >= 4) ||
+          offerProfit >= 12
+        ) &&
+        score >= 34 &&
         warningCount <= 2 &&
         (compCount >= 1 || confidence >= 35)
       );
@@ -1341,7 +1434,7 @@ app.post("/api/find-deals", async (req, res) => {
     console.log("After Clean Listings:", cleanListings.length);
     console.log("Market Items:", cleanMarket.length);
 
-    const pricingModel =
+      const pricingModel =
       engine && typeof engine.buildPricingModel === "function"
         ? engine.buildPricingModel({
             queryContext,
