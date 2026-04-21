@@ -144,6 +144,22 @@ function parseAudioFamily(text, brand = "") {
   return "";
 }
 
+function wantsCompleteSetFromQuery(queryContext = {}) {
+  const q = normalizeText(queryContext?.normalizedQuery || queryContext?.rawQuery || "");
+
+  return hasAny(q, [
+    "complete",
+    "complete set",
+    "full set",
+    "boxed complete",
+    "with case",
+    "with charging case",
+    "pair",
+    "both buds",
+    "both earbuds",
+  ]);
+}
+
 function getCategoryTexts(item = {}) {
   const names = Array.isArray(item?.categories)
     ? item.categories.map((category) => category?.categoryName).filter(Boolean)
@@ -558,9 +574,8 @@ function hasFullSetSignals(text) {
   return hasAny(t, [
     "full set",
     "complete set",
-    "complete",
     "complete pair",
-    "pair",
+    "pair of earbuds",
     "both earbuds",
     "both buds",
     "left and right",
@@ -580,6 +595,48 @@ function hasFullSetSignals(text) {
     "full working set",
     "boxed complete",
   ]);
+}
+
+function hasStrongCompleteSignals(text, queryContext = {}) {
+  const t = normalizeText(text);
+  const wantsCompleteSet = Boolean(queryContext?.wantsCompleteSet);
+
+  if (!wantsCompleteSet) {
+    return true;
+  }
+
+  if (hasFullSetSignals(t)) return true;
+
+  if (
+    hasAny(t, [
+      "complete",
+      "complete set",
+      "full set",
+      "boxed complete",
+      "with case",
+      "with charging case",
+      "both buds",
+      "both earbuds",
+      "left and right",
+      "left & right",
+    ])
+  ) {
+    return true;
+  }
+
+  if (
+    String(queryContext?.family || "").startsWith("sony_wf_") &&
+    hasAny(t, [
+      "sony wf-1000xm4 earbuds and case",
+      "wf-1000xm4 earbuds and case",
+      "sony wf 1000xm4 earbuds and case",
+      "wf 1000xm4 earbuds and case",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
@@ -616,6 +673,10 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}) {
       "right replacement",
     ])
   ) {
+    return true;
+  }
+
+  if (queryContext?.wantsCompleteSet && !hasStrongCompleteSignals(t, queryContext)) {
     return true;
   }
 
@@ -766,7 +827,7 @@ function getAudioPricingFloor(queryContext = {}) {
   if (family === "airpods_max") return 150;
 
   if (family === "sony_wf_1000xm5") return 70;
-  if (family === "sony_wf_1000xm4") return 45;
+  if (family === "sony_wf_1000xm4") return queryContext?.wantsCompleteSet ? 55 : 45;
   if (family === "sony_wf_1000xm3") return 30;
 
   if (family === "bose_qc_earbuds_2") return 65;
@@ -797,6 +858,11 @@ function getAudioResaleMultiplier(queryContext = {}, exactMarketCount = 0) {
   if (brand === "samsung" && family.startsWith("galaxy_buds")) {
     multiplier = 0.98;
     if (exactMarketCount >= 5) multiplier = 0.99;
+  }
+
+  if (brand === "sony" && family === "sony_wf_1000xm4" && queryContext?.wantsCompleteSet) {
+    multiplier = 0.97;
+    if (exactMarketCount >= 5) multiplier = 0.98;
   }
 
   return multiplier;
@@ -881,12 +947,37 @@ function scoreAudioCandidate(item, queryContext) {
     if (looksLikeIncompleteEarbudListing(text, queryContext)) score -= 8;
   }
 
+  if (queryContext.wantsCompleteSet) {
+    if (hasStrongCompleteSignals(text, queryContext)) score += 3.5;
+    else score -= 6;
+  }
+
   if (queryContext.family === "sony_wf_1000xm4") {
     if (hasFullSetSignals(text)) score += 2;
     if (text.includes("wf-1000xm4") || text.includes("wf1000xm4")) score += 1.5;
     if (text.includes("charging case")) score -= 6;
     if (text.includes("battery")) score -= 8;
     if (text.includes("ear tips") || text.includes("foam tips")) score -= 8;
+
+    if (queryContext.wantsCompleteSet) {
+      if (
+        hasAny(text, [
+          "complete",
+          "complete set",
+          "full set",
+          "boxed complete",
+          "with charging case",
+          "both earbuds",
+          "both buds",
+          "left and right",
+          "left & right",
+        ])
+      ) {
+        score += 4;
+      } else {
+        score -= 7;
+      }
+    }
   }
 
   return score;
@@ -911,6 +1002,7 @@ function enrichAudioCompPool(queryContext, items = []) {
         total: extractTotalPrice(item),
         score: scoreAudioCandidate(item, queryContext),
         conditionState: classifyAudioConditionState(text),
+        fullSet: hasStrongCompleteSignals(text, queryContext),
       };
     })
     .filter((entry) => entry.total > 0 && entry.score > -5)
@@ -932,6 +1024,19 @@ function buildAudioPricingModel(queryContext, marketItems = [], listingItems = [
   let listingConditionPool = desiredConditionState
     ? listingPool.filter((entry) => entry.conditionState === desiredConditionState)
     : listingPool;
+
+  if (queryContext?.wantsCompleteSet) {
+    const strictMarketFullSet = marketConditionPool.filter((entry) => entry.fullSet);
+    const strictListingFullSet = listingConditionPool.filter((entry) => entry.fullSet);
+
+    if (strictMarketFullSet.length >= 3) {
+      marketConditionPool = strictMarketFullSet;
+    }
+
+    if (strictListingFullSet.length >= 2) {
+      listingConditionPool = strictListingFullSet;
+    }
+  }
 
   const pricingFloor = getAudioPricingFloor(queryContext);
 
@@ -1008,6 +1113,7 @@ function buildAudioPricingModel(queryContext, marketItems = [], listingItems = [
   if (exactMarket.length >= 5) confidence += 4;
   if (exactListings.length >= 3) confidence += 3;
   if (queryContext.family) confidence += 2;
+  if (queryContext.wantsCompleteSet && exactMarket.length >= 3) confidence += 2;
 
   confidence = Math.min(92, confidence);
 
@@ -1060,6 +1166,7 @@ export const audioEngine = {
     const brand = detectAudioBrand(normalizedQuery);
     const family = parseAudioFamily(normalizedQuery, brand);
     const allowDamaged = shouldAllowDamagedListings({ normalizedQuery });
+    const wantsCompleteSet = wantsCompleteSetFromQuery({ normalizedQuery, rawQuery });
 
     return {
       rawQuery,
@@ -1067,6 +1174,7 @@ export const audioEngine = {
       brand,
       family,
       allowDamaged,
+      wantsCompleteSet,
     };
   },
 
@@ -1164,8 +1272,12 @@ export const audioEngine = {
       variants.push("wf-1000xm4");
       variants.push("wf1000xm4");
       variants.push("sony wf-1000xm4 earbuds");
-      variants.push("sony wf-1000xm4 complete");
-      variants.push("sony wf-1000xm4 full set");
+      if (ctx.wantsCompleteSet) {
+        variants.push("sony wf-1000xm4 complete");
+        variants.push("sony wf-1000xm4 full set");
+        variants.push("sony wf-1000xm4 complete set");
+        variants.push("sony wf-1000xm4 with charging case");
+      }
     }
 
     if (ctx.family === "sony_wf_1000xm5") {
@@ -1272,10 +1384,18 @@ export const audioEngine = {
       if (looksLikeIncompleteEarbudListing(text, queryContext)) return false;
     }
 
+    if (queryContext.wantsCompleteSet && !hasStrongCompleteSignals(text, queryContext)) {
+      return false;
+    }
+
     if (queryContext.family === "sony_wf_1000xm4") {
       if (text.includes("battery")) return false;
       if (text.includes("ear tips") || text.includes("foam tips")) return false;
       if (text.includes("charging case only")) return false;
+
+      if (queryContext.wantsCompleteSet && !hasStrongCompleteSignals(text, queryContext)) {
+        return false;
+      }
     }
 
     return true;
