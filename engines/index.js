@@ -3,14 +3,14 @@ import { dysonEngine } from "./dysonEngine.js";
 import { phoneEngine } from "./phoneEngine.js";
 import { consoleEngine } from "./consoleEngine.js";
 import { cameraEngine } from "./cameraEngine.js";
-import { audioEngine } from "./audioEngine.js"; // ✅ ADD THIS
+import { audioEngine } from "./audioEngine.js";
 
 const engines = [
   dysonEngine,
+  audioEngine,
   phoneEngine,
   consoleEngine,
   cameraEngine,
-  audioEngine, // ✅ ADD THIS (IMPORTANT: keep below phone is fine)
 ];
 
 export function detectEngineForQuery(query = "") {
@@ -34,7 +34,7 @@ export {
   phoneEngine,
   consoleEngine,
   cameraEngine,
-  audioEngine, // ✅ EXPORT IT
+  audioEngine,
 };
 
 export default {
@@ -46,5 +46,5 @@ export default {
   phoneEngine,
   consoleEngine,
   cameraEngine,
-  audioEngine, // ✅ ADD HERE TOO
+  audioEngine,
 };
