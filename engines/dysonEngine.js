@@ -541,7 +541,7 @@ function getDysonListingWarnings(item, queryContext) {
 
   if (isDysonAssemblyStyleListing(titleText)) {
     warnings.push("Title includes assembly wording, so check exactly what is included.");
-    penalty += 8;
+    penalty += 20;
   }
 
   if (isDysonUnitPartStyleListing(titleText)) {
@@ -675,7 +675,7 @@ export const dysonEngine = {
     } else if (isDysonHousingStyleListing(titleText) || isDysonUnitPartStyleListing(titleText)) {
       estimatedResale = roundMoney(baseEstimatedResale * 0.86);
     } else if (isDysonAssemblyStyleListing(titleText)) {
-      estimatedResale = roundMoney(baseEstimatedResale * 0.9);
+      estimatedResale = roundMoney(baseEstimatedResale * 0.82);
     } else if (isDysonPartsCategory(item) && !hasStrongWorkingSignals(titleText)) {
       estimatedResale = roundMoney(baseEstimatedResale * 0.96);
     }
