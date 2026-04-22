@@ -795,6 +795,55 @@ function hasSamsungStrongCompleteSignals(text) {
   ]);
 }
 
+function hasSamsungCompleteConfidenceSignals(text) {
+  const t = normalizeText(text);
+
+  const hasOfficialOrModelSignal =
+    hasSamsungOfficialSignals(t) ||
+    hasAny(t, [
+      "buds2 pro",
+      "buds 2 pro",
+      "buds3 pro",
+      "buds 3 pro",
+      "buds2",
+      "buds 2",
+      "buds3",
+      "buds 3",
+      "buds pro",
+      "buds live",
+      "buds plus",
+      "buds fe",
+    ]);
+
+  if (!hasOfficialOrModelSignal) {
+    return false;
+  }
+
+  if (hasSamsungStrongCompleteSignals(t)) {
+    return true;
+  }
+
+  return hasAny(t, [
+    "earbuds",
+    "wireless earbuds",
+    "wireless earphones",
+    "bluetooth earbuds",
+    "bluetooth earphones",
+    "used",
+    "fully working",
+    "working order",
+    "tested",
+    "good condition",
+    "vgc",
+    "excellent condition",
+    "genuine samsung",
+    "official samsung",
+    "sm-r510",
+    "sm-r530",
+    "sm-r630",
+  ]);
+}
+
 function looksLikeLikelyCompleteSamsungListing(text, queryContext = {}, item = {}) {
   const t = normalizeText(text);
   const family = String(queryContext?.family || "");
@@ -803,7 +852,10 @@ function looksLikeLikelyCompleteSamsungListing(text, queryContext = {}, item = {
   if (!wantsCompleteSet) return false;
   if (!family.startsWith("galaxy_buds")) return false;
 
-  if (!hasSamsungOfficialSignals(t) && !hasAny(t, ["buds2 pro", "buds 2 pro", "buds3 pro", "buds 3 pro"])) {
+  if (
+    !hasSamsungOfficialSignals(t) &&
+    !hasAny(t, ["buds2 pro", "buds 2 pro", "buds3 pro", "buds 3 pro", "buds2", "buds 2", "buds3", "buds 3"])
+  ) {
     return false;
   }
 
@@ -820,7 +872,7 @@ function looksLikeLikelyCompleteSamsungListing(text, queryContext = {}, item = {
   if (inAccessoryCategory && !inAudioCategory) return false;
   if (!inAudioCategory && !hasSamsungOfficialSignals(t)) return false;
 
-  if (!hasSamsungStrongCompleteSignals(t)) return false;
+  if (!hasSamsungStrongCompleteSignals(t) && !hasSamsungCompleteConfidenceSignals(t)) return false;
 
   return true;
 }
