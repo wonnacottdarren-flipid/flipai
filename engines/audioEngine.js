@@ -685,6 +685,29 @@ function hasFullSetSignals(text) {
   ]);
 }
 
+function hasAirpodsFamilySignals(text) {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "airpods pro 2",
+    "airpods pro 2nd",
+    "airpods pro second generation",
+    "airpods pro gen 2",
+    "airpods pro 2nd gen",
+    "airpods pro 2nd generation",
+    "apple airpods pro 2",
+    "airpods pro",
+    "airpods 3",
+    "airpods 2",
+    "a2698",
+    "a2699",
+    "a2700",
+    "a3047",
+    "a3048",
+    "a2968",
+  ]);
+}
+
 function hasAirpodsCaseSignals(text) {
   const t = normalizeText(text);
 
@@ -724,6 +747,12 @@ function hasAirpodsPairedModelSignals(text) {
 function hasAirpodsCompleteConfidenceSignals(text) {
   const t = normalizeText(text);
 
+  const hasOfficialOrFamilySignal = hasAirpodsFamilySignals(t) || hasAny(t, ["airpods"]);
+
+  if (!hasOfficialOrFamilySignal) {
+    return false;
+  }
+
   return (
     hasFullSetSignals(t) ||
     hasAirpodsCaseSignals(t) ||
@@ -741,6 +770,20 @@ function hasAirpodsCompleteConfidenceSignals(text) {
       "both earbuds",
       "a2700",
       "a2968",
+      "used",
+      "fully working",
+      "working order",
+      "tested",
+      "good condition",
+      "excellent condition",
+      "genuine apple",
+      "genuine",
+      "apple",
+      "in-ear",
+      "wireless",
+      "bluetooth",
+      "noise cancelling",
+      "noise canceling",
     ])
   );
 }
