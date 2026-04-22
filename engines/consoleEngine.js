@@ -285,6 +285,8 @@ const HARD_REJECT_TERMS = [
   "shell only",
   "empty box",
   "box only",
+  "bricked",
+  "dead console",
 ];
 
 const PS5_GAME_TERMS = [
@@ -364,6 +366,26 @@ const MINOR_WARNING_TERMS = [
   ["hdmi issue", "HDMI issue mentioned"],
   ["hdmi fault", "HDMI issue mentioned"],
   ["overheating", "Overheating risk mentioned"],
+
+  ["game error", "Error wording mentioned"],
+  ["system error", "Error wording mentioned"],
+  ["error code", "Error wording mentioned"],
+  ["console error", "Error wording mentioned"],
+  ["software issue", "Issue wording mentioned"],
+  ["system issue", "Issue wording mentioned"],
+  ["console issue", "Issue wording mentioned"],
+  ["freezing", "Stability issue mentioned"],
+  ["freezes", "Stability issue mentioned"],
+  ["crashing", "Stability issue mentioned"],
+  ["crashes", "Stability issue mentioned"],
+  ["glitching", "Stability issue mentioned"],
+  ["glitches", "Stability issue mentioned"],
+  ["stuck on", "Boot or loading issue mentioned"],
+  ["safe mode", "Boot or loading issue mentioned"],
+  ["wont load", "Boot or loading issue mentioned"],
+  ["won't load", "Boot or loading issue mentioned"],
+  ["not loading", "Boot or loading issue mentioned"],
+  ["load issue", "Boot or loading issue mentioned"],
 ];
 
 const CONSOLE_ONLY_QUERY_TERMS = [
@@ -378,6 +400,43 @@ const CONSOLE_ONLY_QUERY_TERMS = [
   "no controller",
   "controller not included",
   "pad not included",
+];
+
+const FAULTY_OR_PARTS_EXTRA_TERMS = [
+  "game error",
+  "system error",
+  "console error",
+  "error code",
+  "safe mode loop",
+  "stuck in safe mode",
+  "stuck on safe mode",
+  "stuck on logo",
+  "stuck on startup",
+  "stuck on start up",
+  "stuck on boot",
+  "boot loop",
+  "bootloop",
+  "freezing",
+  "freezes",
+  "keeps freezing",
+  "crashing",
+  "crashes",
+  "keeps crashing",
+  "glitching",
+  "glitches",
+  "software issue",
+  "system issue",
+  "console issue",
+  "gpu issue",
+  "power issue",
+  "overheats",
+  "over heating",
+  "wont load",
+  "won't load",
+  "not loading",
+  "load issue",
+  "corrupted",
+  "corrupt data",
 ];
 
 function hasAny(text, phrases = []) {
@@ -1015,6 +1074,63 @@ function isIncompleteSwitchConsole(text, queryContext = {}) {
   ]);
 }
 
+function hasFaultKeywordCombo(text = "") {
+  const t = normalizeConsoleText(text);
+
+  if (hasAny(t, FAULTY_OR_PARTS_EXTRA_TERMS)) return true;
+
+  const hasErrorWord = hasAny(t, ["error", "issue", "problem", "fault"]);
+  const hasSystemWord = hasAny(t, [
+    "game",
+    "system",
+    "console",
+    "software",
+    "boot",
+    "loading",
+    "load",
+    "startup",
+    "start up",
+    "safe mode",
+    "logo",
+  ]);
+
+  if (hasErrorWord && hasSystemWord) return true;
+
+  const hasReadDesc = hasAny(t, [
+    "read description",
+    "read desc",
+    "see description",
+    "read caption",
+    "see caption",
+  ]);
+
+  if (
+    hasReadDesc &&
+    hasAny(t, [
+      "error",
+      "issue",
+      "problem",
+      "fault",
+      "freezing",
+      "freezes",
+      "crashing",
+      "crashes",
+      "glitching",
+      "glitches",
+      "stuck on",
+      "safe mode",
+      "wont load",
+      "won't load",
+      "not loading",
+      "corrupted",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function isSeverelyBadConsole(text, queryContext = {}) {
   const t = normalizeConsoleText(text);
 
@@ -1030,6 +1146,15 @@ function isSeverelyBadConsole(text, queryContext = {}) {
       "screen only",
       "tablet only",
       "main unit only",
+      "boot loop",
+      "bootloop",
+      "stuck in safe mode",
+      "stuck on safe mode",
+      "safe mode loop",
+      "stuck on logo",
+      "stuck on boot",
+      "bricked",
+      "dead console",
     ])
   );
 }
@@ -1067,6 +1192,17 @@ function classifyConsoleConditionState(text) {
       "screen only",
       "tablet only",
       "main unit only",
+      "boot loop",
+      "bootloop",
+      "safe mode loop",
+      "stuck in safe mode",
+      "stuck on safe mode",
+      "stuck on logo",
+      "stuck on startup",
+      "stuck on start up",
+      "stuck on boot",
+      "bricked",
+      "dead console",
     ])
   ) {
     return "faulty_or_parts";
@@ -1081,7 +1217,8 @@ function classifyConsoleConditionState(text) {
       "hdmi issue",
       "overheating",
       "missing thumbstick",
-    ])
+    ]) ||
+    hasFaultKeywordCombo(t)
   ) {
     return "minor_fault";
   }
@@ -1102,6 +1239,9 @@ function shouldAllowDamagedConsoles(queryContext) {
     "no power",
     "no hdmi",
     "banned",
+    "error",
+    "issue",
+    "problem",
   ]);
 }
 
@@ -1250,7 +1390,9 @@ function detectBundleSignals(text, family) {
       "dock included",
       "with dock",
       "official dock",
-    ]) ? 1 : 0;
+    ])
+      ? 1
+      : 0;
 
   const explicitBundleWords = hasAny(t, [
     "bundle",
@@ -1316,6 +1458,7 @@ function estimateConsoleRepairCost(queryContext, conditionState, text) {
     if (hasAny(t, ["hdmi issue"])) return 25;
     if (hasAny(t, ["overheating"])) return 20;
     if (hasAny(t, ["missing thumbstick"])) return 12;
+    if (hasFaultKeywordCombo(t)) return 20;
     return 10;
   }
 
@@ -1597,6 +1740,13 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
   }
 
   if (
+    hasAny(t, ["read description", "read desc", "see description", "read caption", "see caption"]) &&
+    hasFaultKeywordCombo(t)
+  ) {
+    flags.push("Description suggests a likely fault");
+  }
+
+  if (
     queryStorage &&
     queryStorage !== "unknown" &&
     (!itemStorage || itemStorage === "unknown") &&
@@ -1625,6 +1775,11 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "Disc drive issue mentioned") penalty += 11;
     else if (flag === "HDMI issue mentioned") penalty += 11;
     else if (flag === "Overheating risk mentioned") penalty += 10;
+    else if (flag === "Error wording mentioned") penalty += 12;
+    else if (flag === "Issue wording mentioned") penalty += 10;
+    else if (flag === "Stability issue mentioned") penalty += 12;
+    else if (flag === "Boot or loading issue mentioned") penalty += 14;
+    else if (flag === "Description suggests a likely fault") penalty += 16;
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 3;
     else if (flag === "Console-only intent was searched, but extras look stronger than expected") penalty += 4;
     else if (flag === "Unknown Switch version") penalty += 7;
@@ -1855,7 +2010,7 @@ function scoreConsoleCandidate(item, queryContext) {
   if (isConsoleCategory(item)) score += 1.3;
   if (looksLikeMainConsoleTitle(titleText)) score += 1.2;
   if (conditionState === "clean_working") score += 1.5;
-  if (conditionState === "minor_fault") score -= 1.5;
+  if (conditionState === "minor_fault") score -= 3.25;
   if (conditionState === "faulty_or_parts") score -= 8;
 
   if (bundleType === "bundle") score += 1.35;
@@ -1921,7 +2076,7 @@ function scoreConsoleCandidate(item, queryContext) {
   }
 
   const warningPenalty = calculateWarningPenalty(warningFlags);
-  score -= warningPenalty * 0.045;
+  score -= warningPenalty * 0.06;
 
   if (queryContext.family === "switch_lite") {
     if (hasAny(text, ["heavily used", "lot of wear", "well used"])) score -= 1.15;
@@ -1973,7 +2128,7 @@ function enrichConsoleCompPool(queryContext, items = []) {
         adjustedTotal: roundMoney(
           extractTotalPrice(item) -
             bundleValueBonus * 0.55 +
-            Math.min(warningPenalty, 12) -
+            Math.min(warningPenalty, 24) -
             discDigitalBias -
             storageBias +
             consoleOnlyAdjustment
@@ -2051,24 +2206,34 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     );
 
     const v2MarketTotals = removePriceOutliers(
-      v2Market.slice(0, 24).map((entry) => entry.adjustedTotal).filter((value) => value > 0)
+      v2Market
+        .slice(0, 24)
+        .map((entry) => entry.adjustedTotal)
+        .filter((value) => value > 0)
     );
 
     const unknownMarketTotals = removePriceOutliers(
-      unknownMarket.slice(0, 24).map((entry) => entry.adjustedTotal).filter((value) => value > 0)
+      unknownMarket
+        .slice(0, 24)
+        .map((entry) => entry.adjustedTotal)
+        .filter((value) => value > 0)
     );
 
     const v2ListingTotals = removePriceOutliers(
-      v2Listings.slice(0, 16).map((entry) => entry.adjustedTotal).filter((value) => value > 0)
+      v2Listings
+        .slice(0, 16)
+        .map((entry) => entry.adjustedTotal)
+        .filter((value) => value > 0)
     );
 
     const unknownListingTotals = removePriceOutliers(
-      unknownListings.slice(0, 16).map((entry) => entry.adjustedTotal).filter((value) => value > 0)
+      unknownListings
+        .slice(0, 16)
+        .map((entry) => entry.adjustedTotal)
+        .filter((value) => value > 0)
     );
 
-    const blendedV2Totals = removePriceOutliers(
-      [...v2MarketTotals, ...v2ListingTotals].filter((value) => value > 0)
-    );
+    const blendedV2Totals = removePriceOutliers([...v2MarketTotals, ...v2ListingTotals].filter((value) => value > 0));
 
     if (v2MarketTotals.length >= 3 || blendedV2Totals.length >= 3) {
       marketTotals = v2MarketTotals.length >= 3 ? v2MarketTotals : blendedV2Totals;
@@ -2087,31 +2252,21 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
       marketTotals = unknownMarketTotals;
       listingTotals = unknownListingTotals.length ? unknownListingTotals : v2ListingTotals;
 
-      baseline =
-        median(unknownMarketTotals) ||
-        percentile(unknownMarketTotals, 0.35) ||
-        median(unknownListingTotals) ||
-        0;
+      baseline = median(unknownMarketTotals) || percentile(unknownMarketTotals, 0.35) || median(unknownListingTotals) || 0;
 
       baseline = Math.max(baseline, getSwitchBucketLowBandFloor("switch_unknown_standard"));
       pricingMode = "Switch unknown-version median";
     } else {
       const fallbackCombined = removePriceOutliers(
-        [
-          ...v2MarketTotals,
-          ...unknownMarketTotals,
-          ...v2ListingTotals,
-          ...unknownListingTotals,
-        ].filter((value) => value > 0)
+        [...v2MarketTotals, ...unknownMarketTotals, ...v2ListingTotals, ...unknownListingTotals].filter(
+          (value) => value > 0
+        )
       );
 
       marketTotals = fallbackCombined;
       listingTotals = fallbackCombined;
 
-      baseline =
-        median(fallbackCombined) ||
-        percentile(fallbackCombined, 0.35) ||
-        0;
+      baseline = median(fallbackCombined) || percentile(fallbackCombined, 0.35) || 0;
 
       baseline = Math.max(baseline, getSwitchBucketLowBandFloor("switch_unknown_standard"));
       pricingMode = "Switch mixed fallback";
@@ -2132,9 +2287,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     );
 
     if (marketTotals.length < 3 && listingTotals.length >= 2) {
-      marketTotals = removePriceOutliers(
-        [...marketTotals, ...listingTotals].filter((value) => value > 0)
-      );
+      marketTotals = removePriceOutliers([...marketTotals, ...listingTotals].filter((value) => value > 0));
     }
 
     if (listingTotals.length < 2 && marketTotals.length >= 2) {
@@ -2234,10 +2387,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     confidence = Math.min(confidence, 56);
   }
 
-  if (
-    queryContext.family === "switch_v2" &&
-    pricingMode !== "Switch V2 confirmed blended median"
-  ) {
+  if (queryContext.family === "switch_v2" && pricingMode !== "Switch V2 confirmed blended median") {
     confidence = Math.min(confidence, 74);
   }
 
@@ -2269,10 +2419,16 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
       familyLowBandFloor,
       baseline,
       multiplier: conservativeMultiplier,
-      switchMarketV2Count: marketConditionPool.filter((entry) => entry.switchPricingBucket === "switch_v2_confirmed").length,
-      switchMarketUnknownCount: marketConditionPool.filter((entry) => entry.switchPricingBucket === "switch_unknown_standard").length,
-      switchListingV2Count: listingConditionPool.filter((entry) => entry.switchPricingBucket === "switch_v2_confirmed").length,
-      switchListingUnknownCount: listingConditionPool.filter((entry) => entry.switchPricingBucket === "switch_unknown_standard").length,
+      switchMarketV2Count: marketConditionPool.filter((entry) => entry.switchPricingBucket === "switch_v2_confirmed")
+        .length,
+      switchMarketUnknownCount: marketConditionPool.filter(
+        (entry) => entry.switchPricingBucket === "switch_unknown_standard"
+      ).length,
+      switchListingV2Count: listingConditionPool.filter((entry) => entry.switchPricingBucket === "switch_v2_confirmed")
+        .length,
+      switchListingUnknownCount: listingConditionPool.filter(
+        (entry) => entry.switchPricingBucket === "switch_unknown_standard"
+      ).length,
     },
   };
 }
@@ -2289,11 +2445,14 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
   const consoleOnlyAdjustment = getConsoleOnlyAdjustment(queryContext, `${titleText} ${text}`, bundleSignals);
   const switchGeneration = detectSwitchGeneration(`${titleText} ${text}`);
 
-  let estimatedResale =
-    Number(baseResale || 0) + bundleValueBonus * 0.75 + discDigitalBias + storageBias;
+  let estimatedResale = Number(baseResale || 0) + bundleValueBonus * 0.75 + discDigitalBias + storageBias;
 
   if (consoleOnlyAdjustment > 0) {
     estimatedResale -= consoleOnlyAdjustment;
+  }
+
+  if (warningPenalty >= 10) {
+    estimatedResale -= Math.min(warningPenalty, 22);
   }
 
   if (queryContext.family === "switch_v2") {
@@ -2361,8 +2520,7 @@ export const consoleEngine = {
 
     const wantsBundle =
       !wantsConsoleOnly &&
-      (
-        normalizedQuery.includes("bundle") ||
+      (normalizedQuery.includes("bundle") ||
         normalizedQuery.includes("with games") ||
         normalizedQuery.includes("games included") ||
         normalizedQuery.includes("with 2 controllers") ||
@@ -2371,8 +2529,7 @@ export const consoleEngine = {
         normalizedQuery.includes("second controller") ||
         normalizedQuery.includes("spare controller") ||
         normalizedQuery.includes("job lot") ||
-        normalizedQuery.includes("comes with")
-      );
+        normalizedQuery.includes("comes with"));
 
     return {
       rawQuery,
