@@ -381,7 +381,12 @@ function isPs5Like(text) {
 
 function isXboxSeriesLike(text) {
   const t = normalizeConsoleText(text);
-  return t.includes("xbox series x") || t.includes("xbox series s") || t.includes("series x") || t.includes("series s");
+  return (
+    t.includes("xbox series x") ||
+    t.includes("xbox series s") ||
+    t.includes("series x") ||
+    t.includes("series s")
+  );
 }
 
 function isSwitchLike(text) {
@@ -557,11 +562,7 @@ function isObviousAccessoryTitle(titleText) {
     return true;
   }
 
-  if (
-    t.includes("dualsense") &&
-    !t.includes("console") &&
-    !t.includes("bundle")
-  ) {
+  if (t.includes("dualsense") && !t.includes("console") && !t.includes("bundle")) {
     return true;
   }
 
@@ -630,9 +631,58 @@ function isClearlyNonConsole(item, text) {
   return false;
 }
 
-function isSeverelyBadConsole(text) {
+function isIncompleteSwitchConsole(text, queryContext = {}) {
   const t = normalizeConsoleText(text);
-  return hasAny(t, HARD_REJECT_TERMS) || hasAny(t, ["hdmi fault", "no hdmi", "overheating issue"]);
+  const family = String(queryContext?.family || "");
+
+  if (!family.startsWith("switch")) return false;
+
+  if (
+    hasAny(t, [
+      "tablet only",
+      "screen only",
+      "main unit only",
+      "console only",
+      "no dock",
+      "without dock",
+      "missing dock",
+      "dock not included",
+      "no joy con",
+      "no joy-cons",
+      "no joy cons",
+      "without joy con",
+      "without joy-cons",
+      "without joy cons",
+      "missing joy con",
+      "missing joy-cons",
+      "missing joy cons",
+      "joy cons not included",
+      "joy-cons not included",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isSeverelyBadConsole(text, queryContext = {}) {
+  const t = normalizeConsoleText(text);
+
+  if (isIncompleteSwitchConsole(t, queryContext)) return true;
+
+  return (
+    hasAny(t, HARD_REJECT_TERMS) ||
+    hasAny(t, [
+      "hdmi fault",
+      "no hdmi",
+      "overheating issue",
+      "heavy damage",
+      "screen only",
+      "tablet only",
+      "main unit only",
+    ])
+  );
 }
 
 function classifyConsoleConditionState(text) {
@@ -645,6 +695,7 @@ function classifyConsoleConditionState(text) {
       "spares or repairs",
       "spares repairs",
       "parts only",
+      "parts",
       "faulty",
       "broken",
       "not working",
@@ -663,6 +714,10 @@ function classifyConsoleConditionState(text) {
       "motherboard fault",
       "blue light of death",
       "overheating issue",
+      "heavy damage",
+      "screen only",
+      "tablet only",
+      "main unit only",
     ])
   ) {
     return "faulty_or_parts";
@@ -676,6 +731,7 @@ function classifyConsoleConditionState(text) {
       "won't read discs",
       "hdmi issue",
       "overheating",
+      "missing thumbstick",
     ])
   ) {
     return "minor_fault";
@@ -708,10 +764,30 @@ function hasControllerIncluded(text, family) {
   const t = normalizeConsoleText(text);
 
   if (family.startsWith("switch")) {
-    if (hasAny(t, ["tablet only", "console only", "no joy cons", "no joy-cons", "without joy cons", "without joy-cons"])) {
+    if (
+      hasAny(t, [
+        "tablet only",
+        "console only",
+        "no joy cons",
+        "no joy-cons",
+        "without joy cons",
+        "without joy-cons",
+      ])
+    ) {
       return false;
     }
-    if (hasAny(t, ["joy con included", "joy-cons included", "with joy cons", "with joy-cons"])) return true;
+
+    if (
+      hasAny(t, [
+        "joy con included",
+        "joy-cons included",
+        "with joy cons",
+        "with joy-cons",
+      ])
+    ) {
+      return true;
+    }
+
     return true;
   }
 
@@ -726,7 +802,17 @@ function detectExtraControllerCount(text) {
 
   if (hasAny(t, ["4 controllers", "four controllers"])) return 3;
   if (hasAny(t, ["3 controllers", "three controllers"])) return 2;
-  if (hasAny(t, ["2 controllers", "two controllers", "extra controller", "second controller", "spare controller"])) return 1;
+  if (
+    hasAny(t, [
+      "2 controllers",
+      "two controllers",
+      "extra controller",
+      "second controller",
+      "spare controller",
+    ])
+  ) {
+    return 1;
+  }
 
   return 0;
 }
@@ -741,7 +827,9 @@ function detectIncludedGamesCount(text) {
   if (hasAny(t, ["4 games", "four games"])) return 4;
   if (hasAny(t, ["3 games", "three games"])) return 3;
   if (hasAny(t, ["2 games", "two games"])) return 2;
-  if (hasAny(t, ["with game", "with games", "game included", "games included", "includes game", "includes games"])) return 1;
+  if (hasAny(t, ["with game", "with games", "game included", "games included", "includes game", "includes games"])) {
+    return 1;
+  }
 
   const matchedNamedGames = PS5_GAME_TERMS.filter((term) => t.includes(term));
   if (matchedNamedGames.length) {
@@ -756,7 +844,11 @@ function detectBundleSignals(text, family) {
   const extraControllerCount = detectExtraControllerCount(t);
   const includedGamesCount = detectIncludedGamesCount(t);
 
-  const hasBox = hasAny(t, ["boxed", "box included", "original box", "complete in box"]) ? 1 : 0;
+  const hasBox =
+    !hasAny(t, ["unboxed", "no box", "without box"]) &&
+    hasAny(t, ["boxed", "box included", "original box", "complete in box"])
+      ? 1
+      : 0;
 
   const hasAccessories = hasAny(t, [
     "with headset",
@@ -769,24 +861,26 @@ function detectBundleSignals(text, family) {
     "with extra accessories",
     "plus headset",
     "plus accessories",
-  ]) ? 1 : 0;
+  ])
+    ? 1
+    : 0;
 
   const explicitBundleWords = hasAny(t, [
     "bundle",
     "job lot",
-    "comes with",
-    "includes",
-    "included",
+    "comes with games",
+    "includes games",
+    "games included",
     "plus games",
-    "plus controller",
     "with games",
-    "with controller",
     "with 2 controllers",
     "with two controllers",
     "extra controller",
     "second controller",
     "spare controller",
-  ]) ? 1 : 0;
+  ])
+    ? 1
+    : 0;
 
   let bundleType = "standard";
 
@@ -839,6 +933,10 @@ function estimateConsoleRepairCost(queryContext, conditionState, text) {
 
     if (hasAny(t, ["overheating"])) {
       return 20;
+    }
+
+    if (hasAny(t, ["missing thumbstick"])) {
+      return 12;
     }
 
     return 10;
@@ -985,6 +1083,7 @@ function matchesConsoleFamily(text, queryContext, item) {
   }
 
   if (family === "switch_oled") {
+    if (isIncompleteSwitchConsole(t, queryContext)) return false;
     return t.includes("switch") && t.includes("oled") && !isHardAccessoryListing(titleText || t, item);
   }
 
@@ -996,6 +1095,7 @@ function matchesConsoleFamily(text, queryContext, item) {
     const hasSwitch = t.includes("switch") || t.includes("nintendo switch");
     const saysOled = t.includes("oled");
     const saysLite = t.includes("lite");
+    if (isIncompleteSwitchConsole(t, queryContext)) return false;
     return hasSwitch && !saysOled && !saysLite && !isHardAccessoryListing(titleText || t, item);
   }
 
@@ -1048,10 +1148,7 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
     }
   }
 
-  if (
-    queryContext?.wantsBundle &&
-    (!bundleSignals || bundleSignals.bundleType !== "bundle")
-  ) {
+  if (queryContext?.wantsBundle && (!bundleSignals || bundleSignals.bundleType !== "bundle")) {
     flags.push("Bundle intent was searched, but extras look weak");
   }
 
@@ -1139,9 +1236,12 @@ function getMatchDebug(item, queryContext) {
     bundleSignals.hasAccessories;
 
   if (!text) return { matched: false, reason: "empty_text" };
+  if (isIncompleteSwitchConsole(text, queryContext)) {
+    return { matched: false, reason: "incomplete_switch_console" };
+  }
   if (isHardAccessoryListing(text, item)) return { matched: false, reason: "accessory_listing" };
   if (isClearlyNonConsole(item, text)) return { matched: false, reason: "non_console_listing" };
-  if (isSeverelyBadConsole(text) && !queryContext.allowDamaged) {
+  if (isSeverelyBadConsole(text, queryContext) && !queryContext.allowDamaged) {
     return { matched: false, reason: "severely_bad_console_blocked" };
   }
   if (!queryContext.allowDamaged && isDamagedConsoleConditionState(conditionState)) {
@@ -1175,9 +1275,10 @@ function scoreConsoleCandidate(item, queryContext) {
   const text = getCombinedItemText(item);
 
   if (!text) return -10;
+  if (isIncompleteSwitchConsole(text, queryContext)) return -10;
   if (isHardAccessoryListing(text, item)) return -10;
   if (isClearlyNonConsole(item, text)) return -10;
-  if (isSeverelyBadConsole(text) && !shouldAllowDamagedConsoles(queryContext)) return -10;
+  if (isSeverelyBadConsole(text, queryContext) && !shouldAllowDamagedConsoles(queryContext)) return -10;
 
   const conditionState = classifyConsoleConditionState(text);
   const allowDamaged = shouldAllowDamagedConsoles(queryContext);
@@ -1315,7 +1416,9 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   );
 
   if (marketTotals.length < 3 && listingTotals.length >= 2) {
-    marketTotals = removePriceOutliers([...marketTotals, ...listingTotals].filter((value) => value > 0));
+    marketTotals = removePriceOutliers(
+      [...marketTotals, ...listingTotals].filter((value) => value > 0)
+    );
   }
 
   if (listingTotals.length < 2 && marketTotals.length >= 2) {
@@ -1390,7 +1493,11 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   if (exactListings.length >= 3) confidence += 3;
   if (queryContext.family) confidence += 2;
 
-  if (pricingMode === "PS5 disc hard fallback" || pricingMode === "PS5 digital hard fallback" || pricingMode === "Console hard fallback") {
+  if (
+    pricingMode === "PS5 disc hard fallback" ||
+    pricingMode === "PS5 digital hard fallback" ||
+    pricingMode === "Console hard fallback"
+  ) {
     confidence = Math.min(confidence, 56);
   }
 
