@@ -685,6 +685,60 @@ function hasFullSetSignals(text) {
   ]);
 }
 
+function looksLikeLikelyCompleteAirpodsListing(text, queryContext = {}, item = {}) {
+  const t = normalizeText(text);
+  const family = String(queryContext?.family || "");
+  const wantsCompleteSet = Boolean(queryContext?.wantsCompleteSet);
+
+  if (!wantsCompleteSet) return false;
+  if (!family.startsWith("airpods_")) return false;
+
+  if (!hasAny(t, ["airpods"])) return false;
+  if (isAccessoryOnly(t)) return false;
+  if (isPartialItem(t)) return false;
+  if (looksLikeSingleSideEarbud(t)) return false;
+  if (looksLikeCaseOnlyListing(t)) return false;
+
+  const inAudioCategory = isAudioCategory(item);
+  const inAccessoryCategory = isAccessoryCategory(item);
+
+  if (inAccessoryCategory && !inAudioCategory) return false;
+
+  if (
+    hasAny(t, [
+      "a2698+a2699",
+      "a2698 a2699",
+      "a2698+a2699+a2700",
+      "a2698 a2699 a2700",
+      "a3047+a3048",
+      "a3047 a3048",
+      "a3047+a3048+a2968",
+      "a3047 a3048 a2968",
+      "a2698",
+      "a2699",
+      "a2700",
+      "a3047",
+      "a3048",
+      "a2968",
+      "magsafe case",
+      "lightning magsafe case",
+      "lightning case",
+      "usb-c case",
+      "usb c case",
+      "wireless charging case",
+      "with case",
+      "apple airpods pro 2nd generation",
+      "apple airpods pro 2",
+      "airpods pro 2nd generation",
+      "airpods pro 2",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function hasStrongCompleteSignals(text, queryContext = {}, item = {}) {
   const t = normalizeText(text);
   const wantsCompleteSet = Boolean(queryContext?.wantsCompleteSet);
@@ -734,6 +788,12 @@ function hasStrongCompleteSignals(text, queryContext = {}, item = {}) {
         "sony wf 1000xm4 box and case",
       ])
     ) {
+      return true;
+    }
+  }
+
+  if (family.startsWith("airpods_")) {
+    if (looksLikeLikelyCompleteAirpodsListing(t, queryContext, item)) {
       return true;
     }
   }
@@ -890,8 +950,9 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}, item = {}) {
   if (queryContext?.wantsCompleteSet) {
     const strongComplete = hasStrongCompleteSignals(t, queryContext, item);
     const likelyCompleteSony = looksLikeLikelyCompleteSonyListing(t, queryContext, item);
+    const likelyCompleteAirpods = looksLikeLikelyCompleteAirpodsListing(t, queryContext, item);
 
-    if (!strongComplete && !likelyCompleteSony) {
+    if (!strongComplete && !likelyCompleteSony && !likelyCompleteAirpods) {
       return true;
     }
   }
@@ -1180,6 +1241,8 @@ function scoreAudioCandidate(item, queryContext) {
       score += 3.5;
     } else if (looksLikeLikelyCompleteSonyListing(text, queryContext, item)) {
       score += 1.5;
+    } else if (looksLikeLikelyCompleteAirpodsListing(text, queryContext, item)) {
+      score += 2.5;
     } else {
       score -= 2;
     }
@@ -1237,6 +1300,9 @@ function scoreAudioCandidate(item, queryContext) {
     ) {
       score -= 16;
     }
+    if (looksLikeLikelyCompleteAirpodsListing(text, queryContext, item)) {
+      score += 2;
+    }
   }
 
   return score;
@@ -1263,7 +1329,8 @@ function enrichAudioCompPool(queryContext, items = []) {
         conditionState: classifyAudioConditionState(text),
         fullSet:
           hasStrongCompleteSignals(text, queryContext, item) ||
-          looksLikeLikelyCompleteSonyListing(text, queryContext, item),
+          looksLikeLikelyCompleteSonyListing(text, queryContext, item) ||
+          looksLikeLikelyCompleteAirpodsListing(text, queryContext, item),
       };
     })
     .filter((entry) => entry.total > 0 && entry.score > -5)
@@ -1451,6 +1518,13 @@ export const audioEngine = {
       variants.push("airpods pro 2nd generation");
       variants.push("airpods pro gen 2");
       variants.push("apple airpods pro 2");
+      if (ctx.wantsCompleteSet) {
+        variants.push("airpods pro 2 complete");
+        variants.push("airpods pro 2 full set");
+        variants.push("apple airpods pro 2 with case");
+        variants.push("airpods pro 2 magsafe case");
+        variants.push("airpods pro 2 a2698 a2699 a2700");
+      }
     }
 
     if (ctx.family === "airpods_pro") {
