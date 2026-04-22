@@ -215,6 +215,9 @@ function isAccessoryOnly(text) {
   return hasAny(text, [
     "case only",
     "charging case only",
+    "case cradle only",
+    "charging cradle only",
+    "cradle only",
     "magsafe case only",
     "usb c case only",
     "lightning case only",
@@ -535,9 +538,14 @@ function looksLikeCaseOnlyListing(text) {
       "wireless charging case",
       "usb c charging case",
       "lightning charging case",
+      "case cradle",
+      "charging cradle",
       "case a2968",
       "case only",
       "charging case only",
+      "case cradle only",
+      "charging cradle only",
+      "cradle only",
     ])
   ) {
     if (
@@ -597,7 +605,7 @@ function hasFullSetSignals(text) {
   ]);
 }
 
-function hasStrongCompleteSignals(text, queryContext = {}) {
+function hasStrongCompleteSignals(text, queryContext = {}, item = {}) {
   const t = normalizeText(text);
   const wantsCompleteSet = Boolean(queryContext?.wantsCompleteSet);
 
@@ -627,18 +635,84 @@ function hasStrongCompleteSignals(text, queryContext = {}) {
     return true;
   }
 
-  if (
-    String(queryContext?.family || "").startsWith("sony_wf_") &&
-    hasAny(t, [
-      "sony wf-1000xm4 earbuds and case",
-      "wf-1000xm4 earbuds and case",
-      "sony wf 1000xm4 earbuds and case",
-      "wf 1000xm4 earbuds and case",
-      "sony wf-1000xm4 box and case",
-      "sony wf 1000xm4 box and case",
-    ])
-  ) {
-    return true;
+  const family = String(queryContext?.family || "");
+  const inAudioCategory = isAudioCategory(item);
+  const inAccessoryCategory = isAccessoryCategory(item);
+
+  if (inAccessoryCategory && !inAudioCategory) {
+    return false;
+  }
+
+  if (family.startsWith("sony_wf_")) {
+    if (
+      hasAny(t, [
+        "sony wf-1000xm4 earbuds and case",
+        "wf-1000xm4 earbuds and case",
+        "sony wf 1000xm4 earbuds and case",
+        "wf 1000xm4 earbuds and case",
+        "sony wf-1000xm4 box and case",
+        "sony wf 1000xm4 box and case",
+      ])
+    ) {
+      return true;
+    }
+  }
+
+  if (family.startsWith("galaxy_buds")) {
+    if (
+      hasAny(t, [
+        "samsung galaxy buds",
+        "galaxy buds2 pro",
+        "galaxy buds 2 pro",
+        "galaxy buds3 pro",
+        "galaxy buds 3 pro",
+        "galaxy buds3",
+        "galaxy buds 3",
+        "galaxy buds2",
+        "galaxy buds 2",
+        "galaxy buds pro",
+        "galaxy buds live",
+        "galaxy buds plus",
+        "galaxy buds fe",
+        "sm-r510",
+        "sm-r530",
+        "sm-r630",
+        "official samsung",
+        "genuine samsung",
+      ]) &&
+      !looksLikeCaseOnlyListing(t) &&
+      !isPartialItem(t) &&
+      !looksLikeSingleSideEarbud(t)
+    ) {
+      return true;
+    }
+  }
+
+  if (family.startsWith("airpods_")) {
+    if (
+      hasAny(t, [
+        "airpods pro 2nd generation",
+        "airpods pro 2",
+        "airpods pro 2nd gen",
+        "airpods pro gen 2",
+        "apple airpods pro 2",
+        "airpods pro",
+        "airpods 3",
+        "airpods 2",
+        "usb-c version",
+        "usbc",
+        "usb c",
+        "mtjv3zm/a",
+        "a3047",
+        "a3048",
+        "a2968",
+      ]) &&
+      !looksLikeCaseOnlyListing(t) &&
+      !isPartialItem(t) &&
+      !looksLikeSingleSideEarbud(t)
+    ) {
+      return true;
+    }
   }
 
   return false;
@@ -671,6 +745,36 @@ function looksLikeLikelyCompleteSonyListing(text, queryContext = {}, item = {}) 
   return true;
 }
 
+function looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext = {}, text = "") {
+  const family = String(queryContext?.family || "");
+  const total = Number(extractTotalPrice(item) || 0);
+  const t = normalizeText(text);
+
+  if (!total || total <= 0) return false;
+
+  if (family === "airpods_pro_2") {
+    const looksTooCheapNew =
+      hasAny(t, ["brand new", "new", "sealed", "with box", "boxed"]) && total < 55;
+    const looksTooCheapAny = total < 35;
+
+    if (looksTooCheapNew || looksTooCheapAny) {
+      return true;
+    }
+  }
+
+  if (family === "airpods_pro") {
+    const looksTooCheapNew =
+      hasAny(t, ["brand new", "new", "sealed", "with box", "boxed"]) && total < 45;
+    const looksTooCheapAny = total < 28;
+
+    if (looksTooCheapNew || looksTooCheapAny) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function looksLikeIncompleteEarbudListing(text, queryContext = {}, item = {}) {
   const t = normalizeText(text);
 
@@ -687,9 +791,11 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}, item = {}) {
       "wireless charging case",
       "usb c charging case",
       "lightning charging case",
+      "case cradle",
+      "charging cradle",
     ]) &&
     !hasFullSetSignals(t) &&
-    !hasStrongCompleteSignals(t, queryContext)
+    !hasStrongCompleteSignals(t, queryContext, item)
   ) {
     return true;
   }
@@ -710,7 +816,7 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}, item = {}) {
   }
 
   if (queryContext?.wantsCompleteSet) {
-    const strongComplete = hasStrongCompleteSignals(t, queryContext);
+    const strongComplete = hasStrongCompleteSignals(t, queryContext, item);
     const likelyCompleteSony = looksLikeLikelyCompleteSonyListing(t, queryContext, item);
 
     if (!strongComplete && !likelyCompleteSony) {
@@ -846,6 +952,9 @@ function isSonyAccessoryListing(text, queryContext = {}) {
       "charging case replacement",
       "charging case only",
       "changing case",
+      "case cradle only",
+      "charging cradle only",
+      "cradle only",
     ])
   ) {
     return true;
@@ -873,7 +982,7 @@ function getAudioPricingFloor(queryContext = {}) {
 
   if (family === "galaxy_buds3_pro") return 75;
   if (family === "galaxy_buds3") return 52;
-  if (family === "galaxy_buds2_pro") return 55;
+  if (family === "galaxy_buds2_pro") return queryContext?.wantsCompleteSet ? 45 : 55;
   if (family === "galaxy_buds2") return 32;
   if (family === "galaxy_buds_pro") return 36;
   if (family === "galaxy_buds_live") return 24;
@@ -928,6 +1037,7 @@ function scoreAudioCandidate(item, queryContext) {
   if (isGenericSamsungCloneListing(text, queryContext)) return -10;
   if (isBrokenOrFaulty(text) && !shouldAllowDamagedListings(queryContext)) return -10;
   if (isDirtyListing(text)) return -10;
+  if (looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext, text)) return -10;
 
   const conditionState = classifyAudioConditionState(text);
   const allowDamaged = shouldAllowDamagedListings(queryContext);
@@ -986,7 +1096,7 @@ function scoreAudioCandidate(item, queryContext) {
   }
 
   if (queryContext.wantsCompleteSet) {
-    if (hasStrongCompleteSignals(text, queryContext)) {
+    if (hasStrongCompleteSignals(text, queryContext, item)) {
       score += 3.5;
     } else if (looksLikeLikelyCompleteSonyListing(text, queryContext, item)) {
       score += 1.5;
@@ -1028,6 +1138,16 @@ function scoreAudioCandidate(item, queryContext) {
     }
   }
 
+  if (queryContext.family === "galaxy_buds3_pro" || queryContext.family === "galaxy_buds2_pro") {
+    if (hasAny(text, ["sm-r630", "sm-r510", "genuine samsung", "official samsung"])) score += 1.5;
+    if (looksLikeCaseOnlyListing(text)) score -= 12;
+    if (hasAny(text, ["case cradle only", "charging cradle only", "cradle only"])) score -= 12;
+  }
+
+  if (queryContext.family === "airpods_pro_2") {
+    if (looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext, text)) score -= 12;
+  }
+
   return score;
 }
 
@@ -1051,7 +1171,7 @@ function enrichAudioCompPool(queryContext, items = []) {
         score: scoreAudioCandidate(item, queryContext),
         conditionState: classifyAudioConditionState(text),
         fullSet:
-          hasStrongCompleteSignals(text, queryContext) ||
+          hasStrongCompleteSignals(text, queryContext, item) ||
           looksLikeLikelyCompleteSonyListing(text, queryContext, item),
       };
     })
@@ -1266,6 +1386,12 @@ export const audioEngine = {
       variants.push("samsung galaxy buds 2 pro");
       variants.push("buds2 pro");
       variants.push("buds 2 pro");
+      if (ctx.wantsCompleteSet) {
+        variants.push("galaxy buds 2 pro complete");
+        variants.push("galaxy buds2 pro complete");
+        variants.push("galaxy buds 2 pro full set");
+        variants.push("samsung galaxy buds 2 pro with case");
+      }
     }
 
     if (ctx.family === "galaxy_buds3_pro") {
@@ -1275,6 +1401,12 @@ export const audioEngine = {
       variants.push("samsung galaxy buds 3 pro");
       variants.push("buds3 pro");
       variants.push("buds 3 pro");
+      if (ctx.wantsCompleteSet) {
+        variants.push("galaxy buds 3 pro complete");
+        variants.push("galaxy buds3 pro complete");
+        variants.push("galaxy buds 3 pro full set");
+        variants.push("samsung galaxy buds 3 pro with case");
+      }
     }
 
     if (ctx.family === "galaxy_buds3") {
@@ -1396,6 +1528,7 @@ export const audioEngine = {
     if (isSonyAccessoryListing(text, queryContext)) return false;
     if (isGenericSamsungCloneListing(text, queryContext)) return false;
     if (isDirtyListing(text)) return false;
+    if (looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext, text)) return false;
 
     const conditionState = classifyAudioConditionState(text);
     const allowDamaged = Boolean(queryContext?.allowDamaged);
@@ -1440,6 +1573,20 @@ export const audioEngine = {
       if (text.includes("ear tips") || text.includes("foam tips")) return false;
       if (text.includes("charging case only")) return false;
       if (text.includes("compatible") && !text.includes("sony")) return false;
+    }
+
+    if (
+      queryContext.family === "galaxy_buds3_pro" ||
+      queryContext.family === "galaxy_buds2_pro" ||
+      queryContext.family === "galaxy_buds3" ||
+      queryContext.family === "galaxy_buds2"
+    ) {
+      if (looksLikeCaseOnlyListing(text)) return false;
+      if (hasAny(text, ["case cradle only", "charging cradle only", "cradle only"])) return false;
+    }
+
+    if (queryContext.family === "airpods_pro_2" && looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext, text)) {
+      return false;
     }
 
     return true;
