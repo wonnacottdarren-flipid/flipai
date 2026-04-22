@@ -198,6 +198,30 @@ const NON_CONSOLE_TERMS = [
   "season pass",
   "wall art",
   "canvas print",
+
+  // New hard non-console / digital / subscription style blockers
+  "membership",
+  "12 month membership",
+  "3 month membership",
+  "subscription",
+  "online expansion pack",
+  "expansion pack",
+  "nintendo switch online",
+  "online membership",
+  "membership code",
+  "download token",
+  "digital download",
+  "digital item",
+  "digital only",
+  "code in message",
+  "emailed code",
+  "email delivery",
+  "instant delivery",
+  "same day delivery",
+  "account",
+  "accounts",
+  "mod menu",
+  "service only",
 ];
 
 const HARD_REJECT_TERMS = [
@@ -613,14 +637,81 @@ function isHardAccessoryListing(text, item) {
   return false;
 }
 
+function isDigitalCodeOrMembership(item, text) {
+  const titleText = getTitleText(item);
+  const categoryText = getCategoryText(item);
+  const combinedText = normalizeConsoleText(text);
+
+  if (looksLikeMainConsoleTitle(titleText)) return false;
+
+  if (
+    hasAny(titleText, [
+      "membership",
+      "subscription",
+      "expansion pack",
+      "online expansion pack",
+      "nintendo switch online",
+      "online membership",
+      "membership code",
+      "download code",
+      "digital code",
+      "digital download",
+      "voucher",
+      "gift card",
+      "season pass",
+      "dlc",
+      "12 month membership",
+      "3 month membership",
+      "instant delivery",
+      "email delivery",
+      "emailed code",
+    ])
+  ) {
+    return true;
+  }
+
+  if (
+    hasAny(combinedText, [
+      "membership",
+      "subscription",
+      "nintendo switch online",
+      "online membership",
+      "digital code",
+      "download code",
+      "digital download",
+      "voucher",
+      "gift card",
+      "instant delivery",
+      "email delivery",
+      "emailed code",
+    ])
+  ) {
+    return true;
+  }
+
+  if (
+    hasAny(categoryText, [
+      "video games",
+      "soundtracks",
+      "strategy guides cheats",
+      "strategy guides & cheats",
+    ]) &&
+    !hasStrongConsoleSignals(titleText)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function isClearlyNonConsole(item, text) {
   const combinedText = normalizeConsoleText(text);
   const titleText = getTitleText(item);
 
   if (looksLikeMainConsoleTitle(titleText)) return false;
 
+  if (isDigitalCodeOrMembership(item, combinedText)) return true;
   if (isNonConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return true;
-
   if (hasAny(titleText, NON_CONSOLE_TERMS)) return true;
 
   if (
@@ -672,6 +763,10 @@ function isIncompleteSwitchConsole(text, queryContext = {}) {
       "missing joy cons",
       "joy cons not included",
       "joy-cons not included",
+      "hac-001 tablet only",
+      "tablet unit only",
+      "screen tablet only",
+      "main tablet only",
     ])
   ) {
     return true;
@@ -875,6 +970,7 @@ function detectBundleSignals(text, family) {
     "with extra accessories",
     "plus headset",
     "plus accessories",
+    "official case",
   ])
     ? 1
     : 0;
