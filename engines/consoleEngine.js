@@ -562,6 +562,38 @@ function isPs5Like(text) {
   return t.includes("ps5") || t.includes("playstation5");
 }
 
+function hasReadDescriptionSignal(text = "") {
+  const t = normalizeConsoleText(text);
+  return hasAny(t, [
+    "read description",
+    "read desc",
+    "see description",
+    "read caption",
+    "see caption",
+  ]);
+}
+
+function hasStrongCleanConditionSignal(text = "") {
+  const t = normalizeConsoleText(text);
+
+  return hasAny(t, [
+    "excellent condition",
+    "very good condition",
+    "great condition",
+    "good condition",
+    "fully working",
+    "works perfectly",
+    "working perfectly",
+    "perfect working order",
+    "tested and working",
+    "fully tested",
+    "mint condition",
+    "immaculate",
+    "pristine",
+    "boxed complete",
+  ]);
+}
+
 function isSwitchV2Signal(text = "") {
   const t = normalizeConsoleText(text);
 
@@ -1096,13 +1128,7 @@ function hasFaultKeywordCombo(text = "") {
 
   if (hasErrorWord && hasSystemWord) return true;
 
-  const hasReadDesc = hasAny(t, [
-    "read description",
-    "read desc",
-    "see description",
-    "read caption",
-    "see caption",
-  ]);
+  const hasReadDesc = hasReadDescriptionSignal(t);
 
   if (
     hasReadDesc &&
@@ -1740,10 +1766,18 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
   }
 
   if (
-    hasAny(t, ["read description", "read desc", "see description", "read caption", "see caption"]) &&
+    hasReadDescriptionSignal(t) &&
     hasFaultKeywordCombo(t)
   ) {
     flags.push("Description suggests a likely fault");
+  }
+
+  if (
+    family === "ps5_digital" &&
+    hasReadDescriptionSignal(t) &&
+    !hasStrongCleanConditionSignal(t)
+  ) {
+    flags.push("PS5 digital listing needs manual verification");
   }
 
   if (
@@ -1780,6 +1814,7 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "Stability issue mentioned") penalty += 12;
     else if (flag === "Boot or loading issue mentioned") penalty += 14;
     else if (flag === "Description suggests a likely fault") penalty += 16;
+    else if (flag === "PS5 digital listing needs manual verification") penalty += 18;
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 3;
     else if (flag === "Console-only intent was searched, but extras look stronger than expected") penalty += 4;
     else if (flag === "Unknown Switch version") penalty += 7;
@@ -2050,6 +2085,24 @@ function scoreConsoleCandidate(item, queryContext) {
   }
 
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
+
+  if (queryContext.family === "ps5_digital") {
+    if (hasReadDescriptionSignal(text)) {
+      score -= 1.6;
+    }
+
+    if (hasReadDescriptionSignal(text) && !hasStrongCleanConditionSignal(text)) {
+      score -= 2.8;
+    }
+
+    if (hasFaultKeywordCombo(text)) {
+      score -= 2.4;
+    }
+
+    if (hasReadDescriptionSignal(text) && hasFaultKeywordCombo(text)) {
+      score -= 3.2;
+    }
+  }
 
   if (queryContext.family === "switch_v2") {
     if (switchGeneration === "v2") {
@@ -2453,6 +2506,22 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
 
   if (warningPenalty >= 10) {
     estimatedResale -= Math.min(warningPenalty, 22);
+  }
+
+  if (
+    queryContext.family === "ps5_digital" &&
+    hasReadDescriptionSignal(text) &&
+    !hasStrongCleanConditionSignal(text)
+  ) {
+    estimatedResale -= 14;
+  }
+
+  if (
+    queryContext.family === "ps5_digital" &&
+    hasReadDescriptionSignal(text) &&
+    hasFaultKeywordCombo(text)
+  ) {
+    estimatedResale -= 18;
   }
 
   if (queryContext.family === "switch_v2") {
