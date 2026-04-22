@@ -92,6 +92,45 @@ const NON_CONSOLE_CATEGORY_TERMS = [
   "toys to life products",
 ];
 
+const HARD_NON_CONSOLE_CATEGORY_TERMS = [
+  "art",
+  "art drawings",
+  "drawings",
+  "paintings",
+  "prints",
+  "posters",
+  "canvas",
+  "collectibles",
+  "collectable card games",
+  "trading card games",
+  "coins",
+  "stamps",
+  "pottery",
+  "ceramics",
+  "antiques",
+  "jewellery",
+  "jewelry",
+  "clothes shoes accessories",
+  "fashion",
+  "books",
+  "magazines",
+  "music",
+  "records",
+  "vinyl",
+  "dolls bears",
+  "toys",
+  "model railways",
+  "cameras photography",
+  "mobile phones communication",
+  "computers tablets networking",
+  "home furniture diy",
+  "health beauty",
+  "sporting goods",
+  "vehicle parts accessories",
+  "pet supplies",
+  "crafts",
+];
+
 const ACCESSORY_TERMS = [
   "controller only",
   "dualsense only",
@@ -551,6 +590,11 @@ function isNonConsoleCategory(item) {
   return hasAny(categoryText, NON_CONSOLE_CATEGORY_TERMS);
 }
 
+function isHardNonConsoleCategory(item) {
+  const categoryText = getCategoryText(item);
+  return hasAny(categoryText, HARD_NON_CONSOLE_CATEGORY_TERMS) && !isConsoleCategory(item);
+}
+
 function hasStrongConsoleSignals(text) {
   const t = normalizeConsoleText(text);
 
@@ -842,9 +886,10 @@ function isClearlyNonConsole(item, text) {
   const combinedText = normalizeConsoleText(text);
   const titleText = getTitleText(item);
 
+  if (isHardNonConsoleCategory(item)) return true;
   if (isDigitalCodeOrMembership(item, combinedText)) return true;
 
-  if (looksLikeMainConsoleTitle(titleText)) return false;
+  if (looksLikeMainConsoleTitle(titleText) && isConsoleCategory(item)) return false;
 
   if (isNonConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return true;
   if (hasAny(titleText, NON_CONSOLE_TERMS)) return true;
@@ -1352,10 +1397,13 @@ function matchesConsoleFamily(text, queryContext, item) {
   const queryStorage = String(queryContext?.storagePreference || "");
   const itemStorage = detectConsoleStorage(`${titleText} ${t}`, family);
 
+  if (isHardNonConsoleCategory(item)) return false;
+
   if (!family) return true;
 
   if (family === "ps5_disc") {
     if (!isPs5Like(t)) return false;
+    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
     if (consoleType === "digital") return false;
@@ -1365,6 +1413,7 @@ function matchesConsoleFamily(text, queryContext, item) {
 
   if (family === "ps5_digital") {
     if (!isPs5Like(t)) return false;
+    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
     if (consoleType !== "digital") return false;
@@ -1375,7 +1424,9 @@ function matchesConsoleFamily(text, queryContext, item) {
   if (family === "xbox_series_x") {
     const hasSeriesX = t.includes("xbox series x") || t.includes("series x");
     const saysSeriesS = t.includes("xbox series s") || t.includes("series s");
-    if (!hasSeriesX || saysSeriesS || isHardAccessoryListing(titleText || t, item)) return false;
+    if (!hasSeriesX || saysSeriesS) return false;
+    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
+    if (isHardAccessoryListing(titleText || t, item)) return false;
     if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
     return true;
   }
@@ -1383,17 +1434,21 @@ function matchesConsoleFamily(text, queryContext, item) {
   if (family === "xbox_series_s") {
     const hasSeriesS = t.includes("xbox series s") || t.includes("series s");
     const saysSeriesX = t.includes("xbox series x") || t.includes("series x");
-    if (!hasSeriesS || saysSeriesX || isHardAccessoryListing(titleText || t, item)) return false;
+    if (!hasSeriesS || saysSeriesX) return false;
+    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
+    if (isHardAccessoryListing(titleText || t, item)) return false;
     if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
     return true;
   }
 
   if (family === "switch_oled") {
     if (isIncompleteSwitchConsole(t, queryContext)) return false;
+    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     return t.includes("switch") && t.includes("oled") && !isHardAccessoryListing(titleText || t, item);
   }
 
   if (family === "switch_lite") {
+    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     return t.includes("switch") && t.includes("lite") && !isHardAccessoryListing(titleText || t, item);
   }
 
@@ -1404,6 +1459,7 @@ function matchesConsoleFamily(text, queryContext, item) {
 
     if (isIncompleteSwitchConsole(t, queryContext)) return false;
     if (switchGeneration === "v1") return false;
+    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
 
     return hasSwitch && !saysOled && !saysLite && !isHardAccessoryListing(titleText || t, item);
   }
@@ -1597,6 +1653,9 @@ function getMatchDebug(item, queryContext) {
     bundleSignals.hasAccessories;
 
   if (!text) return { matched: false, reason: "empty_text" };
+  if (isHardNonConsoleCategory(item)) {
+    return { matched: false, reason: "hard_non_console_category" };
+  }
   if (isIncompleteSwitchConsole(text, queryContext)) {
     return { matched: false, reason: "incomplete_switch_console" };
   }
@@ -1656,6 +1715,7 @@ function scoreConsoleCandidate(item, queryContext) {
   const text = getCombinedItemText(item);
 
   if (!text) return -10;
+  if (isHardNonConsoleCategory(item)) return -10;
   if (isIncompleteSwitchConsole(text, queryContext)) return -10;
   if (isHardAccessoryListing(text, item)) return -10;
   if (isClearlyNonConsole(item, text)) return -10;
