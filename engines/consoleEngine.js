@@ -557,7 +557,6 @@ function isStorageMismatch(queryStorage = "", itemStorage = "", family = "") {
   const fam = String(family || "");
 
   if (!q || q === "unknown" || !i || i === "unknown") return false;
-
   if (q === i) return false;
 
   if (fam === "ps5_disc" || fam === "ps5_digital") {
@@ -1110,6 +1109,34 @@ function hasControllerIncluded(text, family) {
   return true;
 }
 
+function isHomeConsoleOnlyListing(text = "", family = "") {
+  const t = normalizeConsoleText(text);
+  const fam = String(family || "");
+
+  if (!(fam.startsWith("ps5") || fam.startsWith("xbox_series"))) return false;
+
+  if (
+    hasAny(t, [
+      "console only",
+      "unit only",
+      "main unit only",
+      "base unit only",
+      "just console",
+      "console unit only",
+      "body only",
+      "without controller",
+      "missing controller",
+      "no controller",
+      "pad not included",
+      "controller not included",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function detectExtraControllerCount(text) {
   const t = normalizeConsoleText(text);
 
@@ -1203,7 +1230,7 @@ function detectBundleSignals(text, family) {
 
   let bundleType = "standard";
 
-  if (!hasControllerIncluded(t, family)) {
+  if (!hasControllerIncluded(t, family) || isHomeConsoleOnlyListing(t, family)) {
     bundleType = "console_only";
   }
 
@@ -1540,8 +1567,8 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "Seller may have important notes in caption") penalty += 3;
     else if (flag === "No returns accepted") penalty += 4;
     else if (flag === "Untested listing") penalty += 6;
-    else if (flag === "No controller included") penalty += 6;
-    else if (flag === "Console-only listing") penalty += 3;
+    else if (flag === "No controller included") penalty += 10;
+    else if (flag === "Console-only listing") penalty += 16;
     else if (flag === "No box included") penalty += 1;
     else if (flag === "Condition may reduce resale appeal") penalty += 6;
     else if (flag === "Visible cosmetic wear mentioned") penalty += 4;
@@ -1596,6 +1623,21 @@ function getStorageBias(queryContext, text) {
   }
 
   return 0;
+}
+
+function getConsoleOnlyAdjustment(queryContext, text, bundleSignals) {
+  const family = String(queryContext?.family || "");
+  const t = normalizeConsoleText(text);
+  const bundleType = String(bundleSignals?.bundleType || "");
+
+  if (bundleType !== "console_only" && !isHomeConsoleOnlyListing(t, family)) {
+    return 0;
+  }
+
+  if (family.startsWith("ps5")) return 34;
+  if (family.startsWith("xbox_series")) return 28;
+  if (family.startsWith("switch")) return 18;
+  return 20;
 }
 
 function getFamilyHardFloor(family = "") {
@@ -1761,7 +1803,7 @@ function scoreConsoleCandidate(item, queryContext) {
 
   if (bundleType === "bundle") score += 1.35;
   if (bundleType === "boxed") score += 0.45;
-  if (bundleType === "console_only") score -= 0.35;
+  if (bundleType === "console_only") score -= 1.9;
 
   score += Math.min(bundleSignals.extraControllerCount, 2) * 0.55;
   score += Math.min(bundleSignals.includedGamesCount, 4) * 0.2;
@@ -1860,6 +1902,7 @@ function enrichConsoleCompPool(queryContext, items = []) {
       const warningPenalty = calculateWarningPenalty(warningFlags);
       const discDigitalBias = getDiscDigitalPricingBias(queryContext, text);
       const storageBias = getStorageBias(queryContext, `${titleText} ${text}`);
+      const consoleOnlyAdjustment = getConsoleOnlyAdjustment(queryContext, `${titleText} ${text}`, bundleSignals);
       const matchDebug = getMatchDebug(item, queryContext);
 
       return {
@@ -1868,9 +1911,10 @@ function enrichConsoleCompPool(queryContext, items = []) {
         adjustedTotal: roundMoney(
           extractTotalPrice(item) -
             bundleValueBonus * 0.55 +
-            Math.min(warningPenalty, 8) -
+            Math.min(warningPenalty, 12) -
             discDigitalBias -
-            storageBias
+            storageBias +
+            consoleOnlyAdjustment
         ),
         score: scoreConsoleCandidate(item, queryContext),
         conditionState: classifyConsoleConditionState(text),
@@ -1881,6 +1925,7 @@ function enrichConsoleCompPool(queryContext, items = []) {
         warningPenalty,
         discDigitalBias,
         storageBias,
+        consoleOnlyAdjustment,
         matchDebug,
         switchGeneration: detectSwitchGeneration(`${titleText} ${text}`),
         switchPricingBucket: getSwitchPricingBucket(item, queryContext),
@@ -2177,10 +2222,15 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
   const warningPenalty = calculateWarningPenalty(warningFlags);
   const discDigitalBias = getDiscDigitalPricingBias(queryContext, text);
   const storageBias = getStorageBias(queryContext, `${titleText} ${text}`);
+  const consoleOnlyAdjustment = getConsoleOnlyAdjustment(queryContext, `${titleText} ${text}`, bundleSignals);
   const switchGeneration = detectSwitchGeneration(`${titleText} ${text}`);
 
   let estimatedResale =
     Number(baseResale || 0) + bundleValueBonus * 0.75 + discDigitalBias + storageBias;
+
+  if (consoleOnlyAdjustment > 0) {
+    estimatedResale -= consoleOnlyAdjustment;
+  }
 
   if (queryContext.family === "switch_v2") {
     if (switchGeneration === "v2") {
@@ -2208,6 +2258,7 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
     debug: {
       discDigitalBias,
       storageBias,
+      consoleOnlyAdjustment,
       consoleType: detectConsoleType(getTitleText(item) || text, queryContext.family || ""),
       switchGeneration,
       switchPricingBucket: getSwitchPricingBucket(item, queryContext),
