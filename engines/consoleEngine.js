@@ -261,28 +261,42 @@ const MINOR_WARNING_TERMS = [
   ["see caption", "Seller may have important notes in caption"],
   ["no returns", "No returns accepted"],
   ["untested", "Untested listing"],
+
   ["poor condition", "Condition may reduce resale appeal"],
   ["heavy wear", "Condition may reduce resale appeal"],
+  ["heavily used", "Condition may reduce resale appeal"],
+  ["lot of wear", "Condition may reduce resale appeal"],
   ["bad condition", "Condition may reduce resale appeal"],
   ["fair condition", "Condition may reduce resale appeal"],
+  ["well used", "Condition may reduce resale appeal"],
   ["worn", "Condition may reduce resale appeal"],
+
   ["scratches", "Visible cosmetic wear mentioned"],
   ["scratched", "Visible cosmetic wear mentioned"],
+  ["scratch", "Visible cosmetic wear mentioned"],
+  ["scratched up", "Visible cosmetic wear mentioned"],
+  ["heavy scratches", "Visible cosmetic wear mentioned"],
+  ["wear scratch", "Visible cosmetic wear mentioned"],
   ["cosmetic marks", "Visible cosmetic wear mentioned"],
   ["cosmetic wear", "Visible cosmetic wear mentioned"],
+
   ["missing controller", "No controller included"],
   ["no controller", "No controller included"],
   ["without controller", "No controller included"],
+
   ["console only", "Console-only listing"],
   ["unit only", "Console-only listing"],
   ["tablet only", "Console-only listing"],
+
   ["unboxed", "No box included"],
   ["no box", "No box included"],
   ["without box", "No box included"],
+
   ["low firmware", "Specialist buyer wording"],
   ["jailbreak", "Specialist buyer wording"],
   ["modded", "Specialist buyer wording"],
   ["modded firmware", "Specialist buyer wording"],
+
   ["doesnt read discs", "Disc drive issue mentioned"],
   ["doesn't read discs", "Disc drive issue mentioned"],
   ["wont read discs", "Disc drive issue mentioned"],
@@ -1166,8 +1180,8 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "No controller included") penalty += 6;
     else if (flag === "Console-only listing") penalty += 3;
     else if (flag === "No box included") penalty += 1;
-    else if (flag === "Condition may reduce resale appeal") penalty += 3;
-    else if (flag === "Visible cosmetic wear mentioned") penalty += 2;
+    else if (flag === "Condition may reduce resale appeal") penalty += 6;
+    else if (flag === "Visible cosmetic wear mentioned") penalty += 4;
     else if (flag === "Specialist buyer wording") penalty += 3;
     else if (flag === "Disc drive issue mentioned") penalty += 11;
     else if (flag === "HDMI issue mentioned") penalty += 11;
@@ -1327,7 +1341,33 @@ function scoreConsoleCandidate(item, queryContext) {
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
   const warningPenalty = calculateWarningPenalty(warningFlags);
 
-  return score - warningPenalty * 0.03;
+  score -= warningPenalty * 0.045;
+
+  if (queryContext.family === "switch_lite") {
+    if (hasAny(text, ["heavily used", "lot of wear", "well used"])) {
+      score -= 1.15;
+    }
+
+    if (hasAny(text, ["scratch", "scratches", "scratched", "scratched up", "heavy scratches"])) {
+      score -= 0.65;
+    }
+
+    if (hasAny(text, ["heavy wear", "cosmetic wear", "cosmetic marks", "worn"])) {
+      score -= 0.55;
+    }
+  }
+
+  if (queryContext.family === "switch_oled") {
+    if (hasAny(text, ["heavily used", "lot of wear"])) {
+      score -= 0.75;
+    }
+
+    if (hasAny(text, ["scratch", "scratches", "scratched", "scratched up", "heavy scratches"])) {
+      score -= 0.4;
+    }
+  }
+
+  return score;
 }
 
 function enrichConsoleCompPool(queryContext, items = []) {
@@ -1347,7 +1387,7 @@ function enrichConsoleCompPool(queryContext, items = []) {
         adjustedTotal: roundMoney(
           extractTotalPrice(item) -
             bundleValueBonus * 0.55 +
-            Math.min(warningPenalty, 6) -
+            Math.min(warningPenalty, 8) -
             discDigitalBias
         ),
         score: scoreConsoleCandidate(item, queryContext),
