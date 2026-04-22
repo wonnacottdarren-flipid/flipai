@@ -1263,14 +1263,41 @@ function evaluateDeal({
     queryContext?.rawQuery || queryContext?.normalizedQuery || ""
   );
 
-  if (
+  const isUnknownVersionSwitch =
     normalizedQuery.includes("switch") &&
-    switchGeneration === "unknown" &&
-    finderLabel === "Buy" &&
-    verdict === "BUY NOW"
-  ) {
-    verdict = "BUY";
-    risk = "Medium";
+    (
+      pricingModel?.pricingMode === "Switch unknown-version median" ||
+      switchGeneration === "unknown" ||
+      warningFlags.includes("Switch version not confirmed")
+    );
+
+  if (isUnknownVersionSwitch) {
+    if (finderLabel === "Buy") {
+      const veryStrongUnknownSwitchBuy =
+        estimatedProfit >= 50 &&
+        marginPercent >= 20 &&
+        compCount >= 8 &&
+        confidence >= 70;
+
+      if (veryStrongUnknownSwitchBuy) {
+        verdict = "BUY";
+        risk = "Medium";
+      } else if (offerOpportunity && offerProfit >= 30) {
+        finderLabel = "Offer";
+        verdict = "OFFER TARGET";
+        risk = offerProfit >= 40 ? "Medium" : "High";
+      } else {
+        finderLabel = "Tight";
+        verdict = "TIGHT CHECK";
+        risk = "High";
+      }
+    } else if (finderLabel === "Offer") {
+      if (!(offerOpportunity && offerProfit >= 30)) {
+        finderLabel = "Tight";
+        verdict = "TIGHT CHECK";
+        risk = "High";
+      }
+    }
   }
 
   const bucketPriority = getDealBucketPriority(finderLabel);
