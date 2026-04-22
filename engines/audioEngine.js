@@ -183,6 +183,7 @@ function isAudioCategory(item = {}) {
       "over-ear headphones",
       "on-ear headphones",
       "home headphones",
+      "headsets & earpieces",
     ])
   );
 }
@@ -200,6 +201,7 @@ function isAccessoryCategory(item = {}) {
       "adapters",
       "replacement parts",
       "parts",
+      "parts & accessories",
       "ear tips",
       "tips",
       "pads",
@@ -207,6 +209,7 @@ function isAccessoryCategory(item = {}) {
       "headbands",
       "holder",
       "holders",
+      "two-way radio parts & accessories",
     ])
   );
 }
@@ -376,6 +379,11 @@ function isDirtyListing(text) {
     "not genuine",
     "clone",
     "copy",
+    "best quality",
+    "high quality",
+    "premium quality",
+    "aaa quality",
+    "1:1",
   ]);
 }
 
@@ -526,6 +534,14 @@ function isEarbudFamily(queryContext = {}) {
     family.startsWith("sony_wf_") ||
     family.startsWith("bose_qc_earbuds")
   );
+}
+
+function isNonUkListing(item = {}) {
+  const raw = String(item?.location || "").trim().toUpperCase();
+  if (!raw) return false;
+
+  const allowed = ["GB", "UK", "UNITED KINGDOM"];
+  return !allowed.includes(raw);
 }
 
 function looksLikeCaseOnlyListing(text) {
@@ -844,6 +860,12 @@ function isGenericSamsungCloneListing(text, queryContext = {}) {
     "compatible with galaxy",
     "wireless bluetooth earbuds",
     "wireless bluetooth earphones",
+    "wireless earbud",
+    "wireless earphone",
+    "best quality",
+    "high quality",
+    "premium quality",
+    "aaa quality",
     "bliss anit-noise",
     "anit-noise",
     "3color",
@@ -1028,6 +1050,7 @@ function scoreAudioCandidate(item, queryContext) {
   );
 
   if (!text) return -10;
+  if (isNonUkListing(item)) return -10;
   if (isAccessoryOnly(text)) return -10;
   if (isPartialItem(text)) return -10;
   if (looksLikeSingleSideEarbud(text)) return -10;
@@ -1520,6 +1543,7 @@ export const audioEngine = {
     );
 
     if (!text) return false;
+    if (isNonUkListing(item)) return false;
     if (isAccessoryOnly(text)) return false;
     if (isPartialItem(text)) return false;
     if (looksLikeSingleSideEarbud(text)) return false;
