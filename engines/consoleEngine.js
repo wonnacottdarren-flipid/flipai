@@ -366,6 +366,20 @@ const MINOR_WARNING_TERMS = [
   ["overheating", "Overheating risk mentioned"],
 ];
 
+const CONSOLE_ONLY_QUERY_TERMS = [
+  "console only",
+  "unit only",
+  "main unit only",
+  "base unit only",
+  "body only",
+  "just console",
+  "without controller",
+  "missing controller",
+  "no controller",
+  "controller not included",
+  "pad not included",
+];
+
 function hasAny(text, phrases = []) {
   return phrases.some((phrase) => text.includes(phrase));
 }
@@ -455,6 +469,33 @@ function parseConsoleFamily(text) {
   if (t.includes("series s") && !t.includes("series x")) return "xbox_series_s";
 
   return "";
+}
+
+function detectConsoleOnlyIntent(text = "") {
+  const t = normalizeConsoleText(text);
+
+  if (!hasAny(t, CONSOLE_ONLY_QUERY_TERMS)) {
+    return false;
+  }
+
+  if (
+    hasAny(t, [
+      "bundle",
+      "with games",
+      "games included",
+      "with 2 controllers",
+      "with two controllers",
+      "extra controller",
+      "second controller",
+      "spare controller",
+      "job lot",
+      "comes with",
+    ])
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function isPs5Like(text) {
@@ -1548,6 +1589,14 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
   }
 
   if (
+    queryContext?.wantsConsoleOnly &&
+    bundleSignals &&
+    bundleSignals.bundleType !== "console_only"
+  ) {
+    flags.push("Console-only intent was searched, but extras look stronger than expected");
+  }
+
+  if (
     queryStorage &&
     queryStorage !== "unknown" &&
     (!itemStorage || itemStorage === "unknown") &&
@@ -1577,6 +1626,7 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "HDMI issue mentioned") penalty += 11;
     else if (flag === "Overheating risk mentioned") penalty += 10;
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 3;
+    else if (flag === "Console-only intent was searched, but extras look stronger than expected") penalty += 4;
     else if (flag === "Unknown Switch version") penalty += 7;
     else if (flag === "Generic Switch title") penalty += 5;
     else if (flag === "Storage not confirmed") penalty += 4;
@@ -1739,6 +1789,13 @@ function getMatchDebug(item, queryContext) {
   if (queryContext.wantsBundle && !isRealBundle) {
     return { matched: false, reason: "bundle_required_but_not_detected" };
   }
+  if (queryContext.wantsConsoleOnly && bundleSignals.bundleType !== "console_only") {
+    return {
+      matched: false,
+      reason: "console_only_required_but_not_detected",
+      bundleType: bundleSignals.bundleType,
+    };
+  }
 
   return {
     matched: true,
@@ -1804,6 +1861,11 @@ function scoreConsoleCandidate(item, queryContext) {
   if (bundleType === "bundle") score += 1.35;
   if (bundleType === "boxed") score += 0.45;
   if (bundleType === "console_only") score -= 1.9;
+
+  if (queryContext.wantsConsoleOnly) {
+    if (bundleType === "console_only") score += 2.4;
+    else score -= 5.5;
+  }
 
   score += Math.min(bundleSignals.extraControllerCount, 2) * 0.55;
   score += Math.min(bundleSignals.includedGamesCount, 4) * 0.2;
@@ -2154,6 +2216,8 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   if (compCount >= 3) confidence = 55;
   if (compCount >= 5) confidence = 70;
   if (compCount >= 8) confidence = 84;
+  if (compCount >= 12) confidence = 88;
+  if (compCount >= 16) confidence = 92;
 
   if (exactMarket.length >= 3) confidence += 4;
   if (exactMarket.length >= 5) confidence += 4;
@@ -2293,18 +2357,22 @@ export const consoleEngine = {
     const family = parseConsoleFamily(normalizedQuery);
     const allowDamaged = shouldAllowDamagedConsoles({ normalizedQuery });
     const storagePreference = detectConsoleStorage(normalizedQuery, family);
+    const wantsConsoleOnly = detectConsoleOnlyIntent(normalizedQuery);
 
     const wantsBundle =
-      normalizedQuery.includes("bundle") ||
-      normalizedQuery.includes("with games") ||
-      normalizedQuery.includes("games included") ||
-      normalizedQuery.includes("with 2 controllers") ||
-      normalizedQuery.includes("with two controllers") ||
-      normalizedQuery.includes("extra controller") ||
-      normalizedQuery.includes("second controller") ||
-      normalizedQuery.includes("spare controller") ||
-      normalizedQuery.includes("job lot") ||
-      normalizedQuery.includes("comes with");
+      !wantsConsoleOnly &&
+      (
+        normalizedQuery.includes("bundle") ||
+        normalizedQuery.includes("with games") ||
+        normalizedQuery.includes("games included") ||
+        normalizedQuery.includes("with 2 controllers") ||
+        normalizedQuery.includes("with two controllers") ||
+        normalizedQuery.includes("extra controller") ||
+        normalizedQuery.includes("second controller") ||
+        normalizedQuery.includes("spare controller") ||
+        normalizedQuery.includes("job lot") ||
+        normalizedQuery.includes("comes with")
+      );
 
     return {
       rawQuery,
@@ -2313,12 +2381,20 @@ export const consoleEngine = {
       family,
       allowDamaged,
       wantsBundle,
+      wantsConsoleOnly,
       storagePreference,
     };
   },
 
   buildSearchQuery(query = "") {
     const ctx = this.classifyQuery(query);
+
+    if (ctx.wantsConsoleOnly) {
+      if (ctx.family === "ps5_disc") return "ps5 console only";
+      if (ctx.family === "ps5_digital") return "ps5 digital console only";
+      if (ctx.family === "xbox_series_x") return "xbox series x console only";
+      if (ctx.family === "xbox_series_s") return "xbox series s console only";
+    }
 
     if (ctx.family === "ps5_disc" || ctx.family === "ps5_digital") return "ps5";
     if (ctx.family === "xbox_series_x") return "xbox series x";
@@ -2333,6 +2409,50 @@ export const consoleEngine = {
   expandSearchVariants(query = "") {
     const rawQuery = String(query || "").trim();
     const ctx = this.classifyQuery(rawQuery);
+
+    if (ctx.wantsConsoleOnly) {
+      if (ctx.family === "ps5_disc") {
+        return [
+          "ps5 console only",
+          "playstation 5 console only",
+          "ps5 no controller",
+          "ps5 without controller",
+          "ps5 unit only",
+          "ps5 main unit only",
+          "ps5 body only",
+        ];
+      }
+
+      if (ctx.family === "ps5_digital") {
+        return [
+          "ps5 digital console only",
+          "playstation 5 digital console only",
+          "ps5 digital no controller",
+          "ps5 digital without controller",
+          "digital edition ps5 console only",
+        ];
+      }
+
+      if (ctx.family === "xbox_series_x") {
+        return [
+          "xbox series x console only",
+          "xbox series x no controller",
+          "xbox series x without controller",
+          "series x console only",
+          "series x unit only",
+        ];
+      }
+
+      if (ctx.family === "xbox_series_s") {
+        return [
+          "xbox series s console only",
+          "xbox series s no controller",
+          "xbox series s without controller",
+          "series s console only",
+          "series s unit only",
+        ];
+      }
+    }
 
     if (ctx.family === "ps5_disc") {
       return [
