@@ -1067,7 +1067,7 @@ function detectBundleSignals(text, family) {
       "case included",
       "dock included",
       "with dock",
-      "case",
+      "official dock",
     ]) ? 1 : 0;
 
   const explicitBundleWords = hasAny(t, [
@@ -1401,8 +1401,8 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "HDMI issue mentioned") penalty += 11;
     else if (flag === "Overheating risk mentioned") penalty += 10;
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 3;
-    else if (flag === "Unknown Switch version") penalty += 5;
-    else if (flag === "Generic Switch title") penalty += 3;
+    else if (flag === "Unknown Switch version") penalty += 7;
+    else if (flag === "Generic Switch title") penalty += 5;
   }
 
   return penalty;
@@ -1453,14 +1453,14 @@ function getFamilyLowBandFloor(family = "") {
 
 function getSwitchBucketHardFloor(bucket = "") {
   if (bucket === "switch_v2_confirmed") return 165;
-  if (bucket === "switch_unknown_standard") return 148;
+  if (bucket === "switch_unknown_standard") return 146;
   if (bucket === "switch_v1_confirmed") return 138;
   return 0;
 }
 
 function getSwitchBucketLowBandFloor(bucket = "") {
   if (bucket === "switch_v2_confirmed") return 155;
-  if (bucket === "switch_unknown_standard") return 140;
+  if (bucket === "switch_unknown_standard") return 138;
   if (bucket === "switch_v1_confirmed") return 128;
   return 0;
 }
@@ -1570,13 +1570,13 @@ function scoreConsoleCandidate(item, queryContext) {
   if (conditionState === "minor_fault") score -= 1.5;
   if (conditionState === "faulty_or_parts") score -= 8;
 
-  if (bundleType === "bundle") score += 1.25;
+  if (bundleType === "bundle") score += 1.35;
   if (bundleType === "boxed") score += 0.45;
-  if (bundleType === "console_only") score -= 0.25;
+  if (bundleType === "console_only") score -= 0.35;
 
   score += Math.min(bundleSignals.extraControllerCount, 2) * 0.55;
   score += Math.min(bundleSignals.includedGamesCount, 4) * 0.2;
-  if (bundleSignals.hasAccessories) score += 0.25;
+  if (bundleSignals.hasAccessories) score += 0.35;
   if (bundleSignals.explicitBundleWords) score += 0.35;
 
   if (queryContext.family === "ps5_disc" && consoleType === "disc") score += 1.1;
@@ -1586,17 +1586,23 @@ function scoreConsoleCandidate(item, queryContext) {
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
 
   if (queryContext.family === "switch_v2") {
-    if (switchGeneration === "v2") score += 1.0;
+    if (switchGeneration === "v2") {
+      score += 2.1;
+
+      if (bundleType === "bundle") score += 0.45;
+      if (bundleSignals.hasAccessories) score += 0.2;
+      if (bundleSignals.hasBox) score += 0.15;
+    }
 
     if (switchGeneration === "unknown") {
-      score -= 0.9;
+      score -= 1.85;
       if (!warningFlags.includes("Unknown Switch version")) {
         warningFlags.push("Unknown Switch version");
       }
     }
 
     if (isGenericUnknownSwitchTitle(titleText) && switchGeneration === "unknown") {
-      score -= 0.6;
+      score -= 1.55;
       if (!warningFlags.includes("Generic Switch title")) {
         warningFlags.push("Generic Switch title");
       }
@@ -1604,7 +1610,7 @@ function scoreConsoleCandidate(item, queryContext) {
   }
 
   const warningPenalty = calculateWarningPenalty(warningFlags);
-  score -= warningPenalty * 0.04;
+  score -= warningPenalty * 0.045;
 
   if (queryContext.family === "switch_lite") {
     if (hasAny(text, ["heavily used", "lot of wear", "well used"])) score -= 1.15;
@@ -1742,18 +1748,23 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
       unknownListings.slice(0, 16).map((entry) => entry.adjustedTotal).filter((value) => value > 0)
     );
 
-    if (v2MarketTotals.length >= 3) {
-      marketTotals = v2MarketTotals;
+    const blendedV2Totals = removePriceOutliers(
+      [...v2MarketTotals, ...v2ListingTotals].filter((value) => value > 0)
+    );
+
+    if (v2MarketTotals.length >= 3 || blendedV2Totals.length >= 3) {
+      marketTotals = v2MarketTotals.length >= 3 ? v2MarketTotals : blendedV2Totals;
       listingTotals = v2ListingTotals.length ? v2ListingTotals : unknownListingTotals;
 
       baseline =
+        median(blendedV2Totals) ||
+        percentile(blendedV2Totals, 0.35) ||
         median(v2MarketTotals) ||
-        percentile(v2MarketTotals, 0.35) ||
         median(v2ListingTotals) ||
         0;
 
       baseline = Math.max(baseline, getSwitchBucketLowBandFloor("switch_v2_confirmed"));
-      pricingMode = "Switch V2 confirmed median";
+      pricingMode = "Switch V2 confirmed blended median";
     } else if (unknownMarketTotals.length >= 3) {
       marketTotals = unknownMarketTotals;
       listingTotals = unknownListingTotals.length ? unknownListingTotals : v2ListingTotals;
@@ -1873,7 +1884,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     baseline = roundMoney(Math.max(baseline, 115));
     pricingMode = "Switch Lite median";
   } else if (queryContext.family === "switch_v2") {
-    if (pricingMode === "Switch V2 confirmed median") {
+    if (pricingMode === "Switch V2 confirmed blended median") {
       baseline = roundMoney(Math.max(baseline, getSwitchBucketHardFloor("switch_v2_confirmed")));
     } else {
       baseline = roundMoney(Math.max(baseline, getSwitchBucketHardFloor("switch_unknown_standard")));
@@ -1902,7 +1913,10 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     confidence = Math.min(confidence, 56);
   }
 
-  if (queryContext.family === "switch_v2" && pricingMode !== "Switch V2 confirmed median") {
+  if (
+    queryContext.family === "switch_v2" &&
+    pricingMode !== "Switch V2 confirmed blended median"
+  ) {
     confidence = Math.min(confidence, 74);
   }
 
@@ -1956,12 +1970,16 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
 
   if (queryContext.family === "switch_v2") {
     if (switchGeneration === "v2") {
-      estimatedResale += 5;
+      estimatedResale += 10;
+
+      if (bundleSignals.bundleType === "bundle") estimatedResale += 2;
+      if (bundleSignals.hasAccessories) estimatedResale += 1;
+      if (bundleSignals.hasBox) estimatedResale += 1;
     } else if (switchGeneration === "unknown") {
-      estimatedResale -= 7;
+      estimatedResale -= 10;
 
       if (isGenericUnknownSwitchTitle(titleText)) {
-        estimatedResale -= 4;
+        estimatedResale -= 6;
       }
     }
   }
