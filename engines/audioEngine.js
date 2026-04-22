@@ -685,6 +685,66 @@ function hasFullSetSignals(text) {
   ]);
 }
 
+function hasAirpodsCaseSignals(text) {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "with case",
+    "with charging case",
+    "charging case",
+    "magsafe case",
+    "lightning case",
+    "usb-c case",
+    "usb c case",
+    "wireless charging case",
+    "case included",
+    "includes case",
+    "earbuds and case",
+    "buds and case",
+  ]);
+}
+
+function hasAirpodsPairedModelSignals(text) {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "a2698+a2699",
+    "a2698 a2699",
+    "a2698+a2699+a2700",
+    "a2698 a2699 a2700",
+    "a3047+a3048",
+    "a3047 a3048",
+    "a3047+a3048+a2968",
+    "a3047 a3048 a2968",
+    "a2698 + a2699",
+    "a3047 + a3048",
+  ]);
+}
+
+function hasAirpodsCompleteConfidenceSignals(text) {
+  const t = normalizeText(text);
+
+  return (
+    hasFullSetSignals(t) ||
+    hasAirpodsCaseSignals(t) ||
+    hasAirpodsPairedModelSignals(t) ||
+    hasAny(t, [
+      "boxed",
+      "with box",
+      "box and case",
+      "complete",
+      "complete set",
+      "full set",
+      "left and right",
+      "left & right",
+      "both buds",
+      "both earbuds",
+      "a2700",
+      "a2968",
+    ])
+  );
+}
+
 function looksLikeLikelyCompleteAirpodsListing(text, queryContext = {}, item = {}) {
   const t = normalizeText(text);
   const family = String(queryContext?.family || "");
@@ -703,40 +763,9 @@ function looksLikeLikelyCompleteAirpodsListing(text, queryContext = {}, item = {
   const inAccessoryCategory = isAccessoryCategory(item);
 
   if (inAccessoryCategory && !inAudioCategory) return false;
+  if (!hasAirpodsCompleteConfidenceSignals(t)) return false;
 
-  if (
-    hasAny(t, [
-      "a2698+a2699",
-      "a2698 a2699",
-      "a2698+a2699+a2700",
-      "a2698 a2699 a2700",
-      "a3047+a3048",
-      "a3047 a3048",
-      "a3047+a3048+a2968",
-      "a3047 a3048 a2968",
-      "a2698",
-      "a2699",
-      "a2700",
-      "a3047",
-      "a3048",
-      "a2968",
-      "magsafe case",
-      "lightning magsafe case",
-      "lightning case",
-      "usb-c case",
-      "usb c case",
-      "wireless charging case",
-      "with case",
-      "apple airpods pro 2nd generation",
-      "apple airpods pro 2",
-      "airpods pro 2nd generation",
-      "airpods pro 2",
-    ])
-  ) {
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
 function hasStrongCompleteSignals(text, queryContext = {}, item = {}) {
