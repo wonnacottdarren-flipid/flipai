@@ -409,10 +409,10 @@ function isPs5Like(text) {
   return t.includes("ps5") || t.includes("playstation5");
 }
 
-function detectSwitchGeneration(text = "") {
+function isSwitchV2Signal(text = "") {
   const t = normalizeConsoleText(text);
 
-  const v2Signals = [
+  return hasAny(t, [
     "switch v2",
     "nintendo switch v2",
     "hac-001(-01)",
@@ -428,15 +428,15 @@ function detectSwitchGeneration(text = "") {
     "new battery model",
     "mariko",
     "red box model",
-  ];
+  ]);
+}
 
-  const v1Signals = [
+function isSwitchV1Signal(text = "") {
+  const t = normalizeConsoleText(text);
+
+  const basicV1Signals = [
     "switch v1",
     "nintendo switch v1",
-    "hac-001 ",
-    "hac 001 ",
-    "hac-001)",
-    "hac 001)",
     "unpatched switch",
     "unpatched v1",
     "first generation switch",
@@ -444,16 +444,44 @@ function detectSwitchGeneration(text = "") {
     "generation 1 switch",
     "launch model",
     "day one switch",
+    "switch one",
+    "nintendo switch one",
+    "switch 1",
+    "nintendo switch 1",
+    "gen1 switch",
+    "generation1 switch",
+    "first gen switch",
+    "1st gen switch",
+    "v1 console",
+    "v1 model",
   ];
 
-  if (hasAny(t, v2Signals)) return "v2";
-
-  if (
-    hasAny(t, v1Signals) &&
-    !hasAny(t, ["hac-001(-01)", "hac 001(-01)", "hac-001 01", "hac 001 01", "hac-001-01"])
-  ) {
-    return "v1";
+  if (hasAny(t, basicV1Signals)) {
+    return true;
   }
+
+  const hasHac001Base =
+    t.includes("hac-001 ") ||
+    t.includes("hac 001 ") ||
+    t.includes("hac-001)") ||
+    t.includes("hac 001)") ||
+    t.endsWith("hac-001") ||
+    t.endsWith("hac 001") ||
+    t.includes("model hac-001") ||
+    t.includes("model hac 001");
+
+  if (hasHac001Base && !isSwitchV2Signal(t)) {
+    return true;
+  }
+
+  return false;
+}
+
+function detectSwitchGeneration(text = "") {
+  const t = normalizeConsoleText(text);
+
+  if (isSwitchV2Signal(t)) return "v2";
+  if (isSwitchV1Signal(t)) return "v1";
 
   return "unknown";
 }
@@ -796,6 +824,7 @@ function isIncompleteSwitchConsole(text, queryContext = {}) {
       "without dock",
       "missing dock",
       "dock not included",
+      "dock missing",
       "no joy con",
       "no joy-cons",
       "no joy cons",
@@ -807,6 +836,7 @@ function isIncompleteSwitchConsole(text, queryContext = {}) {
       "missing joy cons",
       "joy cons not included",
       "joy-cons not included",
+      "joy con not included",
       "hac-001 tablet only",
       "tablet unit only",
       "screen tablet only",
@@ -822,15 +852,21 @@ function isIncompleteSwitchConsole(text, queryContext = {}) {
       "dock + tablet only",
       "just tablet and dock",
       "only tablet and dock",
-
-      "without joy-cons",
-      "joy-cons not included",
-      "joy cons missing",
-      "joy-cons missing",
-      "tablet + dock no joy cons",
-      "dock and charger only",
       "tablet with dock only",
       "main unit and dock only",
+      "dock and charger only",
+      "tablet plus dock only",
+      "screen and dock only",
+
+      "switch only no joy cons",
+      "switch console only no joy cons",
+      "switch only without joy cons",
+      "switch without joy cons",
+      "tablet + dock no joy cons",
+      "no joy cons included",
+      "no joy-con included",
+      "joy cons missing",
+      "joy-cons missing",
     ])
   ) {
     return true;
@@ -2147,12 +2183,28 @@ export const consoleEngine = {
   },
 
   classifyItem(item, queryContext) {
+    const titleText = getTitleText(item);
     const text = getCombinedItemText(item);
     const conditionState = classifyConsoleConditionState(text);
     const repairCost = estimateConsoleRepairCost(queryContext, conditionState, text);
     const bundleSignals = detectBundleSignals(text, queryContext.family || "");
     const bundleValueBonus = estimateBundleValueBonus(queryContext, bundleSignals, text);
     const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
+
+    if (queryContext.family === "switch_v2") {
+      const switchGeneration = detectSwitchGeneration(`${titleText} ${text}`);
+
+      if (switchGeneration === "unknown" && !warningFlags.includes("Unknown Switch version")) {
+        warningFlags.push("Unknown Switch version");
+      }
+
+      if (isGenericUnknownSwitchTitle(titleText) && switchGeneration === "unknown") {
+        if (!warningFlags.includes("Generic Switch title")) {
+          warningFlags.push("Generic Switch title");
+        }
+      }
+    }
+
     const warningScorePenalty = calculateWarningPenalty(warningFlags);
     const matchDebug = getMatchDebug(item, queryContext);
 
