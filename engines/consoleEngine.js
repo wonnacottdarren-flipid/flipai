@@ -199,29 +199,21 @@ const NON_CONSOLE_TERMS = [
   "wall art",
   "canvas print",
 
-  // New hard non-console / digital / subscription style blockers
   "membership",
-  "12 month membership",
-  "3 month membership",
   "subscription",
+  "nintendo switch online",
   "online expansion pack",
   "expansion pack",
-  "nintendo switch online",
   "online membership",
   "membership code",
-  "download token",
   "digital download",
   "digital item",
   "digital only",
-  "code in message",
   "emailed code",
   "email delivery",
   "instant delivery",
-  "same day delivery",
   "account",
   "accounts",
-  "mod menu",
-  "service only",
 ];
 
 const HARD_REJECT_TERMS = [
@@ -505,18 +497,32 @@ function looksLikeMainConsoleTitle(text) {
   }
 
   if (
-    t.startsWith("ps5 ") ||
-    t.startsWith("playstation5 ") ||
-    t.startsWith("xbox series x") ||
-    t.startsWith("xbox series s") ||
-    t.startsWith("nintendo switch") ||
-    t.startsWith("switch oled") ||
-    t.startsWith("switch lite") ||
     t === "ps5" ||
     t === "playstation5" ||
     t === "xbox series x" ||
     t === "xbox series s" ||
     t === "nintendo switch"
+  ) {
+    return true;
+  }
+
+  if (
+    (t.startsWith("ps5 ") || t.startsWith("playstation5 ")) &&
+    hasAny(t, ["console", "edition", "standard", "digital", "disc", "slim", "cfi"])
+  ) {
+    return true;
+  }
+
+  if (
+    (t.startsWith("xbox series x") || t.startsWith("xbox series s")) &&
+    hasAny(t, ["console", "1tb", "512gb", "boxed", "with controller"])
+  ) {
+    return true;
+  }
+
+  if (
+    (t.startsWith("nintendo switch") || t.startsWith("switch oled") || t.startsWith("switch lite")) &&
+    hasAny(t, ["console", "32gb", "64gb", "hac-", "hadh-", "hdk-", "boxed", "joy con", "joy-cons", "joy cons"])
   ) {
     return true;
   }
@@ -642,15 +648,13 @@ function isDigitalCodeOrMembership(item, text) {
   const categoryText = getCategoryText(item);
   const combinedText = normalizeConsoleText(text);
 
-  if (looksLikeMainConsoleTitle(titleText)) return false;
-
   if (
     hasAny(titleText, [
       "membership",
       "subscription",
-      "expansion pack",
-      "online expansion pack",
       "nintendo switch online",
+      "online expansion pack",
+      "expansion pack",
       "online membership",
       "membership code",
       "download code",
@@ -660,11 +664,11 @@ function isDigitalCodeOrMembership(item, text) {
       "gift card",
       "season pass",
       "dlc",
-      "12 month membership",
-      "3 month membership",
       "instant delivery",
       "email delivery",
       "emailed code",
+      "12 month membership",
+      "3 month membership",
     ])
   ) {
     return true;
@@ -675,12 +679,17 @@ function isDigitalCodeOrMembership(item, text) {
       "membership",
       "subscription",
       "nintendo switch online",
+      "online expansion pack",
+      "expansion pack",
       "online membership",
-      "digital code",
+      "membership code",
       "download code",
+      "digital code",
       "digital download",
       "voucher",
       "gift card",
+      "season pass",
+      "dlc",
       "instant delivery",
       "email delivery",
       "emailed code",
@@ -692,9 +701,9 @@ function isDigitalCodeOrMembership(item, text) {
   if (
     hasAny(categoryText, [
       "video games",
-      "soundtracks",
       "strategy guides cheats",
       "strategy guides & cheats",
+      "soundtracks",
     ]) &&
     !hasStrongConsoleSignals(titleText)
   ) {
@@ -708,9 +717,10 @@ function isClearlyNonConsole(item, text) {
   const combinedText = normalizeConsoleText(text);
   const titleText = getTitleText(item);
 
+  if (isDigitalCodeOrMembership(item, combinedText)) return true;
+
   if (looksLikeMainConsoleTitle(titleText)) return false;
 
-  if (isDigitalCodeOrMembership(item, combinedText)) return true;
   if (isNonConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return true;
   if (hasAny(titleText, NON_CONSOLE_TERMS)) return true;
 
@@ -959,21 +969,24 @@ function detectBundleSignals(text, family) {
       ? 1
       : 0;
 
-  const hasAccessories = hasAny(t, [
-    "with headset",
-    "with charging station",
-    "with dock",
-    "with camera",
-    "with media remote",
-    "with accessories",
-    "extras included",
-    "with extra accessories",
-    "plus headset",
-    "plus accessories",
-    "official case",
-  ])
-    ? 1
-    : 0;
+  const hasAccessories =
+    hasAny(t, [
+      "with headset",
+      "with charging station",
+      "with camera",
+      "with media remote",
+      "with accessories",
+      "extras included",
+      "with extra accessories",
+      "plus headset",
+      "plus accessories",
+      "official case",
+      "carrying case",
+      "case included",
+    ]) ? 1 : 0;
+
+  const hasDockAccessory =
+    hasAny(t, ["with dock", "dock included"]) ? 1 : 0;
 
   const explicitBundleWords = hasAny(t, [
     "bundle",
@@ -1006,7 +1019,8 @@ function detectBundleSignals(text, family) {
     explicitBundleWords ||
     extraControllerCount > 0 ||
     includedGamesCount > 0 ||
-    hasAccessories
+    hasAccessories ||
+    hasDockAccessory
   ) {
     bundleType = "bundle";
   }
@@ -1016,7 +1030,7 @@ function detectBundleSignals(text, family) {
     extraControllerCount,
     includedGamesCount,
     hasBox: Boolean(hasBox),
-    hasAccessories: Boolean(hasAccessories),
+    hasAccessories: Boolean(hasAccessories || hasDockAccessory),
     explicitBundleWords: Boolean(explicitBundleWords),
   };
 }
