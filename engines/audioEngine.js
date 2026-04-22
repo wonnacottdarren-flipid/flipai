@@ -768,36 +768,31 @@ function looksLikeLikelyCompleteAirpodsListing(text, queryContext = {}, item = {
   return true;
 }
 
-function hasSamsungCompleteConfidenceSignals(text) {
+function hasSamsungStrongCompleteSignals(text) {
   const t = normalizeText(text);
 
-  return (
-    hasFullSetSignals(t) ||
-    hasSamsungOfficialSignals(t) ||
-    hasAny(t, [
-      "with the box",
-      "with box",
-      "boxed",
-      "box included",
-      "includes box",
-      "complete",
-      "complete set",
-      "full set",
-      "with case",
-      "with charging case",
-      "earbuds",
-      "wireless earphones",
-      "wireless headphones",
-      "noise cancelling earbuds",
-      "noise canceling earbuds",
-      "graphite",
-      "violet",
-      "white",
-      "black",
-      "buds2 pro",
-      "buds 2 pro",
-    ])
-  );
+  return hasAny(t, [
+    "with the box",
+    "with box",
+    "boxed",
+    "boxed complete",
+    "box included",
+    "includes box",
+    "with case",
+    "with charging case",
+    "case included",
+    "includes case",
+    "complete",
+    "complete set",
+    "full set",
+    "full working set",
+    "earbuds and case",
+    "buds and case",
+    "both earbuds",
+    "both buds",
+    "left and right",
+    "left & right",
+  ]);
 }
 
 function looksLikeLikelyCompleteSamsungListing(text, queryContext = {}, item = {}) {
@@ -824,7 +819,8 @@ function looksLikeLikelyCompleteSamsungListing(text, queryContext = {}, item = {
 
   if (inAccessoryCategory && !inAudioCategory) return false;
   if (!inAudioCategory && !hasSamsungOfficialSignals(t)) return false;
-  if (!hasSamsungCompleteConfidenceSignals(t)) return false;
+
+  if (!hasSamsungStrongCompleteSignals(t)) return false;
 
   return true;
 }
