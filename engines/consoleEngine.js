@@ -424,6 +424,43 @@ function isSwitchLike(text) {
   return t.includes("switch") || t.includes("nintendo switch");
 }
 
+function detectSwitchGeneration(text = "") {
+  const t = normalizeConsoleText(text);
+
+  const v1Signals = [
+    "switch v1",
+    "nintendo switch v1",
+    "hac-001 ",
+    "hac-001)",
+    "hac 001 ",
+    "hac 001)",
+    "unpatched switch",
+    "unpatched v1",
+    "first generation switch",
+    "gen 1 switch",
+    "generation 1 switch",
+  ];
+
+  const v2Signals = [
+    "switch v2",
+    "nintendo switch v2",
+    "hac-001(-01)",
+    "hac 001(-01)",
+    "hac-001 01",
+    "hac 001 01",
+    "revised model",
+    "improved battery",
+    "better battery",
+    "battery improved",
+    "mariko",
+  ];
+
+  if (hasAny(t, v2Signals)) return "v2";
+  if (hasAny(t, v1Signals)) return "v1";
+
+  return "unknown";
+}
+
 function isConsoleCategory(item) {
   const categoryText = getCategoryText(item);
   return hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
@@ -777,6 +814,18 @@ function isIncompleteSwitchConsole(text, queryContext = {}) {
       "tablet unit only",
       "screen tablet only",
       "main tablet only",
+
+      "with docking station only",
+      "docking station only",
+      "console with docking station only",
+      "tablet and dock only",
+      "console and dock only",
+      "dock + tablet only",
+      "just tablet and dock",
+      "only tablet and dock",
+      "switch tablet only",
+      "switch console only no joy cons",
+      "switch only no joy cons",
     ])
   ) {
     return true;
@@ -1219,7 +1268,11 @@ function matchesConsoleFamily(text, queryContext, item) {
     const hasSwitch = t.includes("switch") || t.includes("nintendo switch");
     const saysOled = t.includes("oled");
     const saysLite = t.includes("lite");
+    const switchGeneration = detectSwitchGeneration(titleText || t);
+
     if (isIncompleteSwitchConsole(t, queryContext)) return false;
+    if (switchGeneration === "v1") return false;
+
     return hasSwitch && !saysOled && !saysLite && !isHardAccessoryListing(titleText || t, item);
   }
 
@@ -1352,6 +1405,7 @@ function getMatchDebug(item, queryContext) {
   const itemBrand = detectConsoleBrand(text);
   const familyMatch = matchesConsoleFamily(text, queryContext, item);
   const bundleSignals = detectBundleSignals(text, queryContext.family || "");
+  const switchGeneration = detectSwitchGeneration(titleText || text);
   const isRealBundle =
     bundleSignals.bundleType === "bundle" ||
     bundleSignals.extraControllerCount > 0 ||
@@ -1374,11 +1428,15 @@ function getMatchDebug(item, queryContext) {
   if (queryContext.brand && itemBrand !== queryContext.brand) {
     return { matched: false, reason: `brand_mismatch_${itemBrand || "unknown"}` };
   }
+  if (queryContext.family === "switch_v2" && switchGeneration === "v1") {
+    return { matched: false, reason: "switch_v1_blocked_for_v2_search" };
+  }
   if (!familyMatch) {
     return {
       matched: false,
       reason: `family_mismatch_${queryContext.family || "none"}`,
       consoleType: detectConsoleType(titleText || text, queryContext.family || ""),
+      switchGeneration,
     };
   }
   if (queryContext.wantsBundle && !isRealBundle) {
@@ -1391,6 +1449,7 @@ function getMatchDebug(item, queryContext) {
     conditionState,
     bundleType: bundleSignals.bundleType,
     consoleType: detectConsoleType(titleText || text, queryContext.family || ""),
+    switchGeneration,
   };
 }
 
@@ -1406,6 +1465,7 @@ function scoreConsoleCandidate(item, queryContext) {
 
   const conditionState = classifyConsoleConditionState(text);
   const allowDamaged = shouldAllowDamagedConsoles(queryContext);
+  const switchGeneration = detectSwitchGeneration(titleText || text);
 
   if (!allowDamaged && isDamagedConsoleConditionState(conditionState)) {
     return -10;
@@ -1426,6 +1486,10 @@ function scoreConsoleCandidate(item, queryContext) {
   if (matchesConsoleFamily(text, queryContext, item)) {
     score += 5.2;
   } else {
+    return -10;
+  }
+
+  if (queryContext.family === "switch_v2" && switchGeneration === "v1") {
     return -10;
   }
 
@@ -1475,6 +1539,11 @@ function scoreConsoleCandidate(item, queryContext) {
     if (hasAny(text, ["scratch", "scratches", "scratched", "scratched up", "heavy scratches"])) {
       score -= 0.4;
     }
+  }
+
+  if (queryContext.family === "switch_v2") {
+    if (switchGeneration === "v2") score += 0.9;
+    if (switchGeneration === "unknown") score += 0.1;
   }
 
   return score;
@@ -1703,6 +1772,7 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
     debug: {
       discDigitalBias,
       consoleType: detectConsoleType(getTitleText(item) || text, queryContext.family || ""),
+      switchGeneration: detectSwitchGeneration(getTitleText(item) || text),
     },
   };
 }
