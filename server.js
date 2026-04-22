@@ -708,6 +708,15 @@ function buildDerivedPenaltyFlags({
     queryContext?.rawQuery || queryContext?.normalizedQuery || ""
   );
 
+  const bundleType =
+    adjusted?.bundleType ||
+    classified?.bundleType ||
+    "";
+
+  if (bundleType === "console_only") {
+    pushUniqueFlag(derived, "Console-only setup may be incomplete");
+  }
+
   if (lowCompPenalty >= 18) {
     pushUniqueFlag(derived, "Limited comp support");
   }
@@ -745,15 +754,6 @@ function buildDerivedPenaltyFlags({
     ) {
       pushUniqueFlag(derived, "Generic Switch listing treated more cautiously");
     }
-
-    const bundleType =
-      adjusted?.bundleType ||
-      classified?.bundleType ||
-      "";
-
-    if (bundleType === "console_only") {
-      pushUniqueFlag(derived, "Console-only setup may be incomplete");
-    }
   }
 
   return derived;
@@ -779,6 +779,7 @@ function buildDealReasonBreakdown({
   repairCost = 0,
   warningFlags = [],
   warningScorePenalty = 0,
+  totalScorePenalty = 0,
   offerOpportunity = false,
   offerOpportunityType = "",
   offerProfit = 0,
@@ -883,6 +884,7 @@ function buildDealReasonBreakdown({
     bundleValueBonus: roundMoney(bundleValueBonus),
     warningFlags,
     warningScorePenalty,
+    totalScorePenalty,
     risk,
     verdict,
     finderLabel,
@@ -1200,6 +1202,14 @@ function evaluateDeal({
   const thinMarginPenalty = marginPercent < 10 ? 12 : marginPercent < 14 ? 6 : 0;
   const switchPenalty = getSwitchListingPenalty(queryContext, item, classified, adjusted);
 
+  const listingBundleType =
+    adjusted?.bundleType ||
+    classified?.bundleType ||
+    "";
+
+  const isConsoleOnlyListing = listingBundleType === "console_only";
+  const consoleOnlyPenalty = isConsoleOnlyListing ? 16 : 0;
+
   const derivedFlags = buildDerivedPenaltyFlags({
     item,
     queryContext,
@@ -1263,6 +1273,35 @@ function evaluateDeal({
     finderLabel = "Tight";
     verdict = "TIGHT CHECK";
     risk = "High";
+  }
+
+  if (isConsoleOnlyListing) {
+    const consoleOnlyStrongBuy =
+      estimatedProfit >= Math.max(60, thresholds.strongAskProfit + 15) &&
+      marginPercent >= Math.max(18, thresholds.solidAskMargin) &&
+      compCount >= thresholds.minCompHealthy;
+
+    const consoleOnlyOfferGood =
+      offerOpportunity &&
+      offerProfit >= Math.max(24, estimatedProfit + 8);
+
+    if (finderLabel === "Buy" && !consoleOnlyStrongBuy) {
+      if (consoleOnlyOfferGood) {
+        finderLabel = "Offer";
+        verdict = "OFFER TARGET";
+        risk = offerProfit >= 34 ? "Medium" : "High";
+      } else {
+        finderLabel = "Tight";
+        verdict = "TIGHT CHECK";
+        risk = "High";
+      }
+    }
+
+    if (finderLabel === "Offer" && !consoleOnlyOfferGood) {
+      finderLabel = "Tight";
+      verdict = "TIGHT CHECK";
+      risk = "High";
+    }
   }
 
   const switchGeneration =
@@ -1337,13 +1376,16 @@ function evaluateDeal({
       rawCompContribution
   );
 
-  const finalPenalty = roundMoney(
-    baseWarningPenalty +
-      lowCompPenalty +
-      confidencePenalty +
-      thinMarginPenalty +
-      switchPenalty
+  const warningPenaltyTotal = roundMoney(baseWarningPenalty);
+  const structuralPenaltyTotal = roundMoney(
+    lowCompPenalty +
+    confidencePenalty +
+    thinMarginPenalty +
+    switchPenalty +
+    consoleOnlyPenalty
   );
+
+  const finalPenalty = roundMoney(warningPenaltyTotal + structuralPenaltyTotal);
 
   let score = roundMoney(Math.max(0, scoreBeforePenalty - finalPenalty));
 
@@ -1390,7 +1432,8 @@ function evaluateDeal({
     risk,
     score,
     rawScore: scoreBeforePenalty,
-    warningScorePenalty: finalPenalty,
+    warningScorePenalty: warningPenaltyTotal,
+    totalScorePenalty: finalPenalty,
     compCount,
     confidence,
     confidenceLabel,
@@ -1417,7 +1460,8 @@ function evaluateDeal({
     repairCost,
     bundleValueBonus: roundMoney(adjusted?.bundleValueBonus || 0),
     warningFlags,
-    warningScorePenalty: finalPenalty,
+    warningScorePenalty: warningPenaltyTotal,
+    totalScorePenalty: finalPenalty,
     risk,
     verdict,
     finderLabel,
@@ -1438,7 +1482,8 @@ function evaluateDeal({
     dealScore: score,
     rawDealScore: scoreBeforePenalty,
     warningFlags,
-    warningScorePenalty: finalPenalty,
+    warningScorePenalty: warningPenaltyTotal,
+    totalScorePenalty: finalPenalty,
     undervaluedAmount,
     undervaluedPercent,
     finderLabel,
@@ -1999,6 +2044,8 @@ app.post("/api/find-deals", async (req, res) => {
         confidence: d.scanner?.confidence,
         compCount: d.scanner?.compCount,
         warnings: d.warningFlags,
+        warningPenalty: d.warningScorePenalty,
+        totalPenalty: d.totalScorePenalty,
       });
     });
 
