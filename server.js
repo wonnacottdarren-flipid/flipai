@@ -222,10 +222,12 @@ function buildAutoCompsFromItems(items = []) {
   const minSoldPrice = compCount ? roundMoney(Math.min(...cleanedPrices)) : 0;
   const maxSoldPrice = compCount ? roundMoney(Math.max(...cleanedPrices)) : 0;
 
-  let confidence = 20;
-  if (compCount >= 3) confidence = 55;
-  if (compCount >= 5) confidence = 72;
-  if (compCount >= 8) confidence = 86;
+  let confidence = 18;
+  if (compCount >= 3) confidence = 44;
+  if (compCount >= 5) confidence = 58;
+  if (compCount >= 8) confidence = 72;
+  if (compCount >= 12) confidence = 82;
+  if (compCount >= 16) confidence = 88;
 
   let confidenceLabel = "Low";
   if (confidence >= 80) confidenceLabel = "High";
@@ -308,12 +310,13 @@ function createGenericPricingModel(items = []) {
   const estimatedResale = roundMoney(baseline * 0.95);
 
   const compCount = totals.length;
-  let confidence = 22;
-  if (compCount >= 3) confidence = 55;
-  if (compCount >= 5) confidence = 70;
-  if (compCount >= 8) confidence = 84;
+  let confidence = 16;
+  if (compCount >= 3) confidence = 42;
+  if (compCount >= 5) confidence = 56;
+  if (compCount >= 8) confidence = 70;
+  if (compCount >= 12) confidence = 82;
 
-  confidence = Math.min(92, confidence);
+  confidence = Math.min(90, confidence);
 
   let confidenceLabel = "Low";
   if (confidence >= 80) confidenceLabel = "High";
@@ -567,6 +570,103 @@ function getDealBucketPriority(label = "") {
   return 0;
 }
 
+function getLowCompPenalty(compCount = 0) {
+  const count = Number(compCount || 0);
+
+  if (count >= 14) return 0;
+  if (count >= 10) return 8;
+  if (count >= 8) return 16;
+  if (count >= 6) return 28;
+  if (count >= 4) return 42;
+  if (count >= 3) return 58;
+  if (count >= 2) return 78;
+  if (count >= 1) return 95;
+  return 120;
+}
+
+function getConfidencePenalty(confidence = 0) {
+  const value = Number(confidence || 0);
+
+  if (value >= 80) return 0;
+  if (value >= 70) return 5;
+  if (value >= 55) return 12;
+  if (value >= 45) return 22;
+  return 36;
+}
+
+function getSwitchListingPenalty(queryContext = {}, item = {}, classifiedItem = {}, adjustedItem = {}) {
+  const q = normalizeText(queryContext?.rawQuery || queryContext?.normalizedQuery || "");
+  const title = normalizeText(item?.title || "");
+  const rawText = normalizeText(
+    [
+      item?.title,
+      item?.subtitle,
+      item?.condition,
+      item?.conditionDisplayName,
+      item?.itemCondition,
+      item?.shortDescription,
+      item?.description,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+
+  const isSwitchQuery = q.includes("switch");
+  if (!isSwitchQuery) return 0;
+
+  let penalty = 0;
+
+  const bundleType =
+    adjustedItem?.bundleType ||
+    classifiedItem?.bundleType ||
+    "";
+
+  if (!title.includes("v2") && !title.includes("hac-001(-01)") && !title.includes("hac 001(-01)")) {
+    penalty += 8;
+  }
+
+  if (
+    rawText.includes("v1") ||
+    rawText.includes("hac-001 ") ||
+    rawText.includes("unpatched") ||
+    rawText.includes("patched") ||
+    rawText.includes("first generation") ||
+    rawText.includes("gen 1")
+  ) {
+    penalty += 16;
+  }
+
+  if (
+    rawText.includes("tablet only") ||
+    rawText.includes("screen only") ||
+    rawText.includes("main unit only") ||
+    rawText.includes("console only") ||
+    rawText.includes("no dock") ||
+    rawText.includes("without dock") ||
+    rawText.includes("missing dock") ||
+    rawText.includes("dock not included") ||
+    rawText.includes("no joy con") ||
+    rawText.includes("no joy-cons") ||
+    rawText.includes("no joy cons") ||
+    rawText.includes("without joy con") ||
+    rawText.includes("without joy-cons") ||
+    rawText.includes("without joy cons") ||
+    rawText.includes("missing joy con") ||
+    rawText.includes("missing joy-cons") ||
+    rawText.includes("missing joy cons") ||
+    rawText.includes("joy cons not included") ||
+    rawText.includes("joy-cons not included")
+  ) {
+    penalty += 100;
+  }
+
+  if (bundleType === "console_only") {
+    penalty += 45;
+  }
+
+  return penalty;
+}
+
 function buildDealReasonBreakdown({
   title,
   pricingMode,
@@ -601,7 +701,7 @@ function buildDealReasonBreakdown({
     );
   } else if (label.includes("offer")) {
     bullets.push(
-      "Not quite strong enough as a straight buy, but it improves if you negotiate lower."
+      "Better as an offer play than a straight buy. Try to improve the entry price before moving."
     );
   } else if (label.includes("tight")) {
     bullets.push(
@@ -647,18 +747,18 @@ function buildDealReasonBreakdown({
 
   if (marginPercent >= 25) {
     bullets.push("Margin profile looks strong for a flip candidate.");
-  } else if (marginPercent >= 12) {
+  } else if (marginPercent >= 15) {
     bullets.push("Margin is workable if the item condition matches expectations.");
   } else {
-    bullets.push("Margin is thin, so there is less room for surprises.");
+    bullets.push("Margin is thinner here, so there is less room for mistakes.");
   }
 
   if (confidence >= 80) {
     bullets.push("Confidence is high because the matching comp pool looks stronger.");
   } else if (confidence >= 55) {
-    bullets.push("Confidence is medium with enough comp support to be directionally useful.");
+    bullets.push("Confidence is medium with decent comp support.");
   } else {
-    bullets.push("Confidence is low, so manual checking matters more here.");
+    bullets.push("Confidence is lower here, so manual checking matters more.");
   }
 
   if (warningFlags.length) {
@@ -672,7 +772,7 @@ function buildDealReasonBreakdown({
   } else if (risk === "Medium") {
     bullets.push("Risk is moderate because the deal works, but without huge room for error.");
   } else {
-    bullets.push("Risk is high because the setup leaves less room for pricing or condition mistakes.");
+    bullets.push("Risk is higher because the setup leaves less room for pricing or condition mistakes.");
   }
 
   return {
@@ -780,70 +880,85 @@ function getTightClassificationThresholds(queryContext = {}) {
 
   if (isSonyWfXm4) {
     return {
-      strongAskProfit: 14,
-      strongAskMargin: 10,
-      solidAskProfit: 9,
-      solidAskMargin: 6,
-      strongOfferProfit: 14,
-      strongOfferMarginFloor: 5,
-      tightAskProfit: 5,
+      strongAskProfit: 16,
+      strongAskMargin: 12,
+      solidAskProfit: 11,
+      solidAskMargin: 7,
+      strongOfferProfit: 16,
+      strongOfferMarginFloor: 6,
+      tightAskProfit: 6,
       tightAskMargin: 3,
-      tightOfferProfit: 8,
+      tightOfferProfit: 10,
+      minCompStrong: 5,
+      minCompHealthy: 4,
+      minCompTight: 2,
     };
   }
 
   if (isAudio) {
     return {
-      strongAskProfit: 18,
-      strongAskMargin: 12,
-      solidAskProfit: 12,
-      solidAskMargin: 7,
-      strongOfferProfit: 16,
+      strongAskProfit: 20,
+      strongAskMargin: 13,
+      solidAskProfit: 14,
+      solidAskMargin: 8,
+      strongOfferProfit: 18,
       strongOfferMarginFloor: 6,
-      tightAskProfit: 6,
+      tightAskProfit: 7,
       tightAskMargin: 4,
-      tightOfferProfit: 10,
+      tightOfferProfit: 11,
+      minCompStrong: 5,
+      minCompHealthy: 4,
+      minCompTight: 2,
     };
   }
 
   if (isPhone) {
     return {
-      strongAskProfit: 28,
-      strongAskMargin: 16,
-      solidAskProfit: 20,
-      solidAskMargin: 10,
-      strongOfferProfit: 24,
+      strongAskProfit: 32,
+      strongAskMargin: 18,
+      solidAskProfit: 24,
+      solidAskMargin: 12,
+      strongOfferProfit: 26,
       strongOfferMarginFloor: 8,
-      tightAskProfit: 8,
-      tightAskMargin: 5,
-      tightOfferProfit: 14,
+      tightAskProfit: 10,
+      tightAskMargin: 6,
+      tightOfferProfit: 16,
+      minCompStrong: 6,
+      minCompHealthy: 5,
+      minCompTight: 3,
     };
   }
 
   if (isConsole) {
     return {
-      strongAskProfit: 35,
-      strongAskMargin: 14,
-      solidAskProfit: 25,
-      solidAskMargin: 9,
-      strongOfferProfit: 22,
-      strongOfferMarginFloor: 6,
-      tightAskProfit: 10,
-      tightAskMargin: 5,
-      tightOfferProfit: 15,
+      strongAskProfit: 40,
+      strongAskMargin: 18,
+      solidAskProfit: 30,
+      solidAskMargin: 12,
+      strongOfferProfit: 26,
+      strongOfferMarginFloor: 8,
+      tightAskProfit: 12,
+      tightAskMargin: 6,
+      tightOfferProfit: 18,
+      minCompStrong: 6,
+      minCompHealthy: 5,
+      minCompTight: 3,
     };
   }
 
   return {
-    strongAskProfit: 30,
-    strongAskMargin: 15,
-    solidAskProfit: 22,
-    solidAskMargin: 10,
-    strongOfferProfit: 22,
-    strongOfferMarginFloor: 7,
-    tightAskProfit: 9,
+    strongAskProfit: 34,
+    strongAskMargin: 16,
+    solidAskProfit: 26,
+    solidAskMargin: 11,
+    strongOfferProfit: 24,
+    strongOfferMarginFloor: 8,
+    tightAskProfit: 10,
     tightAskMargin: 5,
-    tightOfferProfit: 14,
+    tightOfferProfit: 16,
+    minCompStrong: 5,
+    minCompHealthy: 4,
+    minCompTight: 2,
   };
 }
 
@@ -935,7 +1050,7 @@ function evaluateDeal({
       ? classified.warningFlags
       : [];
 
-  const warningScorePenalty = Number(
+  const baseWarningPenalty = Number(
     adjusted?.warningScorePenalty ??
       classified?.warningScorePenalty ??
       0
@@ -977,10 +1092,13 @@ function evaluateDeal({
     offerProfit >= thresholds.tightOfferProfit;
 
   const dataSupportStrong =
-    compCount >= 3 || confidence >= 55;
+    compCount >= thresholds.minCompStrong && confidence >= 70;
+
+  const dataSupportHealthy =
+    compCount >= thresholds.minCompHealthy && confidence >= 58;
 
   const dataSupportTight =
-    compCount >= 2 || confidence >= 45;
+    compCount >= thresholds.minCompTight || confidence >= 45;
 
   const warningsAreLight = warningFlags.length <= 1;
   const warningsAreAcceptable = warningFlags.length <= 2;
@@ -996,21 +1114,21 @@ function evaluateDeal({
   ) {
     finderLabel = "Buy";
     verdict = "BUY NOW";
-    risk = estimatedProfit >= thresholds.strongAskProfit + 10 ? "Low" : "Medium";
+    risk = estimatedProfit >= thresholds.strongAskProfit + 12 ? "Low" : "Medium";
   } else if (
     askIsHealthy &&
     warningsAreAcceptable &&
-    dataSupportStrong &&
-    estimatedProfit >= 22
+    dataSupportHealthy &&
+    estimatedProfit >= Math.max(26, thresholds.solidAskProfit)
   ) {
     finderLabel = "Buy";
     verdict = "BUY";
-    risk = estimatedProfit >= 30 ? "Low" : "Medium";
+    risk = estimatedProfit >= Math.max(34, thresholds.solidAskProfit + 8) ? "Low" : "Medium";
   } else if (
     offerIsStrong &&
     offerBeatsAskClearly &&
     warningsAreAcceptable &&
-    dataSupportStrong &&
+    dataSupportHealthy &&
     (
       estimatedProfit < thresholds.solidAskProfit ||
       marginPercent < thresholds.solidAskMargin
@@ -1022,7 +1140,8 @@ function evaluateDeal({
   } else if (
     (askIsBorderline || offerIsBorderline) &&
     warningsAreAcceptable &&
-    dataSupportTight
+    dataSupportTight &&
+    estimatedProfit >= 10
   ) {
     finderLabel = "Tight";
     verdict = "TIGHT CHECK";
@@ -1031,22 +1150,65 @@ function evaluateDeal({
 
   const bucketPriority = getDealBucketPriority(finderLabel);
 
+  const rawCompContribution = Math.min(Math.max(0, compCount), 14) * 1.1;
+  const rawConfidenceContribution = Math.max(0, confidence) * 0.12;
+
   const scoreBeforePenalty = roundMoney(
-    bucketPriority * 45 +
-      Math.max(0, estimatedProfit) * 1.2 +
-      Math.max(0, offerProfit) * 0.8 +
-      Math.max(0, marginPercent) * 0.8 +
-      Math.max(0, undervaluedPercent) * 0.35 +
-      Math.max(0, confidence) * 0.22 +
-      Math.max(0, compCount) * 1.8
+    bucketPriority * 38 +
+      Math.max(0, estimatedProfit) * 1.55 +
+      Math.max(0, offerProfit) * 0.95 +
+      Math.max(0, marginPercent) * 0.55 +
+      Math.max(0, undervaluedPercent) * 0.16 +
+      rawConfidenceContribution +
+      rawCompContribution
   );
 
-  const lowConfidencePenalty = confidence < 55 ? 8 : 0;
-  const thinMarginPenalty = marginPercent < 10 ? 8 : 0;
+  const lowCompPenalty = getLowCompPenalty(compCount);
+  const confidencePenalty = getConfidencePenalty(confidence);
+  const thinMarginPenalty = marginPercent < 10 ? 12 : marginPercent < 14 ? 6 : 0;
+  const switchPenalty = getSwitchListingPenalty(queryContext, item, classified, adjusted);
+
   const finalPenalty = roundMoney(
-    warningScorePenalty + lowConfidencePenalty + thinMarginPenalty
+    baseWarningPenalty +
+      lowCompPenalty +
+      confidencePenalty +
+      thinMarginPenalty +
+      switchPenalty
   );
-  const score = roundMoney(Math.max(0, scoreBeforePenalty - finalPenalty));
+
+  let score = roundMoney(Math.max(0, scoreBeforePenalty - finalPenalty));
+
+  if (finderLabel === "Buy" && compCount < thresholds.minCompHealthy) {
+    finderLabel = "Tight";
+    verdict = "TIGHT CHECK";
+    risk = "High";
+  }
+
+  if (finderLabel === "Buy" && estimatedProfit < Math.max(26, thresholds.solidAskProfit)) {
+    finderLabel = "Tight";
+    verdict = "TIGHT CHECK";
+    risk = "High";
+  }
+
+  if (finderLabel === "Buy" && marginPercent < thresholds.solidAskMargin) {
+    finderLabel = "Tight";
+    verdict = "TIGHT CHECK";
+    risk = "High";
+  }
+
+  if (finderLabel === "Buy" && compCount <= 3) {
+    finderLabel = "Tight";
+    verdict = "TIGHT CHECK";
+    risk = "High";
+  }
+
+  if (finderLabel === "Tight" && estimatedProfit < 8 && offerProfit < thresholds.tightOfferProfit) {
+    finderLabel = "Skip";
+    verdict = "SKIP";
+    risk = "High";
+  }
+
+  score = roundMoney(Math.max(0, score));
 
   const scanner = {
     totalBuyPrice: total,
@@ -1236,38 +1398,42 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
     if (label.includes("buy")) {
       if (isAudio) {
         return (
-          estimatedProfit >= 9 &&
-          marginPercent >= 6 &&
-          score >= 90 &&
+          estimatedProfit >= 11 &&
+          marginPercent >= 7 &&
+          score >= 95 &&
           warningCount <= 2 &&
-          (compCount >= 3 || confidence >= 55)
+          compCount >= 4 &&
+          confidence >= 58
         );
       }
 
       return (
-        estimatedProfit >= 22 &&
-        marginPercent >= 10 &&
-        score >= 78 &&
+        estimatedProfit >= 26 &&
+        marginPercent >= 12 &&
+        score >= 105 &&
         warningCount <= 2 &&
-        (compCount >= 3 || confidence >= 55)
+        compCount >= 5 &&
+        confidence >= 58
       );
     }
 
     if (label.includes("offer")) {
       if (isAudio) {
         return (
-          offerProfit >= 12 &&
-          score >= 70 &&
+          offerProfit >= 14 &&
+          score >= 78 &&
           warningCount <= 2 &&
-          (compCount >= 3 || confidence >= 55)
+          compCount >= 4 &&
+          confidence >= 58
         );
       }
 
       return (
-        offerProfit >= 20 &&
-        score >= 64 &&
+        offerProfit >= 22 &&
+        score >= 82 &&
         warningCount <= 2 &&
-        (compCount >= 3 || confidence >= 55)
+        compCount >= 5 &&
+        confidence >= 58
       );
     }
 
@@ -1275,10 +1441,10 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
       if (isAudio) {
         return (
           (
-            (estimatedProfit >= 5 && marginPercent >= 3) ||
-            offerProfit >= 8
+            (estimatedProfit >= 6 && marginPercent >= 4) ||
+            offerProfit >= 10
           ) &&
-          score >= 45 &&
+          score >= 48 &&
           warningCount <= 2 &&
           (compCount >= 2 || confidence >= 45)
         );
@@ -1286,12 +1452,12 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
 
       return (
         (
-          (estimatedProfit >= 8 && marginPercent >= 5) ||
-          offerProfit >= 14
+          (estimatedProfit >= 10 && marginPercent >= 6) ||
+          offerProfit >= 16
         ) &&
-        score >= 42 &&
+        score >= 52 &&
         warningCount <= 2 &&
-        (compCount >= 2 || confidence >= 45)
+        (compCount >= 3 || confidence >= 45)
       );
     }
 
@@ -1339,38 +1505,38 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
     if (label.includes("buy")) {
       if (isAudio) {
         return (
-          estimatedProfit >= 7 &&
+          estimatedProfit >= 8 &&
           marginPercent >= 5 &&
-          score >= 70 &&
+          score >= 72 &&
           warningCount <= 2 &&
-          (compCount >= 2 || confidence >= 45)
+          compCount >= 2
         );
       }
 
       return (
-        estimatedProfit >= 18 &&
-        marginPercent >= 8 &&
-        score >= 55 &&
+        estimatedProfit >= 20 &&
+        marginPercent >= 9 &&
+        score >= 74 &&
         warningCount <= 2 &&
-        (compCount >= 2 || confidence >= 45)
+        compCount >= 3
       );
     }
 
     if (label.includes("offer")) {
       if (isAudio) {
         return (
-          offerProfit >= 10 &&
-          score >= 58 &&
+          offerProfit >= 11 &&
+          score >= 62 &&
           warningCount <= 2 &&
-          (compCount >= 2 || confidence >= 45)
+          compCount >= 2
         );
       }
 
       return (
         offerProfit >= 18 &&
-        score >= 50 &&
+        score >= 66 &&
         warningCount <= 2 &&
-        (compCount >= 2 || confidence >= 45)
+        compCount >= 3
       );
     }
 
@@ -1392,7 +1558,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
           (estimatedProfit >= 6 && marginPercent >= 4) ||
           offerProfit >= 12
         ) &&
-        score >= 34 &&
+        score >= 40 &&
         warningCount <= 2 &&
         (compCount >= 1 || confidence >= 35)
       );
