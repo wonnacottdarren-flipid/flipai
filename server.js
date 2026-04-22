@@ -594,6 +594,14 @@ function getConfidencePenalty(confidence = 0) {
   return 36;
 }
 
+function pushUniqueFlag(flags = [], text = "") {
+  const clean = String(text || "").trim();
+  if (!clean) return;
+  if (!flags.includes(clean)) {
+    flags.push(clean);
+  }
+}
+
 function getSwitchListingPenalty(queryContext = {}, item = {}, classifiedItem = {}, adjustedItem = {}) {
   const q = normalizeText(queryContext?.rawQuery || queryContext?.normalizedQuery || "");
   const title = normalizeText(item?.title || "");
@@ -621,7 +629,17 @@ function getSwitchListingPenalty(queryContext = {}, item = {}, classifiedItem = 
     classifiedItem?.bundleType ||
     "";
 
-  if (!title.includes("v2") && !title.includes("hac-001(-01)") && !title.includes("hac 001(-01)")) {
+  const switchGeneration =
+    adjustedItem?.debug?.switchGeneration ||
+    classifiedItem?.debug?.switchGeneration ||
+    "";
+
+  if (
+    !title.includes("v2") &&
+    !title.includes("hac-001(-01)") &&
+    !title.includes("hac 001(-01)") &&
+    switchGeneration !== "v2"
+  ) {
     penalty += 8;
   }
 
@@ -665,6 +683,69 @@ function getSwitchListingPenalty(queryContext = {}, item = {}, classifiedItem = 
   }
 
   return penalty;
+}
+
+function buildDerivedPenaltyFlags({
+  item,
+  queryContext,
+  classified,
+  adjusted,
+  compCount,
+  confidence,
+  lowCompPenalty,
+  confidencePenalty,
+  thinMarginPenalty,
+  switchPenalty,
+}) {
+  const derived = [];
+  const title = normalizeText(item?.title || "");
+  const normalizedQuery = normalizeText(
+    queryContext?.rawQuery || queryContext?.normalizedQuery || ""
+  );
+
+  if (lowCompPenalty >= 16) {
+    pushUniqueFlag(derived, "Limited comp support");
+  }
+
+  if (confidencePenalty >= 12) {
+    pushUniqueFlag(derived, "Confidence reduced by thinner comp quality");
+  }
+
+  if (thinMarginPenalty >= 6) {
+    pushUniqueFlag(derived, "Thin margin leaves less room for error");
+  }
+
+  if (normalizedQuery.includes("switch")) {
+    const switchGeneration =
+      adjusted?.debug?.switchGeneration ||
+      classified?.debug?.switchGeneration ||
+      "";
+
+    if (switchGeneration === "unknown") {
+      pushUniqueFlag(derived, "Switch version not confirmed");
+    }
+
+    if (
+      switchPenalty > 0 &&
+      switchGeneration !== "v2" &&
+      !title.includes("v2") &&
+      !title.includes("hac-001(-01)") &&
+      !title.includes("hac 001(-01)")
+    ) {
+      pushUniqueFlag(derived, "Generic Switch listing treated more cautiously");
+    }
+
+    const bundleType =
+      adjusted?.bundleType ||
+      classified?.bundleType ||
+      "";
+
+    if (bundleType === "console_only") {
+      pushUniqueFlag(derived, "Console-only setup may be incomplete");
+    }
+  }
+
+  return derived;
 }
 
 function buildDealReasonBreakdown({
@@ -997,6 +1078,7 @@ function evaluateDeal({
           warningScorePenalty: 0,
           bundleSignals: classified?.bundleSignals || {},
           bundleType: classified?.bundleType || "standard",
+          debug: classified?.debug || {},
         };
 
   const estimatedResale = roundMoney(
@@ -1044,10 +1126,10 @@ function evaluateDeal({
     }
   }
 
-  const warningFlags = Array.isArray(adjusted?.warningFlags)
-    ? adjusted.warningFlags
+  const baseWarningFlags = Array.isArray(adjusted?.warningFlags)
+    ? [...adjusted.warningFlags]
     : Array.isArray(classified?.warningFlags)
-      ? classified.warningFlags
+      ? [...classified.warningFlags]
       : [];
 
   const baseWarningPenalty = Number(
@@ -1100,6 +1182,30 @@ function evaluateDeal({
   const dataSupportTight =
     compCount >= thresholds.minCompTight || confidence >= 45;
 
+  let warningFlags = [...baseWarningFlags];
+
+  const lowCompPenalty = getLowCompPenalty(compCount);
+  const confidencePenalty = getConfidencePenalty(confidence);
+  const thinMarginPenalty = marginPercent < 10 ? 12 : marginPercent < 14 ? 6 : 0;
+  const switchPenalty = getSwitchListingPenalty(queryContext, item, classified, adjusted);
+
+  const derivedFlags = buildDerivedPenaltyFlags({
+    item,
+    queryContext,
+    classified,
+    adjusted,
+    compCount,
+    confidence,
+    lowCompPenalty,
+    confidencePenalty,
+    thinMarginPenalty,
+    switchPenalty,
+  });
+
+  for (const flag of derivedFlags) {
+    pushUniqueFlag(warningFlags, flag);
+  }
+
   const warningsAreLight = warningFlags.length <= 1;
   const warningsAreAcceptable = warningFlags.length <= 2;
 
@@ -1148,6 +1254,25 @@ function evaluateDeal({
     risk = "High";
   }
 
+  const switchGeneration =
+    adjusted?.debug?.switchGeneration ||
+    classified?.debug?.switchGeneration ||
+    "";
+
+  const normalizedQuery = normalizeText(
+    queryContext?.rawQuery || queryContext?.normalizedQuery || ""
+  );
+
+  if (
+    normalizedQuery.includes("switch") &&
+    switchGeneration === "unknown" &&
+    finderLabel === "Buy" &&
+    verdict === "BUY NOW"
+  ) {
+    verdict = "BUY";
+    risk = "Medium";
+  }
+
   const bucketPriority = getDealBucketPriority(finderLabel);
 
   const rawCompContribution = Math.min(Math.max(0, compCount), 14) * 1.1;
@@ -1162,11 +1287,6 @@ function evaluateDeal({
       rawConfidenceContribution +
       rawCompContribution
   );
-
-  const lowCompPenalty = getLowCompPenalty(compCount);
-  const confidencePenalty = getConfidencePenalty(confidence);
-  const thinMarginPenalty = marginPercent < 10 ? 12 : marginPercent < 14 ? 6 : 0;
-  const switchPenalty = getSwitchListingPenalty(queryContext, item, classified, adjusted);
 
   const finalPenalty = roundMoney(
     baseWarningPenalty +
@@ -1401,7 +1521,7 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
           estimatedProfit >= 11 &&
           marginPercent >= 7 &&
           score >= 95 &&
-          warningCount <= 2 &&
+          warningCount <= 3 &&
           compCount >= 4 &&
           confidence >= 58
         );
@@ -1411,7 +1531,7 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
         estimatedProfit >= 26 &&
         marginPercent >= 12 &&
         score >= 105 &&
-        warningCount <= 2 &&
+        warningCount <= 3 &&
         compCount >= 5 &&
         confidence >= 58
       );
@@ -1422,7 +1542,7 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
         return (
           offerProfit >= 14 &&
           score >= 78 &&
-          warningCount <= 2 &&
+          warningCount <= 3 &&
           compCount >= 4 &&
           confidence >= 58
         );
@@ -1431,7 +1551,7 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
       return (
         offerProfit >= 22 &&
         score >= 82 &&
-        warningCount <= 2 &&
+        warningCount <= 3 &&
         compCount >= 5 &&
         confidence >= 58
       );
@@ -1445,7 +1565,7 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
             offerProfit >= 10
           ) &&
           score >= 48 &&
-          warningCount <= 2 &&
+          warningCount <= 3 &&
           (compCount >= 2 || confidence >= 45)
         );
       }
@@ -1456,7 +1576,7 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
           offerProfit >= 16
         ) &&
         score >= 52 &&
-        warningCount <= 2 &&
+        warningCount <= 3 &&
         (compCount >= 3 || confidence >= 45)
       );
     }
@@ -1508,7 +1628,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
           estimatedProfit >= 8 &&
           marginPercent >= 5 &&
           score >= 72 &&
-          warningCount <= 2 &&
+          warningCount <= 3 &&
           compCount >= 2
         );
       }
@@ -1517,7 +1637,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
         estimatedProfit >= 20 &&
         marginPercent >= 9 &&
         score >= 74 &&
-        warningCount <= 2 &&
+        warningCount <= 3 &&
         compCount >= 3
       );
     }
@@ -1527,7 +1647,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
         return (
           offerProfit >= 11 &&
           score >= 62 &&
-          warningCount <= 2 &&
+          warningCount <= 3 &&
           compCount >= 2
         );
       }
@@ -1535,7 +1655,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
       return (
         offerProfit >= 18 &&
         score >= 66 &&
-        warningCount <= 2 &&
+        warningCount <= 3 &&
         compCount >= 3
       );
     }
@@ -1548,7 +1668,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
             offerProfit >= 7
           ) &&
           score >= 38 &&
-          warningCount <= 2 &&
+          warningCount <= 3 &&
           (compCount >= 1 || confidence >= 35)
         );
       }
@@ -1559,7 +1679,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
           offerProfit >= 12
         ) &&
         score >= 40 &&
-        warningCount <= 2 &&
+        warningCount <= 3 &&
         (compCount >= 1 || confidence >= 35)
       );
     }
