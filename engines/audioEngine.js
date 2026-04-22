@@ -214,6 +214,58 @@ function isAccessoryCategory(item = {}) {
   );
 }
 
+function hasSamsungOfficialSignals(text) {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "samsung galaxy buds",
+    "galaxy buds2 pro",
+    "galaxy buds 2 pro",
+    "galaxy buds3 pro",
+    "galaxy buds 3 pro",
+    "galaxy buds3",
+    "galaxy buds 3",
+    "galaxy buds2",
+    "galaxy buds 2",
+    "galaxy buds pro",
+    "galaxy buds live",
+    "galaxy buds plus",
+    "galaxy buds fe",
+    "sm-r510",
+    "sm-r530",
+    "sm-r630",
+    "official samsung",
+    "genuine samsung",
+  ]);
+}
+
+function hasSuspiciousMobileAccessoryCategories(item = {}) {
+  const categoryTexts = getCategoryTexts(item);
+
+  const hasSuspicious = categoryTexts.some((text) =>
+    hasAny(text, [
+      "radio communication equipment",
+      "mobile phones & communication",
+      "parts & accessories",
+      "two-way radio parts & accessories",
+      "facility maintenance & safety",
+      "business office & industrial",
+      "surveillance & alarm equipment",
+    ])
+  );
+
+  const hasStrongAudioCategory = categoryTexts.some((text) =>
+    hasAny(text, [
+      "portable audio",
+      "sound & vision",
+      "headphones",
+      "headsets",
+    ])
+  );
+
+  return hasSuspicious && !hasStrongAudioCategory;
+}
+
 function isAccessoryOnly(text) {
   return hasAny(text, [
     "case only",
@@ -292,6 +344,10 @@ function isPartialItem(text) {
     "left earphone only",
     "right earphone only",
     "single piece",
+    "left airpod replacement",
+    "right airpod replacement",
+    "left earbud replacement",
+    "right earbud replacement",
   ]);
 }
 
@@ -339,6 +395,14 @@ function looksLikeSingleSideEarbud(text) {
     "single bud",
     "single earbud",
     "single airpod",
+    "left airpod replacement",
+    "right airpod replacement",
+    "left airpod",
+    "right airpod",
+    "left airpod gen",
+    "right airpod gen",
+    "left earbud replacement",
+    "right earbud replacement",
   ]);
 }
 
@@ -674,63 +738,6 @@ function hasStrongCompleteSignals(text, queryContext = {}, item = {}) {
     }
   }
 
-  if (family.startsWith("galaxy_buds")) {
-    if (
-      hasAny(t, [
-        "samsung galaxy buds",
-        "galaxy buds2 pro",
-        "galaxy buds 2 pro",
-        "galaxy buds3 pro",
-        "galaxy buds 3 pro",
-        "galaxy buds3",
-        "galaxy buds 3",
-        "galaxy buds2",
-        "galaxy buds 2",
-        "galaxy buds pro",
-        "galaxy buds live",
-        "galaxy buds plus",
-        "galaxy buds fe",
-        "sm-r510",
-        "sm-r530",
-        "sm-r630",
-        "official samsung",
-        "genuine samsung",
-      ]) &&
-      !looksLikeCaseOnlyListing(t) &&
-      !isPartialItem(t) &&
-      !looksLikeSingleSideEarbud(t)
-    ) {
-      return true;
-    }
-  }
-
-  if (family.startsWith("airpods_")) {
-    if (
-      hasAny(t, [
-        "airpods pro 2nd generation",
-        "airpods pro 2",
-        "airpods pro 2nd gen",
-        "airpods pro gen 2",
-        "apple airpods pro 2",
-        "airpods pro",
-        "airpods 3",
-        "airpods 2",
-        "usb-c version",
-        "usbc",
-        "usb c",
-        "mtjv3zm/a",
-        "a3047",
-        "a3048",
-        "a2968",
-      ]) &&
-      !looksLikeCaseOnlyListing(t) &&
-      !isPartialItem(t) &&
-      !looksLikeSingleSideEarbud(t)
-    ) {
-      return true;
-    }
-  }
-
   return false;
 }
 
@@ -759,6 +766,51 @@ function looksLikeLikelyCompleteSonyListing(text, queryContext = {}, item = {}) 
   if (inAccessoryCategory && !inAudioCategory) return false;
 
   return true;
+}
+
+function getSamsungCheapNewThreshold(family = "") {
+  if (family === "galaxy_buds3_pro") return 55;
+  if (family === "galaxy_buds3") return 40;
+  if (family === "galaxy_buds2_pro") return 42;
+  if (family === "galaxy_buds2") return 28;
+  if (family === "galaxy_buds_pro") return 32;
+  if (family === "galaxy_buds_fe") return 28;
+  if (family === "galaxy_buds_live") return 24;
+  if (family === "galaxy_buds_plus") return 22;
+  return 0;
+}
+
+function looksLikeSuspiciousSamsungBudsListing(item = {}, queryContext = {}, text = "") {
+  const family = String(queryContext?.family || "");
+  if (!family.startsWith("galaxy_buds")) return false;
+
+  const t = normalizeText(text);
+  const total = Number(extractTotalPrice(item) || 0);
+  const cheapNewThreshold = getSamsungCheapNewThreshold(family);
+  const looksNew = hasAny(t, ["brand new", "new", "sealed", "unopened", "unused"]);
+  const suspiciousCategoryMix = hasSuspiciousMobileAccessoryCategories(item);
+  const officialSignals = hasSamsungOfficialSignals(t);
+  const genericWirelessTitle = hasAny(t, [
+    "true wireless earbuds",
+    "bluetooth headphones",
+    "wireless earbuds",
+    "wireless bluetooth earbuds",
+    "wireless bluetooth earphones",
+  ]);
+
+  if (looksNew && cheapNewThreshold > 0 && total > 0 && total < cheapNewThreshold) {
+    return true;
+  }
+
+  if (suspiciousCategoryMix && genericWirelessTitle && !officialSignals) {
+    return true;
+  }
+
+  if (suspiciousCategoryMix && looksNew && cheapNewThreshold > 0 && total > 0 && total < cheapNewThreshold + 8) {
+    return true;
+  }
+
+  return false;
 }
 
 function looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext = {}, text = "") {
@@ -826,6 +878,10 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}, item = {}) {
       "replacement airpods",
       "left replacement",
       "right replacement",
+      "left airpod replacement",
+      "right airpod replacement",
+      "left earbud replacement",
+      "right earbud replacement",
     ])
   ) {
     return true;
@@ -1058,6 +1114,7 @@ function scoreAudioCandidate(item, queryContext) {
   if (looksLikeIncompleteEarbudListing(text, queryContext, item)) return -10;
   if (isSonyAccessoryListing(text, queryContext)) return -10;
   if (isGenericSamsungCloneListing(text, queryContext)) return -10;
+  if (looksLikeSuspiciousSamsungBudsListing(item, queryContext, text)) return -10;
   if (isBrokenOrFaulty(text) && !shouldAllowDamagedListings(queryContext)) return -10;
   if (isDirtyListing(text)) return -10;
   if (looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext, text)) return -10;
@@ -1165,10 +1222,21 @@ function scoreAudioCandidate(item, queryContext) {
     if (hasAny(text, ["sm-r630", "sm-r510", "genuine samsung", "official samsung"])) score += 1.5;
     if (looksLikeCaseOnlyListing(text)) score -= 12;
     if (hasAny(text, ["case cradle only", "charging cradle only", "cradle only"])) score -= 12;
+    if (looksLikeSuspiciousSamsungBudsListing(item, queryContext, text)) score -= 16;
   }
 
   if (queryContext.family === "airpods_pro_2") {
     if (looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext, text)) score -= 12;
+    if (
+      hasAny(text, [
+        "left airpod replacement",
+        "right airpod replacement",
+        "left airpod",
+        "right airpod",
+      ])
+    ) {
+      score -= 16;
+    }
   }
 
   return score;
@@ -1551,6 +1619,7 @@ export const audioEngine = {
     if (looksLikeIncompleteEarbudListing(text, queryContext, item)) return false;
     if (isSonyAccessoryListing(text, queryContext)) return false;
     if (isGenericSamsungCloneListing(text, queryContext)) return false;
+    if (looksLikeSuspiciousSamsungBudsListing(item, queryContext, text)) return false;
     if (isDirtyListing(text)) return false;
     if (looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext, text)) return false;
 
@@ -1607,10 +1676,21 @@ export const audioEngine = {
     ) {
       if (looksLikeCaseOnlyListing(text)) return false;
       if (hasAny(text, ["case cradle only", "charging cradle only", "cradle only"])) return false;
+      if (looksLikeSuspiciousSamsungBudsListing(item, queryContext, text)) return false;
     }
 
-    if (queryContext.family === "airpods_pro_2" && looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext, text)) {
-      return false;
+    if (queryContext.family === "airpods_pro_2") {
+      if (looksLikeSuspiciouslyCheapPremiumAudio(item, queryContext, text)) return false;
+      if (
+        hasAny(text, [
+          "left airpod replacement",
+          "right airpod replacement",
+          "left airpod",
+          "right airpod",
+        ])
+      ) {
+        return false;
+      }
     }
 
     return true;
