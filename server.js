@@ -574,24 +574,26 @@ function getLowCompPenalty(compCount = 0) {
   const count = Number(compCount || 0);
 
   if (count >= 14) return 0;
-  if (count >= 10) return 8;
-  if (count >= 8) return 16;
-  if (count >= 6) return 28;
-  if (count >= 4) return 42;
-  if (count >= 3) return 58;
-  if (count >= 2) return 78;
-  if (count >= 1) return 95;
-  return 120;
+  if (count >= 12) return 3;
+  if (count >= 10) return 6;
+  if (count >= 8) return 10;
+  if (count >= 6) return 18;
+  if (count >= 4) return 28;
+  if (count >= 3) return 40;
+  if (count >= 2) return 58;
+  if (count >= 1) return 80;
+  return 110;
 }
 
 function getConfidencePenalty(confidence = 0) {
   const value = Number(confidence || 0);
 
-  if (value >= 80) return 0;
-  if (value >= 70) return 5;
-  if (value >= 55) return 12;
-  if (value >= 45) return 22;
-  return 36;
+  if (value >= 82) return 0;
+  if (value >= 74) return 3;
+  if (value >= 65) return 6;
+  if (value >= 55) return 10;
+  if (value >= 45) return 18;
+  return 30;
 }
 
 function pushUniqueFlag(flags = [], text = "") {
@@ -634,24 +636,27 @@ function getSwitchListingPenalty(queryContext = {}, item = {}, classifiedItem = 
     classifiedItem?.debug?.switchGeneration ||
     "";
 
-  if (
-    !title.includes("v2") &&
-    !title.includes("hac-001(-01)") &&
-    !title.includes("hac 001(-01)") &&
-    switchGeneration !== "v2"
-  ) {
-    penalty += 8;
+  const isClearlyV2 =
+    switchGeneration === "v2" ||
+    title.includes("v2") ||
+    title.includes("hac-001(-01)") ||
+    title.includes("hac 001(-01)");
+
+  if (!isClearlyV2) {
+    penalty += 6;
   }
 
   if (
     rawText.includes("v1") ||
+    rawText.includes("switch 1") ||
+    rawText.includes("switch one") ||
     rawText.includes("hac-001 ") ||
     rawText.includes("unpatched") ||
     rawText.includes("patched") ||
     rawText.includes("first generation") ||
     rawText.includes("gen 1")
   ) {
-    penalty += 16;
+    penalty += 22;
   }
 
   if (
@@ -703,15 +708,15 @@ function buildDerivedPenaltyFlags({
     queryContext?.rawQuery || queryContext?.normalizedQuery || ""
   );
 
-  if (lowCompPenalty >= 16) {
+  if (lowCompPenalty >= 18) {
     pushUniqueFlag(derived, "Limited comp support");
   }
 
-  if (confidencePenalty >= 12) {
+  if (confidencePenalty >= 10) {
     pushUniqueFlag(derived, "Confidence reduced by thinner comp quality");
   }
 
-  if (thinMarginPenalty >= 6) {
+  if (thinMarginPenalty >= 8) {
     pushUniqueFlag(derived, "Thin margin leaves less room for error");
   }
 
@@ -721,12 +726,18 @@ function buildDerivedPenaltyFlags({
       classified?.debug?.switchGeneration ||
       "";
 
-    if (switchGeneration === "unknown") {
+    const isConfirmedV2 =
+      switchGeneration === "v2" ||
+      title.includes("v2") ||
+      title.includes("hac-001(-01)") ||
+      title.includes("hac 001(-01)");
+
+    if (switchGeneration === "unknown" && !isConfirmedV2) {
       pushUniqueFlag(derived, "Switch version not confirmed");
     }
 
     if (
-      switchPenalty > 0 &&
+      switchPenalty >= 6 &&
       switchGeneration !== "v2" &&
       !title.includes("v2") &&
       !title.includes("hac-001(-01)") &&
@@ -1207,7 +1218,7 @@ function evaluateDeal({
   }
 
   const warningsAreLight = warningFlags.length <= 1;
-  const warningsAreAcceptable = warningFlags.length <= 2;
+  const warningsAreAcceptable = warningFlags.length <= 3;
 
   let finderLabel = "Skip";
   let verdict = "SKIP";
@@ -1263,8 +1274,19 @@ function evaluateDeal({
     queryContext?.rawQuery || queryContext?.normalizedQuery || ""
   );
 
+  const isSwitchQuery = normalizedQuery.includes("switch");
+  const isConfirmedV2Switch =
+    isSwitchQuery &&
+    (
+      switchGeneration === "v2" ||
+      normalizeText(title).includes("v2") ||
+      normalizeText(title).includes("hac-001(-01)") ||
+      normalizeText(title).includes("hac 001(-01)")
+    );
+
   const isUnknownVersionSwitch =
-    normalizedQuery.includes("switch") &&
+    isSwitchQuery &&
+    !isConfirmedV2Switch &&
     (
       pricingModel?.pricingMode === "Switch unknown-version median" ||
       switchGeneration === "unknown" ||
@@ -1547,20 +1569,20 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
         return (
           estimatedProfit >= 11 &&
           marginPercent >= 7 &&
-          score >= 95 &&
+          score >= 90 &&
           warningCount <= 3 &&
           compCount >= 4 &&
-          confidence >= 58
+          confidence >= 55
         );
       }
 
       return (
-        estimatedProfit >= 26 &&
-        marginPercent >= 12 &&
-        score >= 105 &&
+        estimatedProfit >= 24 &&
+        marginPercent >= 10 &&
+        score >= 90 &&
         warningCount <= 3 &&
-        compCount >= 5 &&
-        confidence >= 58
+        compCount >= 4 &&
+        confidence >= 55
       );
     }
 
@@ -1568,19 +1590,19 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
       if (isAudio) {
         return (
           offerProfit >= 14 &&
-          score >= 78 &&
+          score >= 72 &&
           warningCount <= 3 &&
           compCount >= 4 &&
-          confidence >= 58
+          confidence >= 55
         );
       }
 
       return (
         offerProfit >= 22 &&
-        score >= 82 &&
+        score >= 74 &&
         warningCount <= 3 &&
-        compCount >= 5 &&
-        confidence >= 58
+        compCount >= 4 &&
+        confidence >= 55
       );
     }
 
@@ -1591,7 +1613,7 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
             (estimatedProfit >= 6 && marginPercent >= 4) ||
             offerProfit >= 10
           ) &&
-          score >= 48 &&
+          score >= 44 &&
           warningCount <= 3 &&
           (compCount >= 2 || confidence >= 45)
         );
@@ -1602,9 +1624,9 @@ function filterDealsForOutput(deals = [], includeTightDeals = false) {
           (estimatedProfit >= 10 && marginPercent >= 6) ||
           offerProfit >= 16
         ) &&
-        score >= 52 &&
+        score >= 44 &&
         warningCount <= 3 &&
-        (compCount >= 3 || confidence >= 45)
+        (compCount >= 2 || confidence >= 45)
       );
     }
 
@@ -1654,18 +1676,18 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
         return (
           estimatedProfit >= 8 &&
           marginPercent >= 5 &&
-          score >= 72 &&
+          score >= 66 &&
           warningCount <= 3 &&
           compCount >= 2
         );
       }
 
       return (
-        estimatedProfit >= 20 &&
-        marginPercent >= 9 &&
-        score >= 74 &&
+        estimatedProfit >= 18 &&
+        marginPercent >= 8 &&
+        score >= 66 &&
         warningCount <= 3 &&
-        compCount >= 3
+        compCount >= 2
       );
     }
 
@@ -1673,17 +1695,17 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
       if (isAudio) {
         return (
           offerProfit >= 11 &&
-          score >= 62 &&
+          score >= 56 &&
           warningCount <= 3 &&
           compCount >= 2
         );
       }
 
       return (
-        offerProfit >= 18 &&
-        score >= 66 &&
+        offerProfit >= 16 &&
+        score >= 58 &&
         warningCount <= 3 &&
-        compCount >= 3
+        compCount >= 2
       );
     }
 
@@ -1694,7 +1716,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
             (estimatedProfit >= 4 && marginPercent >= 2.5) ||
             offerProfit >= 7
           ) &&
-          score >= 38 &&
+          score >= 34 &&
           warningCount <= 3 &&
           (compCount >= 1 || confidence >= 35)
         );
@@ -1705,7 +1727,7 @@ function applyEmergencyDealFallback(deals = [], includeTightDeals = false) {
           (estimatedProfit >= 6 && marginPercent >= 4) ||
           offerProfit >= 12
         ) &&
-        score >= 40 &&
+        score >= 34 &&
         warningCount <= 3 &&
         (compCount >= 1 || confidence >= 35)
       );
