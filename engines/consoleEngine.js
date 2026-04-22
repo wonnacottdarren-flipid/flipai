@@ -21,6 +21,9 @@ const CONSOLE_FAMILIES = [
       "standard edition",
       "disc edition",
       "disk edition",
+      "disc version",
+      "bluray edition",
+      "blu ray edition",
       "cfi 1116a",
       "cfi 1216a",
       "cfi-1116a",
@@ -144,6 +147,10 @@ const ACCESSORY_TERMS = [
   "cooler",
   "cooling stand",
   "shell cover",
+  "console shell",
+  "replacement fan",
+  "housing only",
+  "outer shell",
 ];
 
 const NON_CONSOLE_TERMS = [
@@ -204,6 +211,7 @@ const HARD_REJECT_TERMS = [
   "not working",
   "no power",
   "wont turn on",
+  "won't turn on",
   "will not turn on",
   "repair required",
   "needs repair",
@@ -301,6 +309,10 @@ function normalizeConsoleText(value) {
     .replace(/\bblu-ray\b/g, "bluray")
     .replace(/\b1 tb\b/g, "1tb")
     .replace(/\b825 gb\b/g, "825gb")
+    .replace(/\bseries\s*x\b/g, "series x")
+    .replace(/\bseries\s*s\b/g, "series s")
+    .replace(/\bjoy\s*cons\b/g, "joy cons")
+    .replace(/\bjoy\s*con\b/g, "joy con")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -367,6 +379,16 @@ function isPs5Like(text) {
   return t.includes("ps5") || t.includes("playstation5");
 }
 
+function isXboxSeriesLike(text) {
+  const t = normalizeConsoleText(text);
+  return t.includes("xbox series x") || t.includes("xbox series s") || t.includes("series x") || t.includes("series s");
+}
+
+function isSwitchLike(text) {
+  const t = normalizeConsoleText(text);
+  return t.includes("switch") || t.includes("nintendo switch");
+}
+
 function isConsoleCategory(item) {
   const categoryText = getCategoryText(item);
   return hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
@@ -401,39 +423,57 @@ function hasStrongConsoleSignals(text) {
     "with controller",
     "controller included",
     "boxed",
+    "xbox series x console",
+    "xbox series s console",
+    "nintendo switch console",
+    "switch oled console",
+    "switch lite console",
   ]);
 }
 
 function looksLikeMainConsoleTitle(text) {
   const t = normalizeConsoleText(text);
 
-  if (!isPs5Like(t)) return false;
-
-  if (hasAny(t, [
-    "console",
-    "ps5 console",
-    "playstation5 console",
-    "disc edition",
-    "digital edition",
-    "standard edition",
-    "standard console",
-    "slim",
-    "cfi-",
-    "cfi ",
-    "1tb",
-    "825gb",
-    "with controller",
-    "controller included",
-    "boxed",
-  ])) {
+  if (
+    hasAny(t, [
+      "console",
+      "ps5 console",
+      "playstation5 console",
+      "disc edition",
+      "digital edition",
+      "standard edition",
+      "standard console",
+      "slim",
+      "cfi-",
+      "cfi ",
+      "1tb",
+      "825gb",
+      "with controller",
+      "controller included",
+      "boxed",
+      "xbox series x console",
+      "xbox series s console",
+      "nintendo switch console",
+      "switch oled console",
+      "switch lite console",
+    ])
+  ) {
     return true;
   }
 
   if (
     t.startsWith("ps5 ") ||
     t.startsWith("playstation5 ") ||
+    t.startsWith("xbox series x") ||
+    t.startsWith("xbox series s") ||
+    t.startsWith("nintendo switch") ||
+    t.startsWith("switch oled") ||
+    t.startsWith("switch lite") ||
     t === "ps5" ||
-    t === "playstation5"
+    t === "playstation5" ||
+    t === "xbox series x" ||
+    t === "xbox series s" ||
+    t === "nintendo switch"
   ) {
     return true;
   }
@@ -491,6 +531,10 @@ function isObviousAccessoryTitle(titleText) {
       "mount only",
       "power cable only",
       "cable only",
+      "joy con only",
+      "joy-con only",
+      "joy cons only",
+      "joy-cons only",
     ])
   ) {
     return true;
@@ -515,6 +559,14 @@ function isObviousAccessoryTitle(titleText) {
 
   if (
     t.includes("dualsense") &&
+    !t.includes("console") &&
+    !t.includes("bundle")
+  ) {
+    return true;
+  }
+
+  if (
+    (t.includes("joy con") || t.includes("joy-cons") || t.includes("joy cons")) &&
     !t.includes("console") &&
     !t.includes("bundle")
   ) {
@@ -598,6 +650,7 @@ function classifyConsoleConditionState(text) {
       "not working",
       "no power",
       "wont turn on",
+      "won't turn on",
       "will not turn on",
       "hdmi fault",
       "no hdmi",
@@ -655,7 +708,9 @@ function hasControllerIncluded(text, family) {
   const t = normalizeConsoleText(text);
 
   if (family.startsWith("switch")) {
-    if (hasAny(t, ["tablet only", "console only", "no joy cons", "no joy-cons"])) return false;
+    if (hasAny(t, ["tablet only", "console only", "no joy cons", "no joy-cons", "without joy cons", "without joy-cons"])) {
+      return false;
+    }
     if (hasAny(t, ["joy con included", "joy-cons included", "with joy cons", "with joy-cons"])) return true;
     return true;
   }
@@ -851,7 +906,8 @@ function detectPs5Variant(text = "") {
     t.includes("disc drive") ||
     t.includes("disc version") ||
     t.includes("disc edition") ||
-    t.includes("standard edition")
+    t.includes("standard edition") ||
+    t.includes("bluray")
   ) {
     return "disc";
   }
@@ -919,28 +975,28 @@ function matchesConsoleFamily(text, queryContext, item) {
   if (family === "xbox_series_x") {
     const hasSeriesX = t.includes("xbox series x") || t.includes("series x");
     const saysSeriesS = t.includes("xbox series s") || t.includes("series s");
-    return hasSeriesX && !saysSeriesS;
+    return hasSeriesX && !saysSeriesS && !isHardAccessoryListing(titleText || t, item);
   }
 
   if (family === "xbox_series_s") {
     const hasSeriesS = t.includes("xbox series s") || t.includes("series s");
     const saysSeriesX = t.includes("xbox series x") || t.includes("series x");
-    return hasSeriesS && !saysSeriesX;
+    return hasSeriesS && !saysSeriesX && !isHardAccessoryListing(titleText || t, item);
   }
 
   if (family === "switch_oled") {
-    return t.includes("switch") && t.includes("oled");
+    return t.includes("switch") && t.includes("oled") && !isHardAccessoryListing(titleText || t, item);
   }
 
   if (family === "switch_lite") {
-    return t.includes("switch") && t.includes("lite");
+    return t.includes("switch") && t.includes("lite") && !isHardAccessoryListing(titleText || t, item);
   }
 
   if (family === "switch_v2") {
     const hasSwitch = t.includes("switch") || t.includes("nintendo switch");
     const saysOled = t.includes("oled");
     const saysLite = t.includes("lite");
-    return hasSwitch && !saysOled && !saysLite;
+    return hasSwitch && !saysOled && !saysLite && !isHardAccessoryListing(titleText || t, item);
   }
 
   return true;
@@ -1274,6 +1330,12 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     pricingMode = "Series X median";
   } else if (queryContext.family === "xbox_series_s") {
     pricingMode = "Series S median";
+  } else if (queryContext.family === "switch_oled") {
+    pricingMode = "Switch OLED median";
+  } else if (queryContext.family === "switch_lite") {
+    pricingMode = "Switch Lite median";
+  } else if (queryContext.family === "switch_v2") {
+    pricingMode = "Switch V2 median";
   }
 
   const estimatedResale = roundMoney(baseline * conservativeMultiplier);
@@ -1375,15 +1437,14 @@ export const consoleEngine = {
     const wantsBundle =
       normalizedQuery.includes("bundle") ||
       normalizedQuery.includes("with games") ||
-      normalizedQuery.includes("with controller") ||
-      normalizedQuery.includes("controllers") ||
-      normalizedQuery.includes("games") ||
-      normalizedQuery.includes("job lot") ||
-      normalizedQuery.includes("comes with") ||
-      normalizedQuery.includes("includes") ||
+      normalizedQuery.includes("games included") ||
+      normalizedQuery.includes("with 2 controllers") ||
+      normalizedQuery.includes("with two controllers") ||
       normalizedQuery.includes("extra controller") ||
-      normalizedQuery.includes("2 controllers") ||
-      normalizedQuery.includes("two controllers");
+      normalizedQuery.includes("second controller") ||
+      normalizedQuery.includes("spare controller") ||
+      normalizedQuery.includes("job lot") ||
+      normalizedQuery.includes("comes with");
 
     return {
       rawQuery,
