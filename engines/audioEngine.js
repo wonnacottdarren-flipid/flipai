@@ -768,6 +768,67 @@ function looksLikeLikelyCompleteAirpodsListing(text, queryContext = {}, item = {
   return true;
 }
 
+function hasSamsungCompleteConfidenceSignals(text) {
+  const t = normalizeText(text);
+
+  return (
+    hasFullSetSignals(t) ||
+    hasSamsungOfficialSignals(t) ||
+    hasAny(t, [
+      "with the box",
+      "with box",
+      "boxed",
+      "box included",
+      "includes box",
+      "complete",
+      "complete set",
+      "full set",
+      "with case",
+      "with charging case",
+      "earbuds",
+      "wireless earphones",
+      "wireless headphones",
+      "noise cancelling earbuds",
+      "noise canceling earbuds",
+      "graphite",
+      "violet",
+      "white",
+      "black",
+      "buds2 pro",
+      "buds 2 pro",
+    ])
+  );
+}
+
+function looksLikeLikelyCompleteSamsungListing(text, queryContext = {}, item = {}) {
+  const t = normalizeText(text);
+  const family = String(queryContext?.family || "");
+  const wantsCompleteSet = Boolean(queryContext?.wantsCompleteSet);
+
+  if (!wantsCompleteSet) return false;
+  if (!family.startsWith("galaxy_buds")) return false;
+
+  if (!hasSamsungOfficialSignals(t) && !hasAny(t, ["buds2 pro", "buds 2 pro", "buds3 pro", "buds 3 pro"])) {
+    return false;
+  }
+
+  if (isAccessoryOnly(t)) return false;
+  if (isPartialItem(t)) return false;
+  if (looksLikeSingleSideEarbud(t)) return false;
+  if (looksLikeCaseOnlyListing(t)) return false;
+  if (isGenericSamsungCloneListing(t, queryContext)) return false;
+  if (looksLikeSuspiciousSamsungBudsListing(item, queryContext, t)) return false;
+
+  const inAudioCategory = isAudioCategory(item);
+  const inAccessoryCategory = isAccessoryCategory(item);
+
+  if (inAccessoryCategory && !inAudioCategory) return false;
+  if (!inAudioCategory && !hasSamsungOfficialSignals(t)) return false;
+  if (!hasSamsungCompleteConfidenceSignals(t)) return false;
+
+  return true;
+}
+
 function hasStrongCompleteSignals(text, queryContext = {}, item = {}) {
   const t = normalizeText(text);
   const wantsCompleteSet = Boolean(queryContext?.wantsCompleteSet);
@@ -823,6 +884,12 @@ function hasStrongCompleteSignals(text, queryContext = {}, item = {}) {
 
   if (family.startsWith("airpods_")) {
     if (looksLikeLikelyCompleteAirpodsListing(t, queryContext, item)) {
+      return true;
+    }
+  }
+
+  if (family.startsWith("galaxy_buds")) {
+    if (looksLikeLikelyCompleteSamsungListing(t, queryContext, item)) {
       return true;
     }
   }
@@ -980,8 +1047,9 @@ function looksLikeIncompleteEarbudListing(text, queryContext = {}, item = {}) {
     const strongComplete = hasStrongCompleteSignals(t, queryContext, item);
     const likelyCompleteSony = looksLikeLikelyCompleteSonyListing(t, queryContext, item);
     const likelyCompleteAirpods = looksLikeLikelyCompleteAirpodsListing(t, queryContext, item);
+    const likelyCompleteSamsung = looksLikeLikelyCompleteSamsungListing(t, queryContext, item);
 
-    if (!strongComplete && !likelyCompleteSony && !likelyCompleteAirpods) {
+    if (!strongComplete && !likelyCompleteSony && !likelyCompleteAirpods && !likelyCompleteSamsung) {
       return true;
     }
   }
@@ -1272,6 +1340,8 @@ function scoreAudioCandidate(item, queryContext) {
       score += 1.5;
     } else if (looksLikeLikelyCompleteAirpodsListing(text, queryContext, item)) {
       score += 2.5;
+    } else if (looksLikeLikelyCompleteSamsungListing(text, queryContext, item)) {
+      score += 2.5;
     } else {
       score -= 2;
     }
@@ -1315,6 +1385,7 @@ function scoreAudioCandidate(item, queryContext) {
     if (looksLikeCaseOnlyListing(text)) score -= 12;
     if (hasAny(text, ["case cradle only", "charging cradle only", "cradle only"])) score -= 12;
     if (looksLikeSuspiciousSamsungBudsListing(item, queryContext, text)) score -= 16;
+    if (looksLikeLikelyCompleteSamsungListing(text, queryContext, item)) score += 2;
   }
 
   if (queryContext.family === "airpods_pro_2") {
@@ -1359,7 +1430,8 @@ function enrichAudioCompPool(queryContext, items = []) {
         fullSet:
           hasStrongCompleteSignals(text, queryContext, item) ||
           looksLikeLikelyCompleteSonyListing(text, queryContext, item) ||
-          looksLikeLikelyCompleteAirpodsListing(text, queryContext, item),
+          looksLikeLikelyCompleteAirpodsListing(text, queryContext, item) ||
+          looksLikeLikelyCompleteSamsungListing(text, queryContext, item),
       };
     })
     .filter((entry) => entry.total > 0 && entry.score > -5)
@@ -1585,6 +1657,8 @@ export const audioEngine = {
         variants.push("galaxy buds2 pro complete");
         variants.push("galaxy buds 2 pro full set");
         variants.push("samsung galaxy buds 2 pro with case");
+        variants.push("samsung galaxy buds 2 pro with box");
+        variants.push("galaxy buds 2 pro sm-r510");
       }
     }
 
@@ -1600,6 +1674,8 @@ export const audioEngine = {
         variants.push("galaxy buds3 pro complete");
         variants.push("galaxy buds 3 pro full set");
         variants.push("samsung galaxy buds 3 pro with case");
+        variants.push("samsung galaxy buds 3 pro with box");
+        variants.push("galaxy buds 3 pro sm-r630");
       }
     }
 
