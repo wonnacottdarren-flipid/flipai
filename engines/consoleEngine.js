@@ -151,6 +151,12 @@ const ACCESSORY_TERMS = [
   "replacement fan",
   "housing only",
   "outer shell",
+  "storage expansion card",
+  "expansion card only",
+  "ssd only",
+  "internal ssd",
+  "nvme",
+  "memory card",
 ];
 
 const NON_CONSOLE_TERMS = [
@@ -337,7 +343,11 @@ function normalizeConsoleText(value) {
     .replace(/\bblu ray\b/g, "bluray")
     .replace(/\bblu-ray\b/g, "bluray")
     .replace(/\b1 tb\b/g, "1tb")
+    .replace(/\b2 tb\b/g, "2tb")
     .replace(/\b825 gb\b/g, "825gb")
+    .replace(/\b512 gb\b/g, "512gb")
+    .replace(/\b64 gb\b/g, "64gb")
+    .replace(/\b32 gb\b/g, "32gb")
     .replace(/\bseries\s*x\b/g, "series x")
     .replace(/\bseries\s*s\b/g, "series s")
     .replace(/\bjoy\s*cons\b/g, "joy cons")
@@ -380,7 +390,7 @@ function detectConsoleBrand(text) {
   const t = normalizeConsoleText(text);
 
   if (t.includes("ps5") || t.includes("playstation5")) return "playstation";
-  if (t.includes("xbox")) return "xbox";
+  if (t.includes("xbox") || t.includes("series x") || t.includes("series s")) return "xbox";
   if (t.includes("switch") || t.includes("nintendo")) return "nintendo";
 
   return "";
@@ -399,6 +409,11 @@ function parseConsoleFamily(text) {
     if (t.includes("digital")) return "ps5_digital";
     return "ps5_disc";
   }
+
+  if (t.includes("xbox") && t.includes("series x")) return "xbox_series_x";
+  if (t.includes("xbox") && t.includes("series s")) return "xbox_series_s";
+  if (t.includes("series x") && !t.includes("series s")) return "xbox_series_x";
+  if (t.includes("series s") && !t.includes("series x")) return "xbox_series_s";
 
   return "";
 }
@@ -480,6 +495,47 @@ function detectSwitchGeneration(text = "") {
   return "unknown";
 }
 
+function detectConsoleStorage(text = "", family = "") {
+  const t = normalizeConsoleText(text);
+  const fam = String(family || "");
+
+  if (hasAny(t, ["2tb", "2 tb"])) return "2tb";
+  if (hasAny(t, ["1tb", "1 tb", "1000gb", "1000 gb"])) return "1tb";
+  if (hasAny(t, ["825gb", "825 gb"])) return "825gb";
+  if (hasAny(t, ["512gb", "512 gb"])) return "512gb";
+  if (hasAny(t, ["64gb", "64 gb"])) return "64gb";
+  if (hasAny(t, ["32gb", "32 gb"])) return "32gb";
+
+  if (fam === "xbox_series_x" && t.includes("galaxy black")) return "2tb";
+  if (fam === "xbox_series_s" && t.includes("carbon black")) return "1tb";
+
+  return "unknown";
+}
+
+function isStorageMismatch(queryStorage = "", itemStorage = "", family = "") {
+  const q = String(queryStorage || "");
+  const i = String(itemStorage || "");
+  const fam = String(family || "");
+
+  if (!q || q === "unknown" || !i || i === "unknown") return false;
+
+  if (q === i) return false;
+
+  if (fam === "ps5_disc" || fam === "ps5_digital") {
+    return q !== i;
+  }
+
+  if (fam === "xbox_series_x") {
+    return q !== i;
+  }
+
+  if (fam === "xbox_series_s") {
+    return q !== i;
+  }
+
+  return q !== i;
+}
+
 function isConsoleCategory(item) {
   const categoryText = getCategoryText(item);
   return hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
@@ -510,7 +566,9 @@ function hasStrongConsoleSignals(text) {
     "cfi-",
     "cfi ",
     "1tb",
+    "2tb",
     "825gb",
+    "512gb",
     "with controller",
     "controller included",
     "boxed",
@@ -519,6 +577,8 @@ function hasStrongConsoleSignals(text) {
     "nintendo switch console",
     "switch oled console",
     "switch lite console",
+    "carbon black",
+    "galaxy black",
   ]);
 }
 
@@ -538,7 +598,9 @@ function looksLikeMainConsoleTitle(text) {
       "cfi-",
       "cfi ",
       "1tb",
+      "2tb",
       "825gb",
+      "512gb",
       "with controller",
       "controller included",
       "boxed",
@@ -547,6 +609,8 @@ function looksLikeMainConsoleTitle(text) {
       "nintendo switch console",
       "switch oled console",
       "switch lite console",
+      "carbon black",
+      "galaxy black",
     ])
   ) {
     return true;
@@ -564,14 +628,14 @@ function looksLikeMainConsoleTitle(text) {
 
   if (
     (t.startsWith("ps5 ") || t.startsWith("playstation5 ")) &&
-    hasAny(t, ["console", "edition", "standard", "digital", "disc", "slim", "cfi"])
+    hasAny(t, ["console", "edition", "standard", "digital", "disc", "slim", "cfi", "825gb", "1tb"])
   ) {
     return true;
   }
 
   if (
     (t.startsWith("xbox series x") || t.startsWith("xbox series s")) &&
-    hasAny(t, ["console", "1tb", "512gb", "boxed", "with controller"])
+    hasAny(t, ["console", "1tb", "2tb", "512gb", "boxed", "with controller", "carbon black", "galaxy black"])
   ) {
     return true;
   }
@@ -640,6 +704,11 @@ function isObviousAccessoryTitle(titleText) {
       "joy-con only",
       "joy cons only",
       "joy-cons only",
+      "storage expansion card",
+      "expansion card only",
+      "ssd only",
+      "nvme",
+      "memory card",
     ])
   ) {
     return true;
@@ -1168,6 +1237,8 @@ function detectPs5Variant(text = "") {
     "standard edition",
     "standard console",
     "bluray",
+    "disc drive",
+    "with disc drive",
     "cfi 1116a",
     "cfi 1216a",
     "cfi-1116a",
@@ -1231,6 +1302,7 @@ function detectConsoleType(text = "", family = "") {
     "disc edition",
     "bluray",
     "standard edition",
+    "disc drive",
     "cfi 1116a",
     "cfi 1216a",
     "cfi-1116a",
@@ -1277,6 +1349,8 @@ function matchesConsoleFamily(text, queryContext, item) {
   const consoleType = detectConsoleType(t, family);
   const titleText = getTitleText(item);
   const switchGeneration = detectSwitchGeneration(`${titleText} ${t}`);
+  const queryStorage = String(queryContext?.storagePreference || "");
+  const itemStorage = detectConsoleStorage(`${titleText} ${t}`, family);
 
   if (!family) return true;
 
@@ -1285,6 +1359,7 @@ function matchesConsoleFamily(text, queryContext, item) {
     if (isClearlyNonConsole(item, titleText || t)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
     if (consoleType === "digital") return false;
+    if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
     return true;
   }
 
@@ -1292,19 +1367,25 @@ function matchesConsoleFamily(text, queryContext, item) {
     if (!isPs5Like(t)) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
-    return consoleType === "digital";
+    if (consoleType !== "digital") return false;
+    if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
+    return true;
   }
 
   if (family === "xbox_series_x") {
     const hasSeriesX = t.includes("xbox series x") || t.includes("series x");
     const saysSeriesS = t.includes("xbox series s") || t.includes("series s");
-    return hasSeriesX && !saysSeriesS && !isHardAccessoryListing(titleText || t, item);
+    if (!hasSeriesX || saysSeriesS || isHardAccessoryListing(titleText || t, item)) return false;
+    if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
+    return true;
   }
 
   if (family === "xbox_series_s") {
     const hasSeriesS = t.includes("xbox series s") || t.includes("series s");
     const saysSeriesX = t.includes("xbox series x") || t.includes("series x");
-    return hasSeriesS && !saysSeriesX && !isHardAccessoryListing(titleText || t, item);
+    if (!hasSeriesS || saysSeriesX || isHardAccessoryListing(titleText || t, item)) return false;
+    if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
+    return true;
   }
 
   if (family === "switch_oled") {
@@ -1369,6 +1450,9 @@ function estimateBundleValueBonus(queryContext, bundleSignals, text) {
 function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
   const t = normalizeConsoleText(text);
   const flags = [];
+  const family = String(queryContext?.family || "");
+  const queryStorage = String(queryContext?.storagePreference || "");
+  const itemStorage = detectConsoleStorage(t, family);
 
   for (const [needle, flag] of MINOR_WARNING_TERMS) {
     if (t.includes(needle) && !flags.includes(flag)) {
@@ -1378,6 +1462,15 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
 
   if (queryContext?.wantsBundle && (!bundleSignals || bundleSignals.bundleType !== "bundle")) {
     flags.push("Bundle intent was searched, but extras look weak");
+  }
+
+  if (
+    queryStorage &&
+    queryStorage !== "unknown" &&
+    (!itemStorage || itemStorage === "unknown") &&
+    (family === "ps5_disc" || family === "ps5_digital" || family === "xbox_series_x" || family === "xbox_series_s")
+  ) {
+    flags.push("Storage not confirmed");
   }
 
   return flags;
@@ -1403,6 +1496,7 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 3;
     else if (flag === "Unknown Switch version") penalty += 7;
     else if (flag === "Generic Switch title") penalty += 5;
+    else if (flag === "Storage not confirmed") penalty += 4;
   }
 
   return penalty;
@@ -1426,6 +1520,25 @@ function getDiscDigitalPricingBias(queryContext, text) {
 
   if (consoleType === "disc") return 4;
   if (consoleType === "digital") return -3;
+  return 0;
+}
+
+function getStorageBias(queryContext, text) {
+  const family = String(queryContext?.family || "");
+  const queryStorage = String(queryContext?.storagePreference || "");
+  const itemStorage = detectConsoleStorage(text, family);
+
+  if (!queryStorage || queryStorage === "unknown") return 0;
+  if (itemStorage === queryStorage) return 6;
+  if (itemStorage === "unknown") return -2;
+
+  if (
+    (family === "xbox_series_s" || family === "xbox_series_x" || family === "ps5_disc" || family === "ps5_digital") &&
+    itemStorage !== queryStorage
+  ) {
+    return -14;
+  }
+
   return 0;
 }
 
@@ -1474,6 +1587,7 @@ function getMatchDebug(item, queryContext) {
   const bundleSignals = detectBundleSignals(text, queryContext.family || "");
   const switchGeneration = detectSwitchGeneration(`${titleText} ${text}`);
   const switchPricingBucket = getSwitchPricingBucket(item, queryContext);
+  const storageTier = detectConsoleStorage(`${titleText} ${text}`, queryContext.family || "");
 
   const isRealBundle =
     bundleSignals.bundleType === "bundle" ||
@@ -1500,6 +1614,17 @@ function getMatchDebug(item, queryContext) {
   if (queryContext.family === "switch_v2" && switchGeneration === "v1") {
     return { matched: false, reason: "switch_v1_blocked_for_v2_search" };
   }
+  if (
+    queryContext?.storagePreference &&
+    queryContext.storagePreference !== "unknown" &&
+    isStorageMismatch(queryContext.storagePreference, storageTier, queryContext.family || "")
+  ) {
+    return {
+      matched: false,
+      reason: "storage_mismatch",
+      storageTier,
+    };
+  }
   if (!familyMatch) {
     return {
       matched: false,
@@ -1507,6 +1632,7 @@ function getMatchDebug(item, queryContext) {
       consoleType: detectConsoleType(titleText || text, queryContext.family || ""),
       switchGeneration,
       switchPricingBucket,
+      storageTier,
     };
   }
   if (queryContext.wantsBundle && !isRealBundle) {
@@ -1521,6 +1647,7 @@ function getMatchDebug(item, queryContext) {
     consoleType: detectConsoleType(titleText || text, queryContext.family || ""),
     switchGeneration,
     switchPricingBucket,
+    storageTier,
   };
 }
 
@@ -1546,6 +1673,8 @@ function scoreConsoleCandidate(item, queryContext) {
   const bundleSignals = detectBundleSignals(text, queryContext.family || "");
   const bundleType = bundleSignals.bundleType;
   const consoleType = detectConsoleType(titleText || text, queryContext.family || "");
+  const storageTier = detectConsoleStorage(`${titleText} ${text}`, queryContext.family || "");
+  const queryStorage = String(queryContext?.storagePreference || "");
 
   let score = 0;
 
@@ -1580,8 +1709,26 @@ function scoreConsoleCandidate(item, queryContext) {
   if (bundleSignals.explicitBundleWords) score += 0.35;
 
   if (queryContext.family === "ps5_disc" && consoleType === "disc") score += 1.1;
-  if (queryContext.family === "ps5_disc" && consoleType === "unknown") score += 1.0;
+  if (queryContext.family === "ps5_disc" && consoleType === "unknown") score += 0.55;
   if (queryContext.family === "ps5_digital" && consoleType === "digital") score += 1.2;
+
+  if (
+    (queryContext.family === "xbox_series_x" || queryContext.family === "xbox_series_s") &&
+    queryStorage &&
+    queryStorage !== "unknown"
+  ) {
+    if (storageTier === queryStorage) score += 1.15;
+    else if (storageTier === "unknown") score -= 0.45;
+  }
+
+  if (
+    (queryContext.family === "ps5_disc" || queryContext.family === "ps5_digital") &&
+    queryStorage &&
+    queryStorage !== "unknown"
+  ) {
+    if (storageTier === queryStorage) score += 0.8;
+    else if (storageTier === "unknown") score -= 0.35;
+  }
 
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
 
@@ -1652,6 +1799,7 @@ function enrichConsoleCompPool(queryContext, items = []) {
 
       const warningPenalty = calculateWarningPenalty(warningFlags);
       const discDigitalBias = getDiscDigitalPricingBias(queryContext, text);
+      const storageBias = getStorageBias(queryContext, `${titleText} ${text}`);
       const matchDebug = getMatchDebug(item, queryContext);
 
       return {
@@ -1661,7 +1809,8 @@ function enrichConsoleCompPool(queryContext, items = []) {
           extractTotalPrice(item) -
             bundleValueBonus * 0.55 +
             Math.min(warningPenalty, 8) -
-            discDigitalBias
+            discDigitalBias -
+            storageBias
         ),
         score: scoreConsoleCandidate(item, queryContext),
         conditionState: classifyConsoleConditionState(text),
@@ -1671,9 +1820,11 @@ function enrichConsoleCompPool(queryContext, items = []) {
         warningFlags,
         warningPenalty,
         discDigitalBias,
+        storageBias,
         matchDebug,
         switchGeneration: detectSwitchGeneration(`${titleText} ${text}`),
         switchPricingBucket: getSwitchPricingBucket(item, queryContext),
+        storageTier: detectConsoleStorage(`${titleText} ${text}`, queryContext.family || ""),
       };
     })
     .filter((entry) => entry.total > 0 && entry.score > -5)
@@ -1903,6 +2054,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   if (exactMarket.length >= 5) confidence += 4;
   if (exactListings.length >= 3) confidence += 3;
   if (queryContext.family) confidence += 2;
+  if (queryContext?.storagePreference && queryContext.storagePreference !== "unknown") confidence += 1;
 
   if (
     pricingMode === "PS5 disc hard fallback" ||
@@ -1964,9 +2116,11 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
   const warningPenalty = calculateWarningPenalty(warningFlags);
   const discDigitalBias = getDiscDigitalPricingBias(queryContext, text);
+  const storageBias = getStorageBias(queryContext, `${titleText} ${text}`);
   const switchGeneration = detectSwitchGeneration(`${titleText} ${text}`);
 
-  let estimatedResale = Number(baseResale || 0) + bundleValueBonus * 0.75 + discDigitalBias;
+  let estimatedResale =
+    Number(baseResale || 0) + bundleValueBonus * 0.75 + discDigitalBias + storageBias;
 
   if (queryContext.family === "switch_v2") {
     if (switchGeneration === "v2") {
@@ -1993,9 +2147,11 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
     estimatedResale: roundMoney(estimatedResale),
     debug: {
       discDigitalBias,
+      storageBias,
       consoleType: detectConsoleType(getTitleText(item) || text, queryContext.family || ""),
       switchGeneration,
       switchPricingBucket: getSwitchPricingBucket(item, queryContext),
+      storageTier: detectConsoleStorage(`${titleText} ${text}`, queryContext.family || ""),
     },
   };
 }
@@ -2025,6 +2181,7 @@ export const consoleEngine = {
     const brand = detectConsoleBrand(normalizedQuery);
     const family = parseConsoleFamily(normalizedQuery);
     const allowDamaged = shouldAllowDamagedConsoles({ normalizedQuery });
+    const storagePreference = detectConsoleStorage(normalizedQuery, family);
 
     const wantsBundle =
       normalizedQuery.includes("bundle") ||
@@ -2045,6 +2202,7 @@ export const consoleEngine = {
       family,
       allowDamaged,
       wantsBundle,
+      storagePreference,
     };
   },
 
