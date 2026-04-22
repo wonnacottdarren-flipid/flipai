@@ -198,7 +198,6 @@ const NON_CONSOLE_TERMS = [
   "season pass",
   "wall art",
   "canvas print",
-
   "membership",
   "subscription",
   "nintendo switch online",
@@ -434,7 +433,7 @@ function isSwitchV2Signal(text = "") {
 function isSwitchV1Signal(text = "") {
   const t = normalizeConsoleText(text);
 
-  const basicV1Signals = [
+  const directSignals = [
     "switch v1",
     "nintendo switch v1",
     "unpatched switch",
@@ -456,11 +455,9 @@ function isSwitchV1Signal(text = "") {
     "v1 model",
   ];
 
-  if (hasAny(t, basicV1Signals)) {
-    return true;
-  }
+  if (hasAny(t, directSignals)) return true;
 
-  const hasHac001Base =
+  const hasBaseHac001 =
     t.includes("hac-001 ") ||
     t.includes("hac 001 ") ||
     t.includes("hac-001)") ||
@@ -470,9 +467,7 @@ function isSwitchV1Signal(text = "") {
     t.includes("model hac-001") ||
     t.includes("model hac 001");
 
-  if (hasHac001Base && !isSwitchV2Signal(t)) {
-    return true;
-  }
+  if (hasBaseHac001 && !isSwitchV2Signal(t)) return true;
 
   return false;
 }
@@ -482,7 +477,6 @@ function detectSwitchGeneration(text = "") {
 
   if (isSwitchV2Signal(t)) return "v2";
   if (isSwitchV1Signal(t)) return "v1";
-
   return "unknown";
 }
 
@@ -814,65 +808,57 @@ function isIncompleteSwitchConsole(text, queryContext = {}) {
 
   if (!family.startsWith("switch")) return false;
 
-  if (
-    hasAny(t, [
-      "tablet only",
-      "screen only",
-      "main unit only",
-      "console only",
-      "no dock",
-      "without dock",
-      "missing dock",
-      "dock not included",
-      "dock missing",
-      "no joy con",
-      "no joy-cons",
-      "no joy cons",
-      "without joy con",
-      "without joy-cons",
-      "without joy cons",
-      "missing joy con",
-      "missing joy-cons",
-      "missing joy cons",
-      "joy cons not included",
-      "joy-cons not included",
-      "joy con not included",
-      "hac-001 tablet only",
-      "tablet unit only",
-      "screen tablet only",
-      "main tablet only",
-      "switch tablet only",
-      "switch screen only",
-
-      "with docking station only",
-      "docking station only",
-      "console with docking station only",
-      "tablet and dock only",
-      "console and dock only",
-      "dock + tablet only",
-      "just tablet and dock",
-      "only tablet and dock",
-      "tablet with dock only",
-      "main unit and dock only",
-      "dock and charger only",
-      "tablet plus dock only",
-      "screen and dock only",
-
-      "switch only no joy cons",
-      "switch console only no joy cons",
-      "switch only without joy cons",
-      "switch without joy cons",
-      "tablet + dock no joy cons",
-      "no joy cons included",
-      "no joy-con included",
-      "joy cons missing",
-      "joy-cons missing",
-    ])
-  ) {
-    return true;
-  }
-
-  return false;
+  return hasAny(t, [
+    "tablet only",
+    "screen only",
+    "main unit only",
+    "console only",
+    "no dock",
+    "without dock",
+    "missing dock",
+    "dock not included",
+    "dock missing",
+    "no joy con",
+    "no joy-cons",
+    "no joy cons",
+    "without joy con",
+    "without joy-cons",
+    "without joy cons",
+    "missing joy con",
+    "missing joy-cons",
+    "missing joy cons",
+    "joy cons not included",
+    "joy-cons not included",
+    "joy con not included",
+    "hac-001 tablet only",
+    "tablet unit only",
+    "screen tablet only",
+    "main tablet only",
+    "switch tablet only",
+    "switch screen only",
+    "with docking station only",
+    "docking station only",
+    "console with docking station only",
+    "tablet and dock only",
+    "console and dock only",
+    "dock + tablet only",
+    "just tablet and dock",
+    "only tablet and dock",
+    "tablet with dock only",
+    "main unit and dock only",
+    "dock and charger only",
+    "tablet plus dock only",
+    "screen and dock only",
+    "switch only no joy cons",
+    "switch console only no joy cons",
+    "switch only without joy cons",
+    "switch without joy cons",
+    "tablet + dock no joy cons",
+    "no joy cons included",
+    "no joy-con included",
+    "joy cons missing",
+    "joy-cons missing",
+  ]);
 }
 
 function isSeverelyBadConsole(text, queryContext = {}) {
@@ -1079,9 +1065,10 @@ function detectBundleSignals(text, family) {
       "official case",
       "carrying case",
       "case included",
+      "dock included",
+      "with dock",
+      "case",
     ]) ? 1 : 0;
-
-  const hasDockAccessory = hasAny(t, ["with dock", "dock included"]) ? 1 : 0;
 
   const explicitBundleWords = hasAny(t, [
     "bundle",
@@ -1114,8 +1101,7 @@ function detectBundleSignals(text, family) {
     explicitBundleWords ||
     extraControllerCount > 0 ||
     includedGamesCount > 0 ||
-    hasAccessories ||
-    hasDockAccessory
+    hasAccessories
   ) {
     bundleType = "bundle";
   }
@@ -1125,7 +1111,7 @@ function detectBundleSignals(text, family) {
     extraControllerCount,
     includedGamesCount,
     hasBox: Boolean(hasBox),
-    hasAccessories: Boolean(hasAccessories || hasDockAccessory),
+    hasAccessories: Boolean(hasAccessories),
     explicitBundleWords: Boolean(explicitBundleWords),
   };
 }
@@ -1145,19 +1131,9 @@ function estimateConsoleRepairCost(queryContext, conditionState, text) {
     if (hasAny(t, ["doesnt read discs", "doesn't read discs", "wont read discs", "won't read discs"])) {
       return 25;
     }
-
-    if (hasAny(t, ["hdmi issue"])) {
-      return 25;
-    }
-
-    if (hasAny(t, ["overheating"])) {
-      return 20;
-    }
-
-    if (hasAny(t, ["missing thumbstick"])) {
-      return 12;
-    }
-
+    if (hasAny(t, ["hdmi issue"])) return 25;
+    if (hasAny(t, ["overheating"])) return 20;
+    if (hasAny(t, ["missing thumbstick"])) return 12;
     return 10;
   }
 
@@ -1425,8 +1401,8 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "HDMI issue mentioned") penalty += 11;
     else if (flag === "Overheating risk mentioned") penalty += 10;
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 3;
-    else if (flag === "Unknown Switch version") penalty += 6;
-    else if (flag === "Generic Switch title") penalty += 4;
+    else if (flag === "Unknown Switch version") penalty += 5;
+    else if (flag === "Generic Switch title") penalty += 3;
   }
 
   return penalty;
@@ -1477,14 +1453,14 @@ function getFamilyLowBandFloor(family = "") {
 
 function getSwitchBucketHardFloor(bucket = "") {
   if (bucket === "switch_v2_confirmed") return 165;
-  if (bucket === "switch_unknown_standard") return 150;
+  if (bucket === "switch_unknown_standard") return 148;
   if (bucket === "switch_v1_confirmed") return 138;
   return 0;
 }
 
 function getSwitchBucketLowBandFloor(bucket = "") {
   if (bucket === "switch_v2_confirmed") return 155;
-  if (bucket === "switch_unknown_standard") return 142;
+  if (bucket === "switch_unknown_standard") return 140;
   if (bucket === "switch_v1_confirmed") return 128;
   return 0;
 }
@@ -1596,12 +1572,12 @@ function scoreConsoleCandidate(item, queryContext) {
 
   if (bundleType === "bundle") score += 1.25;
   if (bundleType === "boxed") score += 0.45;
-  if (bundleType === "console_only") score -= 0.2;
+  if (bundleType === "console_only") score -= 0.25;
 
   score += Math.min(bundleSignals.extraControllerCount, 2) * 0.55;
   score += Math.min(bundleSignals.includedGamesCount, 4) * 0.2;
-  if (bundleSignals.hasAccessories) score += 0.2;
-  if (bundleSignals.explicitBundleWords) score += 0.3;
+  if (bundleSignals.hasAccessories) score += 0.25;
+  if (bundleSignals.explicitBundleWords) score += 0.35;
 
   if (queryContext.family === "ps5_disc" && consoleType === "disc") score += 1.1;
   if (queryContext.family === "ps5_disc" && consoleType === "unknown") score += 1.0;
@@ -1610,16 +1586,17 @@ function scoreConsoleCandidate(item, queryContext) {
   const warningFlags = buildConsoleWarningFlags(text, queryContext, bundleSignals);
 
   if (queryContext.family === "switch_v2") {
-    if (switchGeneration === "v2") score += 1.15;
+    if (switchGeneration === "v2") score += 1.0;
+
     if (switchGeneration === "unknown") {
-      score -= 1.65;
+      score -= 0.9;
       if (!warningFlags.includes("Unknown Switch version")) {
         warningFlags.push("Unknown Switch version");
       }
     }
 
     if (isGenericUnknownSwitchTitle(titleText) && switchGeneration === "unknown") {
-      score -= 1.35;
+      score -= 0.6;
       if (!warningFlags.includes("Generic Switch title")) {
         warningFlags.push("Generic Switch title");
       }
@@ -1627,30 +1604,17 @@ function scoreConsoleCandidate(item, queryContext) {
   }
 
   const warningPenalty = calculateWarningPenalty(warningFlags);
-  score -= warningPenalty * 0.045;
+  score -= warningPenalty * 0.04;
 
   if (queryContext.family === "switch_lite") {
-    if (hasAny(text, ["heavily used", "lot of wear", "well used"])) {
-      score -= 1.15;
-    }
-
-    if (hasAny(text, ["scratch", "scratches", "scratched", "scratched up", "heavy scratches"])) {
-      score -= 0.65;
-    }
-
-    if (hasAny(text, ["heavy wear", "cosmetic wear", "cosmetic marks", "worn"])) {
-      score -= 0.55;
-    }
+    if (hasAny(text, ["heavily used", "lot of wear", "well used"])) score -= 1.15;
+    if (hasAny(text, ["scratch", "scratches", "scratched", "scratched up", "heavy scratches"])) score -= 0.65;
+    if (hasAny(text, ["heavy wear", "cosmetic wear", "cosmetic marks", "worn"])) score -= 0.55;
   }
 
   if (queryContext.family === "switch_oled") {
-    if (hasAny(text, ["heavily used", "lot of wear"])) {
-      score -= 0.75;
-    }
-
-    if (hasAny(text, ["scratch", "scratches", "scratched", "scratched up", "heavy scratches"])) {
-      score -= 0.4;
-    }
+    if (hasAny(text, ["heavily used", "lot of wear"])) score -= 0.75;
+    if (hasAny(text, ["scratch", "scratches", "scratched", "scratched up", "heavy scratches"])) score -= 0.4;
   }
 
   return score;
@@ -1763,62 +1727,44 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
     );
 
     const v2MarketTotals = removePriceOutliers(
-      v2Market
-        .slice(0, 24)
-        .map((entry) => entry.adjustedTotal)
-        .filter((value) => value > 0)
+      v2Market.slice(0, 24).map((entry) => entry.adjustedTotal).filter((value) => value > 0)
     );
 
     const unknownMarketTotals = removePriceOutliers(
-      unknownMarket
-        .slice(0, 24)
-        .map((entry) => entry.adjustedTotal)
-        .filter((value) => value > 0)
+      unknownMarket.slice(0, 24).map((entry) => entry.adjustedTotal).filter((value) => value > 0)
     );
 
     const v2ListingTotals = removePriceOutliers(
-      v2Listings
-        .slice(0, 16)
-        .map((entry) => entry.adjustedTotal)
-        .filter((value) => value > 0)
+      v2Listings.slice(0, 16).map((entry) => entry.adjustedTotal).filter((value) => value > 0)
     );
 
     const unknownListingTotals = removePriceOutliers(
-      unknownListings
-        .slice(0, 16)
-        .map((entry) => entry.adjustedTotal)
-        .filter((value) => value > 0)
+      unknownListings.slice(0, 16).map((entry) => entry.adjustedTotal).filter((value) => value > 0)
     );
 
     if (v2MarketTotals.length >= 3) {
       marketTotals = v2MarketTotals;
       listingTotals = v2ListingTotals.length ? v2ListingTotals : unknownListingTotals;
+
       baseline =
         median(v2MarketTotals) ||
         percentile(v2MarketTotals, 0.35) ||
         median(v2ListingTotals) ||
         0;
 
-      baseline = Math.max(
-        baseline,
-        getSwitchBucketLowBandFloor("switch_v2_confirmed")
-      );
-
+      baseline = Math.max(baseline, getSwitchBucketLowBandFloor("switch_v2_confirmed"));
       pricingMode = "Switch V2 confirmed median";
     } else if (unknownMarketTotals.length >= 3) {
       marketTotals = unknownMarketTotals;
       listingTotals = unknownListingTotals.length ? unknownListingTotals : v2ListingTotals;
+
       baseline =
         median(unknownMarketTotals) ||
         percentile(unknownMarketTotals, 0.35) ||
         median(unknownListingTotals) ||
         0;
 
-      baseline = Math.max(
-        baseline,
-        getSwitchBucketLowBandFloor("switch_unknown_standard")
-      );
-
+      baseline = Math.max(baseline, getSwitchBucketLowBandFloor("switch_unknown_standard"));
       pricingMode = "Switch unknown-version median";
     } else {
       const fallbackCombined = removePriceOutliers(
@@ -1838,11 +1784,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
         percentile(fallbackCombined, 0.35) ||
         0;
 
-      baseline = Math.max(
-        baseline,
-        getSwitchBucketLowBandFloor("switch_unknown_standard")
-      );
-
+      baseline = Math.max(baseline, getSwitchBucketLowBandFloor("switch_unknown_standard"));
       pricingMode = "Switch mixed fallback";
     }
   } else {
@@ -1933,8 +1875,6 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   } else if (queryContext.family === "switch_v2") {
     if (pricingMode === "Switch V2 confirmed median") {
       baseline = roundMoney(Math.max(baseline, getSwitchBucketHardFloor("switch_v2_confirmed")));
-    } else if (pricingMode === "Switch unknown-version median") {
-      baseline = roundMoney(Math.max(baseline, getSwitchBucketHardFloor("switch_unknown_standard")));
     } else {
       baseline = roundMoney(Math.max(baseline, getSwitchBucketHardFloor("switch_unknown_standard")));
     }
@@ -1963,7 +1903,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   }
 
   if (queryContext.family === "switch_v2" && pricingMode !== "Switch V2 confirmed median") {
-    confidence = Math.min(confidence, 76);
+    confidence = Math.min(confidence, 74);
   }
 
   confidence = Math.min(92, confidence);
@@ -1995,13 +1935,9 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
       baseline,
       multiplier: conservativeMultiplier,
       switchMarketV2Count: marketConditionPool.filter((entry) => entry.switchPricingBucket === "switch_v2_confirmed").length,
-      switchMarketUnknownCount: marketConditionPool.filter(
-        (entry) => entry.switchPricingBucket === "switch_unknown_standard"
-      ).length,
+      switchMarketUnknownCount: marketConditionPool.filter((entry) => entry.switchPricingBucket === "switch_unknown_standard").length,
       switchListingV2Count: listingConditionPool.filter((entry) => entry.switchPricingBucket === "switch_v2_confirmed").length,
-      switchListingUnknownCount: listingConditionPool.filter(
-        (entry) => entry.switchPricingBucket === "switch_unknown_standard"
-      ).length,
+      switchListingUnknownCount: listingConditionPool.filter((entry) => entry.switchPricingBucket === "switch_unknown_standard").length,
     },
   };
 }
@@ -2020,12 +1956,12 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
 
   if (queryContext.family === "switch_v2") {
     if (switchGeneration === "v2") {
-      estimatedResale += 4;
+      estimatedResale += 5;
     } else if (switchGeneration === "unknown") {
-      estimatedResale -= 12;
+      estimatedResale -= 7;
 
       if (isGenericUnknownSwitchTitle(titleText)) {
-        estimatedResale -= 6;
+        estimatedResale -= 4;
       }
     }
   }
@@ -2097,29 +2033,12 @@ export const consoleEngine = {
   buildSearchQuery(query = "") {
     const ctx = this.classifyQuery(query);
 
-    if (ctx.family === "ps5_disc" || ctx.family === "ps5_digital") {
-      return "ps5";
-    }
-
-    if (ctx.family === "xbox_series_x") {
-      return "xbox series x";
-    }
-
-    if (ctx.family === "xbox_series_s") {
-      return "xbox series s";
-    }
-
-    if (ctx.family === "switch_oled") {
-      return "nintendo switch oled";
-    }
-
-    if (ctx.family === "switch_lite") {
-      return "nintendo switch lite";
-    }
-
-    if (ctx.family === "switch_v2") {
-      return "nintendo switch";
-    }
+    if (ctx.family === "ps5_disc" || ctx.family === "ps5_digital") return "ps5";
+    if (ctx.family === "xbox_series_x") return "xbox series x";
+    if (ctx.family === "xbox_series_s") return "xbox series s";
+    if (ctx.family === "switch_oled") return "nintendo switch oled";
+    if (ctx.family === "switch_lite") return "nintendo switch lite";
+    if (ctx.family === "switch_v2") return "nintendo switch";
 
     return String(query || "").trim();
   },
