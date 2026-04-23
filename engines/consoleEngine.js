@@ -375,6 +375,69 @@ const XBOX_CONSOLE_INTENT_TERMS = [
   "pad not included",
 ];
 
+const SWITCH_CONSOLE_INTENT_TERMS = [
+  "console",
+  "tablet",
+  "32gb",
+  "64gb",
+  "boxed",
+  "box included",
+  "original box",
+  "complete in box",
+  "no box",
+  "unboxed",
+  "with joy cons",
+  "with joy-con",
+  "with joy-cons",
+  "joy cons included",
+  "joy-con included",
+  "joy-cons included",
+  "dock included",
+  "with dock",
+  "official dock",
+  "charger included",
+  "bundle",
+  "system",
+  "oled model",
+  "switch oled",
+  "switch lite",
+  "nintendo switch console",
+  "switch console",
+  "hac-001",
+  "hac 001",
+  "hac-001(-01)",
+  "hac 001(-01)",
+  "hadh-001",
+  "hadh 001",
+  "hdh-001",
+  "hdh 001",
+];
+
+const SWITCH_GAME_TERMS = [
+  "mario kart",
+  "mario wonder",
+  "zelda",
+  "pokemon",
+  "animal crossing",
+  "splatoon",
+  "metroid",
+  "kirby",
+  "smash bros",
+  "super smash",
+  "luigis mansion",
+  "luigi's mansion",
+  "minecraft",
+  "fifa",
+  "fc 24",
+  "fc24",
+  "fc 25",
+  "fc25",
+  "pegi",
+  "game card",
+  "cartridge",
+  "download code",
+];
+
 const PS5_DISC_CUSTOM_STORAGE_TERMS = [
   "upgraded ssd",
   "ssd upgrade",
@@ -688,126 +751,79 @@ function hasStrictXboxConsoleTitleSignals(text = "") {
   ]);
 }
 
-function isStrictXboxMainConsoleListing(item, text = "", family = "") {
-  const combinedText = normalizeConsoleText(text);
-  const titleText = getTitleText(item);
-  const categoryText = getCategoryText(item);
-  const fam = String(family || parseConsoleFamily(`${titleText} ${combinedText}`));
+function isSwitchOledSignal(text = "") {
+  const t = normalizeConsoleText(text);
+  return hasAny(t, ["switch oled", "nintendo switch oled", "oled model"]);
+}
 
-  if (!(fam === "xbox_series_x" || fam === "xbox_series_s")) {
-    return false;
-  }
+function isSwitchLiteSignal(text = "") {
+  const t = normalizeConsoleText(text);
+  return hasAny(t, ["switch lite", "nintendo switch lite"]);
+}
 
-  if (isXboxOneFamilySignal(`${titleText} ${combinedText}`)) return false;
-  if (isXboxGameListing(item, `${titleText} ${combinedText}`)) return false;
-  if (isHardAccessoryListing(`${titleText} ${combinedText}`, item)) return false;
-  if (isDigitalCodeOrMembership(item, `${titleText} ${combinedText}`)) return false;
+function isSwitchFamilySignal(text = "") {
+  const t = normalizeConsoleText(text);
+  return t.includes("switch") || t.includes("nintendo switch");
+}
 
-  const hasCorrectFamilySignal =
-    fam === "xbox_series_x"
-      ? isXboxSeriesXSignal(`${titleText} ${combinedText}`)
-      : isXboxSeriesSSignal(`${titleText} ${combinedText}`);
+function hasSwitchConsoleIntent(text = "", family = "") {
+  const t = normalizeConsoleText(text);
+  const fam = String(family || "");
 
-  if (!hasCorrectFamilySignal) return false;
+  if (!isSwitchFamilySignal(t)) return false;
 
-  const titleHasStrictSignals = hasStrictXboxConsoleTitleSignals(titleText);
-  const combinedHasStrictSignals = hasStrictXboxConsoleTitleSignals(`${titleText} ${combinedText}`);
-  const inConsoleCategory = hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
+  if (fam === "switch_oled" && !isSwitchOledSignal(t)) return false;
+  if (fam === "switch_lite" && !isSwitchLiteSignal(t)) return false;
+  if (fam === "switch_v2" && (isSwitchOledSignal(t) || isSwitchLiteSignal(t))) return false;
 
-  if (!titleHasStrictSignals && !(inConsoleCategory && combinedHasStrictSignals)) {
-    return false;
-  }
+  return hasAny(t, SWITCH_CONSOLE_INTENT_TERMS);
+}
 
-  return true;
+function hasStrictSwitchConsoleTitleSignals(text = "") {
+  const t = normalizeConsoleText(text);
+
+  return hasAny(t, [
+    "console",
+    "tablet",
+    "32gb",
+    "64gb",
+    "boxed",
+    "box included",
+    "original box",
+    "complete in box",
+    "no box",
+    "unboxed",
+    "with joy cons",
+    "with joy-con",
+    "with joy-cons",
+    "joy cons included",
+    "joy-con included",
+    "joy-cons included",
+    "dock included",
+    "with dock",
+    "official dock",
+    "charger included",
+    "bundle",
+    "system",
+    "oled model",
+    "switch oled",
+    "switch lite",
+    "nintendo switch console",
+    "switch console",
+    "hac-001",
+    "hac 001",
+    "hac-001(-01)",
+    "hac 001(-01)",
+    "hadh-001",
+    "hadh 001",
+    "hdh-001",
+    "hdh 001",
+  ]);
 }
 
 function isVideoGamesCategoryOnly(item) {
   const categoryText = getCategoryText(item);
   return hasAny(categoryText, ["video games"]) && !hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
-}
-
-function hasBaseConsoleIntent(text = "", family = "") {
-  const t = normalizeConsoleText(text);
-  const fam = String(family || "");
-
-  if (fam === "xbox_series_x" || fam === "xbox_series_s") {
-    return hasXboxConsoleIntent(t);
-  }
-
-  if (fam === "ps5_disc" || fam === "ps5_digital") {
-    return hasAny(t, [
-      "console",
-      "ps5 console",
-      "playstation5 console",
-      "disc edition",
-      "digital edition",
-      "standard edition",
-      "standard console",
-      "slim",
-      "cfi-",
-      "cfi ",
-      "1tb",
-      "2tb",
-      "825gb",
-      "512gb",
-      "with controller",
-      "controller included",
-      "boxed",
-    ]);
-  }
-
-  if (fam.startsWith("switch")) {
-    return hasAny(t, [
-      "console",
-      "nintendo switch console",
-      "switch oled console",
-      "switch lite console",
-      "32gb",
-      "64gb",
-      "hac-",
-      "hadh-",
-      "hdk-",
-      "joy con",
-      "joy-cons",
-      "joy cons",
-      "boxed",
-      "with dock",
-      "dock included",
-    ]);
-  }
-
-  return hasAny(t, [
-    "console",
-    "system",
-    "home console",
-    "video console",
-    "boxed",
-    "with controller",
-    "controller included",
-    "1tb",
-    "2tb",
-    "512gb",
-    "825gb",
-  ]);
-}
-
-function failsSharedConsoleGate(item, text = "", queryContext = {}) {
-  const combined = normalizeConsoleText(text);
-  const family = String(queryContext?.family || parseConsoleFamily(combined));
-
-  if (family === "xbox_series_x" || family === "xbox_series_s") {
-    return !isStrictXboxMainConsoleListing(item, combined, family);
-  }
-
-  if (isVideoGamesCategoryOnly(item) && !hasBaseConsoleIntent(combined, family)) {
-    return true;
-  }
-
-  if (isAccessoryCategory(item) && !hasBaseConsoleIntent(combined, family)) {
-    return true;
-  }
-
-  return false;
 }
 
 function isXboxGameListing(item, text = "") {
@@ -850,6 +866,98 @@ function isXboxGameListing(item, text = "") {
   return false;
 }
 
+function isSwitchGameListing(item, text = "", family = "") {
+  const t = normalizeConsoleText(text);
+  const titleText = getTitleText(item);
+  const categoryText = getCategoryText(item);
+  const fam = String(family || parseConsoleFamily(`${titleText} ${t}`));
+
+  if (!(fam === "switch_oled" || fam === "switch_lite" || fam === "switch_v2")) {
+    return false;
+  }
+
+  if (hasSwitchConsoleIntent(`${titleText} ${t}`, fam)) return false;
+
+  if (hasAny(categoryText, ["video games"]) && !hasAny(categoryText, ["video game consoles"])) {
+    return true;
+  }
+
+  if (hasAny(titleText, SWITCH_GAME_TERMS) || hasAny(t, SWITCH_GAME_TERMS)) {
+    return true;
+  }
+
+  if (
+    hasAny(t, [
+      "game card",
+      "cartridge",
+      "download code",
+      "digital download",
+      "pegi",
+      "(nintendo switch",
+      "nintendo switch)",
+      "switch game",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function hasBaseConsoleIntent(text = "", family = "") {
+  const t = normalizeConsoleText(text);
+  const fam = String(family || "");
+
+  if (fam === "xbox_series_x" || fam === "xbox_series_s") {
+    return hasXboxConsoleIntent(t);
+  }
+
+  if (fam === "switch_oled" || fam === "switch_lite" || fam === "switch_v2") {
+    return hasSwitchConsoleIntent(t, fam);
+  }
+
+  if (fam === "ps5_disc" || fam === "ps5_digital") {
+    return hasAny(t, [
+      "console",
+      "ps5 console",
+      "playstation5 console",
+      "disc edition",
+      "digital edition",
+      "standard edition",
+      "standard console",
+      "slim",
+      "cfi-",
+      "cfi ",
+      "1tb",
+      "2tb",
+      "825gb",
+      "512gb",
+      "with controller",
+      "controller included",
+      "boxed",
+    ]);
+  }
+
+  return hasAny(t, [
+    "console",
+    "system",
+    "home console",
+    "video console",
+    "boxed",
+    "with controller",
+    "controller included",
+    "1tb",
+    "2tb",
+    "512gb",
+    "825gb",
+    "32gb",
+    "64gb",
+    "dock included",
+    "with dock",
+    "joy cons included",
+  ]);
+}
+
 function parseConsoleFamily(text) {
   const t = normalizeConsoleText(text);
 
@@ -868,6 +976,9 @@ function parseConsoleFamily(text) {
 
   if (isXboxSeriesXSignal(t)) return "xbox_series_x";
   if (isXboxSeriesSSignal(t)) return "xbox_series_s";
+  if (isSwitchOledSignal(t)) return "switch_oled";
+  if (isSwitchLiteSignal(t)) return "switch_lite";
+  if (isSwitchFamilySignal(t)) return "switch_v2";
 
   return "";
 }
@@ -1096,6 +1207,11 @@ function hasStrongConsoleSignals(text) {
     "switch lite console",
     "carbon black",
     "galaxy black",
+    "32gb",
+    "64gb",
+    "dock included",
+    "with dock",
+    "joy cons included",
   ]);
 }
 
@@ -1128,6 +1244,11 @@ function looksLikeMainConsoleTitle(text) {
       "switch lite console",
       "carbon black",
       "galaxy black",
+      "32gb",
+      "64gb",
+      "dock included",
+      "with dock",
+      "joy cons included",
     ])
   ) {
     return true;
@@ -1140,7 +1261,9 @@ function looksLikeMainConsoleTitle(text) {
     t === "xbox series s" ||
     t === "microsoft xbox series x" ||
     t === "microsoft xbox series s" ||
-    t === "nintendo switch"
+    t === "nintendo switch" ||
+    t === "switch oled" ||
+    t === "switch lite"
   ) {
     return true;
   }
@@ -1165,7 +1288,7 @@ function looksLikeMainConsoleTitle(text) {
 
   if (
     (t.startsWith("nintendo switch") || t.startsWith("switch oled") || t.startsWith("switch lite")) &&
-    hasAny(t, ["console", "32gb", "64gb", "hac-", "hadh-", "hdk-", "boxed", "joy con", "joy-cons", "joy cons"])
+    hasAny(t, ["console", "32gb", "64gb", "hac-", "hadh-", "hdh-", "hdk-", "boxed", "joy con", "joy-cons", "joy cons", "dock"])
   ) {
     return true;
   }
@@ -1361,6 +1484,94 @@ function isDigitalCodeOrMembership(item, text) {
   return false;
 }
 
+function isStrictXboxMainConsoleListing(item, text = "", family = "") {
+  const combinedText = normalizeConsoleText(text);
+  const titleText = getTitleText(item);
+  const categoryText = getCategoryText(item);
+  const fam = String(family || parseConsoleFamily(`${titleText} ${combinedText}`));
+
+  if (!(fam === "xbox_series_x" || fam === "xbox_series_s")) {
+    return false;
+  }
+
+  if (isXboxOneFamilySignal(`${titleText} ${combinedText}`)) return false;
+  if (isXboxGameListing(item, `${titleText} ${combinedText}`)) return false;
+  if (isHardAccessoryListing(`${titleText} ${combinedText}`, item)) return false;
+  if (isDigitalCodeOrMembership(item, `${titleText} ${combinedText}`)) return false;
+
+  const hasCorrectFamilySignal =
+    fam === "xbox_series_x"
+      ? isXboxSeriesXSignal(`${titleText} ${combinedText}`)
+      : isXboxSeriesSSignal(`${titleText} ${combinedText}`);
+
+  if (!hasCorrectFamilySignal) return false;
+
+  const titleHasStrictSignals = hasStrictXboxConsoleTitleSignals(titleText);
+  const combinedHasStrictSignals = hasStrictXboxConsoleTitleSignals(`${titleText} ${combinedText}`);
+  const inConsoleCategory = hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
+
+  if (!titleHasStrictSignals && !(inConsoleCategory && combinedHasStrictSignals)) {
+    return false;
+  }
+
+  return true;
+}
+
+function isStrictSwitchMainConsoleListing(item, text = "", family = "") {
+  const combinedText = normalizeConsoleText(text);
+  const titleText = getTitleText(item);
+  const categoryText = getCategoryText(item);
+  const fam = String(family || parseConsoleFamily(`${titleText} ${combinedText}`));
+
+  if (!(fam === "switch_oled" || fam === "switch_lite" || fam === "switch_v2")) {
+    return false;
+  }
+
+  if (!isSwitchFamilySignal(`${titleText} ${combinedText}`)) return false;
+  if (isSwitchGameListing(item, `${titleText} ${combinedText}`, fam)) return false;
+  if (isHardAccessoryListing(`${titleText} ${combinedText}`, item)) return false;
+  if (isDigitalCodeOrMembership(item, `${titleText} ${combinedText}`)) return false;
+
+  if (fam === "switch_oled" && !isSwitchOledSignal(`${titleText} ${combinedText}`)) return false;
+  if (fam === "switch_lite" && !isSwitchLiteSignal(`${titleText} ${combinedText}`)) return false;
+  if (fam === "switch_v2" && (isSwitchOledSignal(`${titleText} ${combinedText}`) || isSwitchLiteSignal(`${titleText} ${combinedText}`))) {
+    return false;
+  }
+
+  const titleHasStrictSignals = hasStrictSwitchConsoleTitleSignals(titleText);
+  const combinedHasStrictSignals = hasStrictSwitchConsoleTitleSignals(`${titleText} ${combinedText}`);
+  const inConsoleCategory = hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
+
+  if (!titleHasStrictSignals && !(inConsoleCategory && combinedHasStrictSignals)) {
+    return false;
+  }
+
+  return true;
+}
+
+function failsSharedConsoleGate(item, text = "", queryContext = {}) {
+  const combined = normalizeConsoleText(text);
+  const family = String(queryContext?.family || parseConsoleFamily(combined));
+
+  if (family === "xbox_series_x" || family === "xbox_series_s") {
+    return !isStrictXboxMainConsoleListing(item, combined, family);
+  }
+
+  if (family === "switch_oled" || family === "switch_lite" || family === "switch_v2") {
+    return !isStrictSwitchMainConsoleListing(item, combined, family);
+  }
+
+  if (isVideoGamesCategoryOnly(item) && !hasBaseConsoleIntent(combined, family)) {
+    return true;
+  }
+
+  if (isAccessoryCategory(item) && !hasBaseConsoleIntent(combined, family)) {
+    return true;
+  }
+
+  return false;
+}
+
 function isClearlyNonConsole(item, text) {
   const combinedText = normalizeConsoleText(text);
   const titleText = getTitleText(item);
@@ -1400,6 +1611,10 @@ function isClearlyNonConsole(item, text) {
   }
 
   if (isXboxGameListing(item, `${titleText} ${combinedText}`)) {
+    return true;
+  }
+
+  if (isSwitchGameListing(item, `${titleText} ${combinedText}`)) {
     return true;
   }
 
@@ -2081,6 +2296,7 @@ function matchesConsoleFamily(text, queryContext, item) {
   const queryStorage = String(queryContext?.storagePreference || "");
   const itemStorage = detectConsoleStorage(`${titleText} ${t}`, family);
   const xboxText = `${titleText} ${t}`;
+  const switchText = `${titleText} ${t}`;
 
   if (isHardNonConsoleCategory(item)) return false;
   if (failsSharedConsoleGate(item, `${titleText} ${t}`, queryContext)) return false;
@@ -2132,14 +2348,20 @@ function matchesConsoleFamily(text, queryContext, item) {
   }
 
   if (family === "switch_oled") {
+    if (!isStrictSwitchMainConsoleListing(item, switchText, family)) return false;
     if (isIncompleteSwitchConsole(t, queryContext)) return false;
-    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
-    return t.includes("switch") && t.includes("oled") && !isHardAccessoryListing(titleText || t, item);
+    if (!isConsoleCategory(item) && !hasSwitchConsoleIntent(switchText, family)) return false;
+    if (isSwitchGameListing(item, switchText, family)) return false;
+    if (isHardAccessoryListing(titleText || t, item)) return false;
+    return isSwitchOledSignal(switchText);
   }
 
   if (family === "switch_lite") {
-    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
-    return t.includes("switch") && t.includes("lite") && !isHardAccessoryListing(titleText || t, item);
+    if (!isStrictSwitchMainConsoleListing(item, switchText, family)) return false;
+    if (!isConsoleCategory(item) && !hasSwitchConsoleIntent(switchText, family)) return false;
+    if (isSwitchGameListing(item, switchText, family)) return false;
+    if (isHardAccessoryListing(titleText || t, item)) return false;
+    return isSwitchLiteSignal(switchText);
   }
 
   if (family === "switch_v2") {
@@ -2147,9 +2369,11 @@ function matchesConsoleFamily(text, queryContext, item) {
     const saysOled = t.includes("oled");
     const saysLite = t.includes("lite");
 
+    if (!isStrictSwitchMainConsoleListing(item, switchText, family)) return false;
     if (isIncompleteSwitchConsole(t, queryContext)) return false;
     if (switchGeneration === "v1") return false;
-    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
+    if (!isConsoleCategory(item) && !hasSwitchConsoleIntent(switchText, family)) return false;
+    if (isSwitchGameListing(item, switchText, family)) return false;
 
     return hasSwitch && !saysOled && !saysLite && !isHardAccessoryListing(titleText || t, item);
   }
@@ -2797,7 +3021,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
       pricingMode = "Switch V2 confirmed blended median";
     } else if (unknownMarketTotals.length >= 3) {
       marketTotals = unknownMarketTotals;
-      listingTotals = unknownListingsTotals.length ? unknownListingTotals : v2ListingTotals;
+      listingTotals = unknownListingTotals.length ? unknownListingTotals : v2ListingTotals;
 
       baseline =
         median(unknownMarketTotals) ||
@@ -3253,15 +3477,31 @@ export const consoleEngine = {
     }
 
     if (ctx.family === "switch_oled") {
-      return ["nintendo switch oled", "switch oled"];
+      return [
+        "nintendo switch oled",
+        "switch oled",
+        "nintendo switch oled console",
+        "switch oled console",
+      ];
     }
 
     if (ctx.family === "switch_lite") {
-      return ["nintendo switch lite", "switch lite"];
+      return [
+        "nintendo switch lite",
+        "switch lite",
+        "nintendo switch lite console",
+        "switch lite console",
+      ];
     }
 
     if (ctx.family === "switch_v2") {
-      return ["nintendo switch", "switch console"];
+      return [
+        "nintendo switch",
+        "nintendo switch console",
+        "switch console",
+        "nintendo switch v2",
+        "red box nintendo switch",
+      ];
     }
 
     return [rawQuery].filter(Boolean);
