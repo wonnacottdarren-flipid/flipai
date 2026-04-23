@@ -1230,6 +1230,52 @@ function hasPs5DiscOddSlimVariant(text = "") {
   return false;
 }
 
+function hasPs5DiscConfirmedSpec(text = "") {
+  const t = normalizeConsoleText(text);
+  if (!isPs5Like(t)) return false;
+
+  return hasAny(t, [
+    "825gb",
+    "1tb",
+    "slim",
+    "cfi 1116a",
+    "cfi 1216a",
+    "cfi-1116a",
+    "cfi-1216a",
+    "cfi 10",
+    "cfi-10",
+    "cfi 11",
+    "cfi-11",
+    "cfi 12",
+    "cfi-12",
+  ]);
+}
+
+function hasPs5DiscVagueSpecSignal(text = "") {
+  const t = normalizeConsoleText(text);
+  if (!isPs5Like(t)) return false;
+  if (detectConsoleType(t, "ps5_disc") === "digital") return false;
+
+  const looksLikeDisc =
+    hasAny(t, [
+      "disc edition",
+      "disc version",
+      "standard edition",
+      "standard console",
+      "bluray",
+      "disc drive",
+      "with disc drive",
+      "ps5 console",
+      "playstation5 console",
+      "console",
+    ]) || detectConsoleType(t, "ps5_disc") === "disc";
+
+  if (!looksLikeDisc) return false;
+  if (hasPs5DiscConfirmedSpec(t)) return false;
+
+  return true;
+}
+
 function isSeverelyBadConsole(text, queryContext = {}) {
   const t = normalizeConsoleText(text);
 
@@ -1862,6 +1908,10 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
     if (hasPs5DiscOddSlimVariant(t)) {
       flags.push("Odd PS5 slim storage variant");
     }
+
+    if (hasPs5DiscVagueSpecSignal(t)) {
+      flags.push("PS5 disc spec not confirmed");
+    }
   }
 
   if (
@@ -1902,6 +1952,7 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "Odd PS5 disc storage wording") penalty += 10;
     else if (flag === "Custom PS5 disc storage upgrade") penalty += 12;
     else if (flag === "Odd PS5 slim storage variant") penalty += 14;
+    else if (flag === "PS5 disc spec not confirmed") penalty += 10;
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 3;
     else if (flag === "Console-only intent was searched, but extras look stronger than expected") penalty += 4;
     else if (flag === "Unknown Switch version") penalty += 7;
@@ -2202,6 +2253,10 @@ function scoreConsoleCandidate(item, queryContext) {
 
     if (hasPs5DiscOddSlimVariant(text)) {
       score -= 2.8;
+    }
+
+    if (hasPs5DiscVagueSpecSignal(text)) {
+      score -= 1.8;
     }
   }
 
@@ -2536,6 +2591,16 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   if (queryContext.family) confidence += 2;
   if (queryContext?.storagePreference && queryContext.storagePreference !== "unknown") confidence += 1;
 
+  if (queryContext.family === "ps5_disc") {
+    const vagueDiscCompCount = marketConditionPool.filter(
+      (entry) => hasPs5DiscVagueSpecSignal(`${getTitleText(entry.item)} ${getCombinedItemText(entry.item)}`)
+    ).length;
+
+    if (vagueDiscCompCount >= 1) {
+      confidence -= 6;
+    }
+  }
+
   if (
     pricingMode === "PS5 disc hard fallback" ||
     pricingMode === "PS5 digital hard fallback" ||
@@ -2550,6 +2615,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
   }
 
   confidence = Math.min(92, confidence);
+  confidence = Math.max(24, confidence);
 
   let confidenceLabel = "Low";
   if (confidence >= 80) confidenceLabel = "High";
@@ -2640,6 +2706,10 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
 
     if (hasPs5DiscOddSlimVariant(text)) {
       estimatedResale -= 18;
+    }
+
+    if (hasPs5DiscVagueSpecSignal(text)) {
+      estimatedResale -= 14;
     }
   }
 
