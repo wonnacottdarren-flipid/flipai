@@ -539,11 +539,51 @@ function detectConsoleBrand(text) {
   return "";
 }
 
+function isXboxOneFamilySignal(text = "") {
+  const t = normalizeConsoleText(text);
+  return hasAny(t, [
+    "xbox one",
+    "one x",
+    "one s",
+    "xbox one x",
+    "xbox one s",
+    "xboxone",
+    "one console",
+  ]);
+}
+
+function isXboxSeriesXSignal(text = "") {
+  const t = normalizeConsoleText(text);
+
+  if (hasAny(t, ["xbox series s", "series s"])) return false;
+  if (isXboxOneFamilySignal(t)) return false;
+
+  return hasAny(t, [
+    "xbox series x",
+    "series x",
+    "microsoft series x",
+  ]);
+}
+
+function isXboxSeriesSSignal(text = "") {
+  const t = normalizeConsoleText(text);
+
+  if (isXboxOneFamilySignal(t)) return false;
+
+  return hasAny(t, [
+    "xbox series s",
+    "series s",
+    "microsoft series s",
+  ]);
+}
+
 function parseConsoleFamily(text) {
   const t = normalizeConsoleText(text);
 
   for (const [family, patterns] of CONSOLE_FAMILIES) {
     if (patterns.some((pattern) => t.includes(normalizeConsoleText(pattern)))) {
+      if (family === "xbox_series_x" && isXboxOneFamilySignal(t)) continue;
+      if (family === "xbox_series_s" && isXboxOneFamilySignal(t)) continue;
       return family;
     }
   }
@@ -553,10 +593,8 @@ function parseConsoleFamily(text) {
     return "ps5_disc";
   }
 
-  if (t.includes("xbox") && t.includes("series x")) return "xbox_series_x";
-  if (t.includes("xbox") && t.includes("series s")) return "xbox_series_s";
-  if (t.includes("series x") && !t.includes("series s")) return "xbox_series_x";
-  if (t.includes("series s") && !t.includes("series x")) return "xbox_series_s";
+  if (isXboxSeriesXSignal(t)) return "xbox_series_x";
+  if (isXboxSeriesSSignal(t)) return "xbox_series_s";
 
   return "";
 }
@@ -780,6 +818,10 @@ function hasStrongConsoleSignals(text) {
     "boxed",
     "xbox series x console",
     "xbox series s console",
+    "xbox series x",
+    "xbox series s",
+    "series x",
+    "series s",
     "nintendo switch console",
     "switch oled console",
     "switch lite console",
@@ -812,6 +854,10 @@ function looksLikeMainConsoleTitle(text) {
       "boxed",
       "xbox series x console",
       "xbox series s console",
+      "xbox series x",
+      "xbox series s",
+      "series x",
+      "series s",
       "nintendo switch console",
       "switch oled console",
       "switch lite console",
@@ -827,6 +873,8 @@ function looksLikeMainConsoleTitle(text) {
     t === "playstation5" ||
     t === "xbox series x" ||
     t === "xbox series s" ||
+    t === "series x" ||
+    t === "series s" ||
     t === "nintendo switch"
   ) {
     return true;
@@ -840,8 +888,11 @@ function looksLikeMainConsoleTitle(text) {
   }
 
   if (
-    (t.startsWith("xbox series x") || t.startsWith("xbox series s")) &&
-    hasAny(t, ["console", "1tb", "2tb", "512gb", "boxed", "with controller", "carbon black", "galaxy black"])
+    (t.startsWith("xbox series x") ||
+      t.startsWith("xbox series s") ||
+      t.startsWith("series x") ||
+      t.startsWith("series s")) &&
+    !isXboxOneFamilySignal(t)
   ) {
     return true;
   }
@@ -1752,6 +1803,7 @@ function matchesConsoleFamily(text, queryContext, item) {
   const switchGeneration = detectSwitchGeneration(`${titleText} ${t}`);
   const queryStorage = String(queryContext?.storagePreference || "");
   const itemStorage = detectConsoleStorage(`${titleText} ${t}`, family);
+  const xboxText = `${titleText} ${t}`;
 
   if (isHardNonConsoleCategory(item)) return false;
 
@@ -1778,21 +1830,21 @@ function matchesConsoleFamily(text, queryContext, item) {
   }
 
   if (family === "xbox_series_x") {
-    const hasSeriesX = t.includes("xbox series x") || t.includes("series x");
-    const saysSeriesS = t.includes("xbox series s") || t.includes("series s");
-    if (!hasSeriesX || saysSeriesS) return false;
-    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
-    if (isHardAccessoryListing(titleText || t, item)) return false;
+    if (!isXboxSeriesXSignal(xboxText)) return false;
+    if (isXboxSeriesSSignal(xboxText)) return false;
+    if (isXboxOneFamilySignal(xboxText)) return false;
+    if (isClearlyNonConsole(item, xboxText)) return false;
+    if (isHardAccessoryListing(xboxText, item)) return false;
     if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
     return true;
   }
 
   if (family === "xbox_series_s") {
-    const hasSeriesS = t.includes("xbox series s") || t.includes("series s");
-    const saysSeriesX = t.includes("xbox series x") || t.includes("series x");
-    if (!hasSeriesS || saysSeriesX) return false;
-    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
-    if (isHardAccessoryListing(titleText || t, item)) return false;
+    if (!isXboxSeriesSSignal(xboxText)) return false;
+    if (isXboxSeriesXSignal(xboxText)) return false;
+    if (isXboxOneFamilySignal(xboxText)) return false;
+    if (isClearlyNonConsole(item, xboxText)) return false;
+    if (isHardAccessoryListing(xboxText, item)) return false;
     if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
     return true;
   }
@@ -2761,6 +2813,8 @@ export const consoleEngine = {
       text.includes("playstation 5") ||
       text.includes("xbox series x") ||
       text.includes("xbox series s") ||
+      text.includes("series x") ||
+      text.includes("series s") ||
       text.includes("switch oled") ||
       text.includes("switch lite") ||
       text.includes("nintendo switch")
@@ -2850,11 +2904,11 @@ export const consoleEngine = {
 
       if (ctx.family === "xbox_series_x") {
         return [
-          "xbox series x console only",
-          "xbox series x no controller",
-          "xbox series x without controller",
-          "series x console only",
-          "series x unit only",
+          "xbox series x",
+          "series x",
+          "xbox series x console",
+          "microsoft xbox series x",
+          "microsoft series x",
         ];
       }
 
@@ -2893,7 +2947,13 @@ export const consoleEngine = {
     }
 
     if (ctx.family === "xbox_series_x") {
-      return ["xbox series x", "series x", "xbox series x console"];
+      return [
+        "xbox series x",
+        "series x",
+        "xbox series x console",
+        "microsoft xbox series x",
+        "microsoft series x",
+      ];
     }
 
     if (ctx.family === "xbox_series_s") {
