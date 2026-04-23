@@ -498,7 +498,7 @@ const PS5_DISC_CUSTOM_STORAGE_TERMS = [
   "seagate",
 ];
 
-const MINOR_WARNING_TERMS = [
+export const MINOR_WARNING_TERMS = [
   ["read description", "Read description carefully"],
   ["read desc", "Read description carefully"],
   ["see description", "Read description carefully"],
