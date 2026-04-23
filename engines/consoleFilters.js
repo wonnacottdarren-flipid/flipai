@@ -508,7 +508,6 @@ export const MINOR_WARNING_TERMS = [
   ["see caption", "Seller may have important notes in caption"],
   ["no returns", "No returns accepted"],
   ["untested", "Untested listing"],
-
   ["poor condition", "Condition may reduce resale appeal"],
   ["heavy wear", "Condition may reduce resale appeal"],
   ["heavily used", "Condition may reduce resale appeal"],
@@ -517,7 +516,6 @@ export const MINOR_WARNING_TERMS = [
   ["fair condition", "Condition may reduce resale appeal"],
   ["well used", "Condition may reduce resale appeal"],
   ["worn", "Condition may reduce resale appeal"],
-
   ["scratches", "Visible cosmetic wear mentioned"],
   ["scratched", "Visible cosmetic wear mentioned"],
   ["scratch", "Visible cosmetic wear mentioned"],
@@ -526,24 +524,19 @@ export const MINOR_WARNING_TERMS = [
   ["wear scratch", "Visible cosmetic wear mentioned"],
   ["cosmetic marks", "Visible cosmetic wear mentioned"],
   ["cosmetic wear", "Visible cosmetic wear mentioned"],
-
   ["missing controller", "No controller included"],
   ["no controller", "No controller included"],
   ["without controller", "No controller included"],
-
   ["console only", "Console-only listing"],
   ["unit only", "Console-only listing"],
   ["tablet only", "Console-only listing"],
-
   ["unboxed", "No box included"],
   ["no box", "No box included"],
   ["without box", "No box included"],
-
   ["low firmware", "Specialist buyer wording"],
   ["jailbreak", "Specialist buyer wording"],
   ["modded", "Specialist buyer wording"],
   ["modded firmware", "Specialist buyer wording"],
-
   ["doesnt read discs", "Disc drive issue mentioned"],
   ["doesn't read discs", "Disc drive issue mentioned"],
   ["wont read discs", "Disc drive issue mentioned"],
@@ -551,7 +544,6 @@ export const MINOR_WARNING_TERMS = [
   ["hdmi issue", "HDMI issue mentioned"],
   ["hdmi fault", "HDMI issue mentioned"],
   ["overheating", "Overheating risk mentioned"],
-
   ["game error", "Error wording mentioned"],
   ["system error", "Error wording mentioned"],
   ["error code", "Error wording mentioned"],
@@ -1231,17 +1223,9 @@ export function isStorageMismatch(queryStorage = "", itemStorage = "", family = 
   if (!q || q === "unknown" || !i || i === "unknown") return false;
   if (q === i) return false;
 
-  if (fam === "ps5_disc" || fam === "ps5_digital") {
-    return q !== i;
-  }
-
-  if (fam === "xbox_series_x") {
-    return q !== i;
-  }
-
-  if (fam === "xbox_series_s") {
-    return q !== i;
-  }
+  if (fam === "ps5_disc" || fam === "ps5_digital") return q !== i;
+  if (fam === "xbox_series_x") return q !== i;
+  if (fam === "xbox_series_s") return q !== i;
 
   return q !== i;
 }
@@ -1302,6 +1286,71 @@ export function hasStrongConsoleSignals(text) {
   ]);
 }
 
+export function isHardPs5AccessoryListing(text = "", item = {}) {
+  const t = normalizeConsoleText(`${getTitleText(item)} ${text}`);
+
+  if (!isPs5Like(t)) return false;
+
+  if (
+    hasAny(t, [
+      "disc drive only",
+      "replacement disc drive",
+      "ps5 slim/pro disc drive",
+      "ps5 slim pro disc drive",
+      "playstation5 slim pro disc drive",
+    ])
+  ) {
+    return true;
+  }
+
+  if (
+    t.includes("disc drive") &&
+    !hasAny(t, [
+      "console with disc drive",
+      "with disc drive console",
+      "ps5 console",
+      "playstation5 console",
+      "disc edition",
+      "disc version",
+      "standard edition",
+      "standard console",
+      "bluray edition console",
+      "blu ray edition console",
+    ])
+  ) {
+    return true;
+  }
+
+  if (
+    hasAny(t, [
+      "dualsense controller",
+      "dualsense wireless controller",
+      "ps5 controller",
+      "playstation5 controller",
+      "controller for ps5",
+      "controller for playstation5",
+      "controller only",
+    ]) &&
+    !hasAny(t, [
+      "console with controller",
+      "with controller",
+      "controller included",
+      "includes controller",
+      "2 controllers",
+      "two controllers",
+      "extra controller",
+      "second controller",
+      "console bundle",
+      "ps5 console",
+      "playstation5 console",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function looksLikeMainConsoleTitle(text) {
   const t = normalizeConsoleText(text);
 
@@ -1310,6 +1359,8 @@ export function looksLikeMainConsoleTitle(text) {
       "disc drive only",
       "replacement disc drive",
       "ps5 slim/pro disc drive",
+      "ps5 slim pro disc drive",
+      "playstation5 slim pro disc drive",
       "dualsense controller",
       "ps5 controller",
       "playstation5 controller",
@@ -1422,7 +1473,20 @@ export function looksLikeMainConsoleTitle(text) {
 
   if (
     (t.startsWith("nintendo switch") || t.startsWith("switch oled") || t.startsWith("switch lite")) &&
-    hasAny(t, ["console", "32gb", "64gb", "hac-", "hadh-", "hdh-", "hdk-", "boxed", "joy con", "joy-cons", "joy cons", "dock"])
+    hasAny(t, [
+      "console",
+      "32gb",
+      "64gb",
+      "hac-",
+      "hadh-",
+      "hdh-",
+      "hdk-",
+      "boxed",
+      "joy con",
+      "joy-cons",
+      "joy cons",
+      "dock",
+    ])
   ) {
     return true;
   }
@@ -1533,6 +1597,7 @@ export function isHardAccessoryListing(text, item) {
   const combinedText = normalizeConsoleText(text);
   const family = parseConsoleFamily(`${titleText} ${combinedText}`);
 
+  if (isHardPs5AccessoryListing(`${titleText} ${combinedText}`, item)) return true;
   if (isSwitchPartsListing(item, `${titleText} ${combinedText}`, family)) return true;
 
   if (looksLikeMainConsoleTitle(titleText)) return false;
@@ -1720,9 +1785,11 @@ export function isClearlyNonConsole(item, text) {
   const titleText = getTitleText(item);
   const family = parseConsoleFamily(`${titleText} ${combinedText}`);
 
+  if (isHardPs5AccessoryListing(`${titleText} ${combinedText}`, item)) return true;
   if (isHardNonConsoleCategory(item)) return true;
   if (isSwitchPartsListing(item, `${titleText} ${combinedText}`, family)) return true;
   if (isDigitalCodeOrMembership(item, combinedText)) return true;
+
   if (
     failsSharedConsoleGate(item, `${titleText} ${combinedText}`, {
       family,
@@ -2565,6 +2632,7 @@ export function matchesConsoleFamily(text, queryContext, item) {
   if (!family) return true;
 
   if (family === "ps5_disc") {
+    if (isHardPs5AccessoryListing(`${titleText} ${t}`, item)) return false;
     if (!isPs5Like(t)) return false;
     if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
@@ -2575,6 +2643,7 @@ export function matchesConsoleFamily(text, queryContext, item) {
   }
 
   if (family === "ps5_digital") {
+    if (isHardPs5AccessoryListing(`${titleText} ${t}`, item)) return false;
     if (!isPs5Like(t)) return false;
     if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
