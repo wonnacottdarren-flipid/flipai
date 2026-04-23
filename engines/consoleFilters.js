@@ -161,7 +161,9 @@ const ACCESSORY_TERMS = [
   "cooling fan",
   "mount only",
   "disc drive only",
+  "disc drive",
   "disc reader only",
+  "replacement disc drive",
   "replacement part",
   "replacement parts",
   "portal",
@@ -1305,6 +1307,53 @@ export function looksLikeMainConsoleTitle(text) {
 
   if (
     hasAny(t, [
+      "disc drive only",
+      "replacement disc drive",
+      "ps5 slim/pro disc drive",
+      "dualsense controller",
+      "ps5 controller",
+      "playstation5 controller",
+      "controller for ps5",
+      "controller for playstation5",
+    ])
+  ) {
+    return false;
+  }
+
+  if (
+    t.includes("disc drive") &&
+    !hasAny(t, [
+      "with disc drive",
+      "disc edition",
+      "disc version",
+      "standard edition",
+      "standard console",
+      "console",
+    ])
+  ) {
+    return false;
+  }
+
+  if (
+    (t.includes("controller") || t.includes("dualsense") || t.includes("dualshock")) &&
+    !hasAny(t, [
+      "with controller",
+      "controller included",
+      "includes controller",
+      "2 controllers",
+      "two controllers",
+      "extra controller",
+      "second controller",
+      "console",
+      "bundle",
+      "system",
+    ])
+  ) {
+    return false;
+  }
+
+  if (
+    hasAny(t, [
       "console",
       "ps5 console",
       "playstation5 console",
@@ -1402,7 +1451,9 @@ export function isObviousAccessoryTitle(titleText) {
       "stand only",
       "hdmi cable",
       "disc drive only",
+      "disc drive",
       "disc reader only",
+      "replacement disc drive",
       "fan only",
       "cooling fan",
       "playstation portal",
@@ -1425,6 +1476,7 @@ export function isObviousAccessoryTitle(titleText) {
       "controller only",
       "dualsense only",
       "dualshock only",
+      "dualsense controller",
       "remote control",
       "thumb grip",
       "thumb grips",
@@ -1456,7 +1508,6 @@ export function isObviousAccessoryTitle(titleText) {
       "second controller",
       "console",
       "bundle",
-      "boxed",
     ])
   ) {
     return true;
