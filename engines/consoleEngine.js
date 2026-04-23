@@ -315,6 +315,37 @@ const PS5_GAME_TERMS = [
   "astro bot",
 ];
 
+const XBOX_GAME_TERMS = [
+  "battlefield",
+  "call of duty",
+  "cod",
+  "fifa",
+  "fc 24",
+  "fc24",
+  "fc 25",
+  "fc25",
+  "forza",
+  "halo",
+  "gears",
+  "gears of war",
+  "starfield",
+  "minecraft",
+  "mindseye",
+  "dying light",
+  "grand theft auto",
+  "gta",
+  "tt isle of man",
+  "ride on the edge",
+  "everspace",
+  "like a dragon",
+  "ishin",
+  "stellar edition",
+  "adventure",
+  "shoot em up",
+  "shoot 'em up",
+  "pegi",
+];
+
 const PS5_DISC_CUSTOM_STORAGE_TERMS = [
   "upgraded ssd",
   "ssd upgrade",
@@ -562,6 +593,7 @@ function isXboxSeriesXSignal(text = "") {
     "xbox series x",
     "series x",
     "microsoft series x",
+    "microsoft xbox series x",
   ]);
 }
 
@@ -574,7 +606,89 @@ function isXboxSeriesSSignal(text = "") {
     "xbox series s",
     "series s",
     "microsoft series s",
+    "microsoft xbox series s",
   ]);
+}
+
+function hasXboxConsoleIntent(text = "") {
+  const t = normalizeConsoleText(text);
+
+  if (!isXboxSeriesXSignal(t) && !isXboxSeriesSSignal(t)) return false;
+  if (isXboxOneFamilySignal(t)) return false;
+
+  if (
+    t === "xbox series x" ||
+    t === "microsoft xbox series x" ||
+    t === "xbox series s" ||
+    t === "microsoft xbox series s"
+  ) {
+    return true;
+  }
+
+  return hasAny(t, [
+    "console",
+    "1tb",
+    "2tb",
+    "512gb",
+    "standard edition",
+    "black console",
+    "white console",
+    "boxed",
+    "no box",
+    "unboxed",
+    "with controller",
+    "controller included",
+    "includes controller",
+    "bundle",
+    "system",
+    "home console",
+    "video console",
+    "carbon black",
+    "galaxy black",
+  ]);
+}
+
+function isXboxGameListing(item, text = "") {
+  const t = normalizeConsoleText(text);
+  const titleText = getTitleText(item);
+  const categoryText = getCategoryText(item);
+
+  if (!(isXboxSeriesXSignal(t) || isXboxSeriesSSignal(t))) return false;
+  if (hasXboxConsoleIntent(t)) return false;
+
+  if (hasAny(categoryText, ["video games"]) && !hasAny(categoryText, ["video game consoles"])) {
+    return true;
+  }
+
+  if (
+    hasAny(titleText, XBOX_GAME_TERMS) ||
+    hasAny(t, XBOX_GAME_TERMS)
+  ) {
+    return true;
+  }
+
+  if (
+    hasAny(t, [
+      "(microsoft xbox series x",
+      "(microsoft xbox series s",
+      "(xbox series x",
+      "(xbox series s",
+      "xbox series x)",
+      "xbox series s)",
+      "series x)",
+      "series s)",
+      "pegi",
+      "free shipping save",
+      "adventure",
+      "shoot em up",
+      "shoot 'em up",
+      "stellar edition",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function parseConsoleFamily(text) {
@@ -818,10 +932,8 @@ function hasStrongConsoleSignals(text) {
     "boxed",
     "xbox series x console",
     "xbox series s console",
-    "xbox series x",
-    "xbox series s",
-    "series x",
-    "series s",
+    "microsoft xbox series x",
+    "microsoft xbox series s",
     "nintendo switch console",
     "switch oled console",
     "switch lite console",
@@ -854,10 +966,8 @@ function looksLikeMainConsoleTitle(text) {
       "boxed",
       "xbox series x console",
       "xbox series s console",
-      "xbox series x",
-      "xbox series s",
-      "series x",
-      "series s",
+      "microsoft xbox series x",
+      "microsoft xbox series s",
       "nintendo switch console",
       "switch oled console",
       "switch lite console",
@@ -873,8 +983,8 @@ function looksLikeMainConsoleTitle(text) {
     t === "playstation5" ||
     t === "xbox series x" ||
     t === "xbox series s" ||
-    t === "series x" ||
-    t === "series s" ||
+    t === "microsoft xbox series x" ||
+    t === "microsoft xbox series s" ||
     t === "nintendo switch"
   ) {
     return true;
@@ -890,9 +1000,10 @@ function looksLikeMainConsoleTitle(text) {
   if (
     (t.startsWith("xbox series x") ||
       t.startsWith("xbox series s") ||
-      t.startsWith("series x") ||
-      t.startsWith("series s")) &&
-    !isXboxOneFamilySignal(t)
+      t.startsWith("microsoft xbox series x") ||
+      t.startsWith("microsoft xbox series s")) &&
+    !isXboxOneFamilySignal(t) &&
+    hasXboxConsoleIntent(t)
   ) {
     return true;
   }
@@ -1123,6 +1234,10 @@ function isClearlyNonConsole(item, text) {
       "game only",
     ])
   ) {
+    return true;
+  }
+
+  if (isXboxGameListing(item, `${titleText} ${combinedText}`)) {
     return true;
   }
 
@@ -1833,8 +1948,10 @@ function matchesConsoleFamily(text, queryContext, item) {
     if (!isXboxSeriesXSignal(xboxText)) return false;
     if (isXboxSeriesSSignal(xboxText)) return false;
     if (isXboxOneFamilySignal(xboxText)) return false;
+    if (isXboxGameListing(item, xboxText)) return false;
     if (isClearlyNonConsole(item, xboxText)) return false;
     if (isHardAccessoryListing(xboxText, item)) return false;
+    if (!isConsoleCategory(item) && !hasXboxConsoleIntent(xboxText)) return false;
     if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
     return true;
   }
@@ -1843,8 +1960,10 @@ function matchesConsoleFamily(text, queryContext, item) {
     if (!isXboxSeriesSSignal(xboxText)) return false;
     if (isXboxSeriesXSignal(xboxText)) return false;
     if (isXboxOneFamilySignal(xboxText)) return false;
+    if (isXboxGameListing(item, xboxText)) return false;
     if (isClearlyNonConsole(item, xboxText)) return false;
     if (isHardAccessoryListing(xboxText, item)) return false;
+    if (!isConsoleCategory(item) && !hasXboxConsoleIntent(xboxText)) return false;
     if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
     return true;
   }
@@ -2904,11 +3023,11 @@ export const consoleEngine = {
 
       if (ctx.family === "xbox_series_x") {
         return [
-          "xbox series x",
-          "series x",
+          "xbox series x console only",
+          "xbox series x no controller",
+          "xbox series x without controller",
           "xbox series x console",
-          "microsoft xbox series x",
-          "microsoft series x",
+          "microsoft xbox series x console",
         ];
       }
 
@@ -2917,8 +3036,8 @@ export const consoleEngine = {
           "xbox series s console only",
           "xbox series s no controller",
           "xbox series s without controller",
-          "series s console only",
-          "series s unit only",
+          "xbox series s console",
+          "microsoft xbox series s console",
         ];
       }
     }
@@ -2949,15 +3068,21 @@ export const consoleEngine = {
     if (ctx.family === "xbox_series_x") {
       return [
         "xbox series x",
-        "series x",
         "xbox series x console",
         "microsoft xbox series x",
-        "microsoft series x",
+        "microsoft xbox series x console",
+        "series x console",
       ];
     }
 
     if (ctx.family === "xbox_series_s") {
-      return ["xbox series s", "series s", "xbox series s console"];
+      return [
+        "xbox series s",
+        "xbox series s console",
+        "microsoft xbox series s",
+        "microsoft xbox series s console",
+        "series s console",
+      ];
     }
 
     if (ctx.family === "switch_oled") {
