@@ -177,6 +177,119 @@ function decorateItemWithAffiliate(item = {}) {
   };
 }
 
+function getFullItemText(item = {}) {
+  return normalizeText(
+    [
+      item?.title,
+      item?.subtitle,
+      item?.condition,
+      item?.conditionDisplayName,
+      item?.itemCondition,
+      item?.shortDescription,
+      item?.description,
+      Array.isArray(item?.categories)
+        ? item.categories.map((category) => category?.categoryName).filter(Boolean).join(" ")
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ")
+  )
+    .replace(/\bps\s*5\b/g, "ps5")
+    .replace(/\bplaystation\s*5\b/g, "playstation 5")
+    .replace(/\bblu\s*ray\b/g, "blu ray")
+    .replace(/\bblu-ray\b/g, "blu ray")
+    .replace(/\bdisk\b/g, "disc")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isHardBlockedFindDealItem(item = {}, queryContext = {}) {
+  const text = getFullItemText(item);
+  const title = normalizeText(extractItemTitle(item));
+  const query = normalizeText(
+    queryContext?.rawQuery ||
+      queryContext?.normalizedQuery ||
+      ""
+  );
+
+  const isPs5Query =
+    query.includes("ps5") ||
+    query.includes("playstation 5") ||
+    query.includes("playstation5");
+
+  const mentionsPs5 =
+    text.includes("ps5") ||
+    text.includes("playstation 5") ||
+    text.includes("playstation5");
+
+  if (isPs5Query || mentionsPs5) {
+    if (
+      title.includes("disc drive") &&
+      !title.includes("console with disc drive") &&
+      !title.includes("with disc drive console") &&
+      !title.includes("disc edition console") &&
+      !title.includes("disc version console") &&
+      !title.includes("standard edition console") &&
+      !title.includes("standard console")
+    ) {
+      return true;
+    }
+
+    if (
+      text.includes("ps5 slim/pro disc drive") ||
+      text.includes("ps5 slim pro disc drive") ||
+      text.includes("playstation 5 slim/pro disc drive") ||
+      text.includes("playstation 5 slim pro disc drive") ||
+      text.includes("replacement disc drive") ||
+      text.includes("disc drive only") ||
+      text.includes("disc reader only")
+    ) {
+      return true;
+    }
+
+    if (
+      title.includes("dualsense controller") ||
+      title.includes("ps5 controller") ||
+      title.includes("controller only") ||
+      title.includes("playstation 5 controller")
+    ) {
+      if (
+        !title.includes("console") &&
+        !title.includes("bundle") &&
+        !title.includes("with controller") &&
+        !title.includes("controller included") &&
+        !title.includes("includes controller")
+      ) {
+        return true;
+      }
+    }
+
+    if (
+      text.includes("playstation portal") ||
+      text.includes("ps portal") ||
+      text.includes("psvr") ||
+      text.includes("playstation vr") ||
+      text.includes("vr2") ||
+      text.includes("faceplate") ||
+      text.includes("face plate") ||
+      text.includes("cover plate") ||
+      text.includes("side plate") ||
+      text.includes("cooling stand") ||
+      text.includes("charging dock") ||
+      text.includes("charging station") ||
+      text.includes("media remote") ||
+      text.includes("hdmi cable") ||
+      text.includes("power cable only") ||
+      text.includes("empty box") ||
+      text.includes("box only")
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function itemMatchesCondition(item, conditionText) {
   const wanted = normalizeText(conditionText).trim();
   if (!wanted) return true;
@@ -1379,10 +1492,10 @@ function evaluateDeal({
   const warningPenaltyTotal = roundMoney(baseWarningPenalty);
   const structuralPenaltyTotal = roundMoney(
     lowCompPenalty +
-    confidencePenalty +
-    thinMarginPenalty +
-    switchPenalty +
-    consoleOnlyPenalty
+      confidencePenalty +
+      thinMarginPenalty +
+      switchPenalty +
+      consoleOnlyPenalty
   );
 
   const finalPenalty = roundMoney(warningPenaltyTotal + structuralPenaltyTotal);
@@ -1836,9 +1949,11 @@ app.post("/api/search-ebay", async (req, res) => {
     filtered = filtered.filter((item) => itemMatchesCondition(item, condition));
     filtered = filtered.filter((item) => itemMatchesPrice(item, filterPriceMax));
     filtered = filtered.filter((item) => itemMatchesFreeShipping(item, freeShippingOnly));
+    filtered = filtered.filter((item) => !isHardBlockedFindDealItem(item, queryContext));
 
     if (engine && typeof engine.matchesItem === "function") {
       filtered = filtered.filter((item) => engine.matchesItem(item, queryContext));
+      filtered = filtered.filter((item) => !isHardBlockedFindDealItem(item, queryContext));
     }
 
     const decoratedItems = filtered
@@ -1891,8 +2006,11 @@ app.post("/api/auto-comps", async (req, res) => {
       filtered = filtered.filter((item) => itemMatchesCondition(item, condition));
     }
 
+    filtered = filtered.filter((item) => !isHardBlockedFindDealItem(item, queryContext));
+
     if (engine && typeof engine.matchesItem === "function") {
       filtered = filtered.filter((item) => engine.matchesItem(item, queryContext));
+      filtered = filtered.filter((item) => !isHardBlockedFindDealItem(item, queryContext));
     }
 
     const autoComps = buildAutoCompsFromItems(filtered);
@@ -1980,10 +2098,13 @@ app.post("/api/find-deals", async (req, res) => {
     cleanListings = cleanListings.filter((item) =>
       itemMatchesFreeShipping(item, freeShippingOnly)
     );
+    cleanListings = cleanListings.filter((item) => !isHardBlockedFindDealItem(item, queryContext));
 
     if (condition.trim()) {
       cleanMarket = cleanMarket.filter((item) => itemMatchesCondition(item, condition));
     }
+
+    cleanMarket = cleanMarket.filter((item) => !isHardBlockedFindDealItem(item, queryContext));
 
     const listingsAfterBasicFilters = cleanListings.length;
     const marketAfterBasicFilters = cleanMarket.length;
@@ -1991,6 +2112,9 @@ app.post("/api/find-deals", async (req, res) => {
     if (engine && typeof engine.matchesItem === "function") {
       cleanListings = cleanListings.filter((item) => engine.matchesItem(item, queryContext));
       cleanMarket = cleanMarket.filter((item) => engine.matchesItem(item, queryContext));
+
+      cleanListings = cleanListings.filter((item) => !isHardBlockedFindDealItem(item, queryContext));
+      cleanMarket = cleanMarket.filter((item) => !isHardBlockedFindDealItem(item, queryContext));
     }
 
     const listingsAfterEngineMatch = cleanListings.length;
@@ -2019,14 +2143,17 @@ app.post("/api/find-deals", async (req, res) => {
 
     console.log("Pricing Model:", pricingModel);
 
-    const evaluatedDeals = cleanListings.map((item) =>
-      evaluateDeal({
-        item,
-        pricingModel,
-        queryContext,
-        engine,
-      })
-    );
+    const evaluatedDeals = cleanListings
+      .filter((item) => !isHardBlockedFindDealItem(item, queryContext))
+      .map((item) =>
+        evaluateDeal({
+          item,
+          pricingModel,
+          queryContext,
+          engine,
+        })
+      )
+      .filter((deal) => !isHardBlockedFindDealItem(deal, queryContext));
 
     console.log("Evaluated Deals:", evaluatedDeals.length);
     console.log("Top 5 Evaluated:");
@@ -2049,16 +2176,26 @@ app.post("/api/find-deals", async (req, res) => {
       });
     });
 
-    const strictDeals = filterDealsForOutput(evaluatedDeals, Boolean(includeTightDeals));
+    const strictDeals = filterDealsForOutput(
+      evaluatedDeals.filter((deal) => !isHardBlockedFindDealItem(deal, queryContext)),
+      Boolean(includeTightDeals)
+    );
     console.log("After STRICT filter:", strictDeals.length);
 
-    const fallbackDeals = applyEmergencyDealFallback(evaluatedDeals, Boolean(includeTightDeals));
+    const fallbackDeals = applyEmergencyDealFallback(
+      evaluatedDeals.filter((deal) => !isHardBlockedFindDealItem(deal, queryContext)),
+      Boolean(includeTightDeals)
+    );
     console.log("After FALLBACK filter:", fallbackDeals.length);
 
     let deals = strictDeals.length ? strictDeals : fallbackDeals;
+    deals = deals.filter((deal) => !isHardBlockedFindDealItem(deal, queryContext));
 
-    const preferredDeals = applyBundlePreferenceFallback(deals, queryContext);
+    const preferredDeals = applyBundlePreferenceFallback(deals, queryContext)
+      .filter((deal) => !isHardBlockedFindDealItem(deal, queryContext));
+
     const finalDeals = preferredDeals
+      .filter((deal) => !isHardBlockedFindDealItem(deal, queryContext))
       .slice(0, Number(topN || 8))
       .map((deal, index) => ({
         ...deal,
