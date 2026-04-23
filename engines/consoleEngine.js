@@ -315,6 +315,37 @@ const PS5_GAME_TERMS = [
   "astro bot",
 ];
 
+const PS5_DISC_CUSTOM_STORAGE_TERMS = [
+  "upgraded ssd",
+  "ssd upgrade",
+  "storage upgrade",
+  "upgraded storage",
+  "expanded storage",
+  "storage expanded",
+  "extra ssd",
+  "additional ssd",
+  "added ssd",
+  "ssd added",
+  "internal ssd",
+  "internal nvme",
+  "nvme installed",
+  "with ssd",
+  "with 1tb ssd",
+  "with 2tb ssd",
+  "custom storage",
+  "custom upgraded storage",
+  "expanded nvme",
+  "m2 ssd",
+  "m.2 ssd",
+  "sn850",
+  "sn850x",
+  "990 pro",
+  "980 pro",
+  "firecuda",
+  "wd black",
+  "seagate",
+];
+
 const MINOR_WARNING_TERMS = [
   ["read description", "Read description carefully"],
   ["read desc", "Read description carefully"],
@@ -1157,6 +1188,48 @@ function hasFaultKeywordCombo(text = "") {
   return false;
 }
 
+function detectPs5DiscShape(text = "") {
+  const t = normalizeConsoleText(text);
+  if (!isPs5Like(t)) return "unknown";
+  if (t.includes("slim")) return "slim";
+  return "standard";
+}
+
+function hasPs5DiscCustomStorageSignal(text = "") {
+  const t = normalizeConsoleText(text);
+  if (!isPs5Like(t)) return false;
+  return hasAny(t, PS5_DISC_CUSTOM_STORAGE_TERMS);
+}
+
+function hasPs5DiscOddStorageWording(text = "") {
+  const t = normalizeConsoleText(text);
+  if (!isPs5Like(t)) return false;
+
+  const storage = detectConsoleStorage(t, "ps5_disc");
+  const shape = detectPs5DiscShape(t);
+
+  if (storage === "2tb") return true;
+  if (storage === "1tb" && shape !== "slim") return true;
+  if (storage === "825gb" && shape === "slim") return true;
+
+  return false;
+}
+
+function hasPs5DiscOddSlimVariant(text = "") {
+  const t = normalizeConsoleText(text);
+  if (!isPs5Like(t) || !t.includes("slim")) return false;
+
+  const storage = detectConsoleStorage(t, "ps5_disc");
+
+  if (storage === "2tb" || storage === "825gb" || storage === "512gb" || storage === "32gb" || storage === "64gb") {
+    return true;
+  }
+
+  if (hasPs5DiscCustomStorageSignal(t)) return true;
+
+  return false;
+}
+
 function isSeverelyBadConsole(text, queryContext = {}) {
   const t = normalizeConsoleText(text);
 
@@ -1765,10 +1838,7 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
     flags.push("Console-only intent was searched, but extras look stronger than expected");
   }
 
-  if (
-    hasReadDescriptionSignal(t) &&
-    hasFaultKeywordCombo(t)
-  ) {
+  if (hasReadDescriptionSignal(t) && hasFaultKeywordCombo(t)) {
     flags.push("Description suggests a likely fault");
   }
 
@@ -1778,6 +1848,20 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
     !hasStrongCleanConditionSignal(t)
   ) {
     flags.push("PS5 digital listing needs manual verification");
+  }
+
+  if (family === "ps5_disc") {
+    if (hasPs5DiscOddStorageWording(t)) {
+      flags.push("Odd PS5 disc storage wording");
+    }
+
+    if (hasPs5DiscCustomStorageSignal(t)) {
+      flags.push("Custom PS5 disc storage upgrade");
+    }
+
+    if (hasPs5DiscOddSlimVariant(t)) {
+      flags.push("Odd PS5 slim storage variant");
+    }
   }
 
   if (
@@ -1815,6 +1899,9 @@ function calculateWarningPenalty(flags = []) {
     else if (flag === "Boot or loading issue mentioned") penalty += 14;
     else if (flag === "Description suggests a likely fault") penalty += 16;
     else if (flag === "PS5 digital listing needs manual verification") penalty += 18;
+    else if (flag === "Odd PS5 disc storage wording") penalty += 10;
+    else if (flag === "Custom PS5 disc storage upgrade") penalty += 12;
+    else if (flag === "Odd PS5 slim storage variant") penalty += 14;
     else if (flag === "Bundle intent was searched, but extras look weak") penalty += 3;
     else if (flag === "Console-only intent was searched, but extras look stronger than expected") penalty += 4;
     else if (flag === "Unknown Switch version") penalty += 7;
@@ -2101,6 +2188,20 @@ function scoreConsoleCandidate(item, queryContext) {
 
     if (hasReadDescriptionSignal(text) && hasFaultKeywordCombo(text)) {
       score -= 3.2;
+    }
+  }
+
+  if (queryContext.family === "ps5_disc") {
+    if (hasPs5DiscOddStorageWording(text)) {
+      score -= 1.9;
+    }
+
+    if (hasPs5DiscCustomStorageSignal(text)) {
+      score -= 2.3;
+    }
+
+    if (hasPs5DiscOddSlimVariant(text)) {
+      score -= 2.8;
     }
   }
 
@@ -2522,6 +2623,20 @@ function applyBundleValueToListing(queryContext, item, baseResale) {
     hasFaultKeywordCombo(text)
   ) {
     estimatedResale -= 18;
+  }
+
+  if (queryContext.family === "ps5_disc") {
+    if (hasPs5DiscOddStorageWording(text)) {
+      estimatedResale -= 12;
+    }
+
+    if (hasPs5DiscCustomStorageSignal(text)) {
+      estimatedResale -= 14;
+    }
+
+    if (hasPs5DiscOddSlimVariant(text)) {
+      estimatedResale -= 18;
+    }
   }
 
   if (queryContext.family === "switch_v2") {
