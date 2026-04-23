@@ -346,6 +346,30 @@ const XBOX_GAME_TERMS = [
   "pegi",
 ];
 
+const XBOX_CONSOLE_INTENT_TERMS = [
+  "console",
+  "1tb",
+  "2tb",
+  "512gb",
+  "standard edition",
+  "boxed",
+  "no box",
+  "unboxed",
+  "with controller",
+  "controller included",
+  "includes controller",
+  "bundle",
+  "system",
+  "home console",
+  "video console",
+  "carbon black",
+  "galaxy black",
+  "console only",
+  "no controller",
+  "without controller",
+  "controller not included",
+];
+
 const PS5_DISC_CUSTOM_STORAGE_TERMS = [
   "upgraded ssd",
   "ssd upgrade",
@@ -625,27 +649,92 @@ function hasXboxConsoleIntent(text = "") {
     return true;
   }
 
+  return hasAny(t, XBOX_CONSOLE_INTENT_TERMS);
+}
+
+function isVideoGamesCategoryOnly(item) {
+  const categoryText = getCategoryText(item);
+  return hasAny(categoryText, ["video games"]) && !hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
+}
+
+function hasBaseConsoleIntent(text = "", family = "") {
+  const t = normalizeConsoleText(text);
+  const fam = String(family || "");
+
+  if (fam === "xbox_series_x" || fam === "xbox_series_s") {
+    return hasXboxConsoleIntent(t);
+  }
+
+  if (fam === "ps5_disc" || fam === "ps5_digital") {
+    return hasAny(t, [
+      "console",
+      "ps5 console",
+      "playstation5 console",
+      "disc edition",
+      "digital edition",
+      "standard edition",
+      "standard console",
+      "slim",
+      "cfi-",
+      "cfi ",
+      "1tb",
+      "2tb",
+      "825gb",
+      "512gb",
+      "with controller",
+      "controller included",
+      "boxed",
+    ]);
+  }
+
+  if (fam.startsWith("switch")) {
+    return hasAny(t, [
+      "console",
+      "nintendo switch console",
+      "switch oled console",
+      "switch lite console",
+      "32gb",
+      "64gb",
+      "hac-",
+      "hadh-",
+      "hdk-",
+      "joy con",
+      "joy-cons",
+      "joy cons",
+      "boxed",
+      "with dock",
+      "dock included",
+    ]);
+  }
+
   return hasAny(t, [
     "console",
-    "1tb",
-    "2tb",
-    "512gb",
-    "standard edition",
-    "black console",
-    "white console",
-    "boxed",
-    "no box",
-    "unboxed",
-    "with controller",
-    "controller included",
-    "includes controller",
-    "bundle",
     "system",
     "home console",
     "video console",
-    "carbon black",
-    "galaxy black",
+    "boxed",
+    "with controller",
+    "controller included",
+    "1tb",
+    "2tb",
+    "512gb",
+    "825gb",
   ]);
+}
+
+function failsSharedConsoleGate(item, text = "", queryContext = {}) {
+  const combined = normalizeConsoleText(text);
+  const family = String(queryContext?.family || parseConsoleFamily(combined));
+
+  if (isVideoGamesCategoryOnly(item) && !hasBaseConsoleIntent(combined, family)) {
+    return true;
+  }
+
+  if (isAccessoryCategory(item) && !hasBaseConsoleIntent(combined, family)) {
+    return true;
+  }
+
+  return false;
 }
 
 function isXboxGameListing(item, text = "") {
@@ -660,10 +749,7 @@ function isXboxGameListing(item, text = "") {
     return true;
   }
 
-  if (
-    hasAny(titleText, XBOX_GAME_TERMS) ||
-    hasAny(t, XBOX_GAME_TERMS)
-  ) {
+  if (hasAny(titleText, XBOX_GAME_TERMS) || hasAny(t, XBOX_GAME_TERMS)) {
     return true;
   }
 
@@ -932,8 +1018,6 @@ function hasStrongConsoleSignals(text) {
     "boxed",
     "xbox series x console",
     "xbox series s console",
-    "microsoft xbox series x",
-    "microsoft xbox series s",
     "nintendo switch console",
     "switch oled console",
     "switch lite console",
@@ -966,8 +1050,6 @@ function looksLikeMainConsoleTitle(text) {
       "boxed",
       "xbox series x console",
       "xbox series s console",
-      "microsoft xbox series x",
-      "microsoft xbox series s",
       "nintendo switch console",
       "switch oled console",
       "switch lite console",
@@ -1212,6 +1294,9 @@ function isClearlyNonConsole(item, text) {
 
   if (isHardNonConsoleCategory(item)) return true;
   if (isDigitalCodeOrMembership(item, combinedText)) return true;
+  if (failsSharedConsoleGate(item, `${titleText} ${combinedText}`, { family: parseConsoleFamily(`${titleText} ${combinedText}`) })) {
+    return true;
+  }
 
   if (looksLikeMainConsoleTitle(titleText) && isConsoleCategory(item)) return false;
 
@@ -1921,6 +2006,7 @@ function matchesConsoleFamily(text, queryContext, item) {
   const xboxText = `${titleText} ${t}`;
 
   if (isHardNonConsoleCategory(item)) return false;
+  if (failsSharedConsoleGate(item, `${titleText} ${t}`, queryContext)) return false;
 
   if (!family) return true;
 
@@ -2247,6 +2333,9 @@ function getMatchDebug(item, queryContext) {
   if (isHardNonConsoleCategory(item)) {
     return { matched: false, reason: "hard_non_console_category" };
   }
+  if (failsSharedConsoleGate(item, `${titleText} ${text}`, queryContext)) {
+    return { matched: false, reason: "shared_console_gate_failed" };
+  }
   if (isIncompleteSwitchConsole(text, queryContext)) {
     return { matched: false, reason: "incomplete_switch_console" };
   }
@@ -2314,6 +2403,7 @@ function scoreConsoleCandidate(item, queryContext) {
 
   if (!text) return -10;
   if (isHardNonConsoleCategory(item)) return -10;
+  if (failsSharedConsoleGate(item, `${titleText} ${text}`, queryContext)) return -10;
   if (isIncompleteSwitchConsole(text, queryContext)) return -10;
   if (isHardAccessoryListing(text, item)) return -10;
   if (isClearlyNonConsole(item, text)) return -10;
