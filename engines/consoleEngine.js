@@ -2959,6 +2959,7 @@ function scoreConsoleCandidate(item, queryContext) {
   if (queryContext.family === "switch_oled") {
     if (hasAny(text, ["heavily used", "lot of wear"])) score -= 0.75;
     if (hasAny(text, ["scratch", "scratches", "scratched", "scratched up", "heavy scratches"])) score -= 0.4;
+    if (hasReadDescriptionSignal(text)) score -= 2.4;
   }
 
   return score;
