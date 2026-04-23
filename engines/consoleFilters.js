@@ -522,6 +522,9 @@ const HARD_PS5_ACCESSORY_TERMS = [
   "external disk drive",
   "slim disc drive",
   "slim disk drive",
+  "pro disc drive",
+  "ps5 pro disc drive",
+  "playstation5 pro disc drive",
   "disc drive for ps5",
   "disk drive for ps5",
   "disc drive for playstation5",
@@ -659,6 +662,9 @@ export function normalizeConsoleText(value) {
     .replace(/\bplaystation 5\b/g, "playstation5")
     .replace(/\bsony ps5\b/g, "ps5")
     .replace(/\bplaystation 5 console\b/g, "playstation5 console")
+    .replace(/\bdigitial\b/g, "digital")
+    .replace(/\bdigitital\b/g, "digital")
+    .replace(/\bdigitel\b/g, "digital")
     .replace(/\bdisk edition\b/g, "disc edition")
     .replace(/\bdisk\b/g, "disc")
     .replace(/\bblu ray\b/g, "bluray")
@@ -715,19 +721,37 @@ export function isHardPs5AccessoryText(text = "") {
   if (hasAny(t, HARD_PS5_ACCESSORY_TERMS)) return true;
 
   const hasDiscDrive = t.includes("disc drive") || t.includes("disk drive");
+
+  if (
+    hasDiscDrive &&
+    hasAny(t, [
+      "for ps5",
+      "for playstation5",
+      "for digital edition",
+      "for slim",
+      "for pro",
+      "replacement",
+      "external",
+      "drive only",
+      "slim disc drive",
+      "pro disc drive",
+      "disc drive attachment",
+      "detachable disc drive",
+    ])
+  ) {
+    return true;
+  }
+
   const hasRealConsoleWording = hasAny(t, [
     "console with disc drive",
+    "ps5 console with disc drive",
+    "playstation5 console with disc drive",
     "with disc drive console",
-    "with disk drive console",
-    "ps5 console",
-    "playstation5 console",
     "disc edition",
-    "disk edition",
     "disc version",
     "standard edition",
     "standard console",
     "bluray edition console",
-    "blu ray edition console",
     "825gb",
     "1tb",
     "2tb",
@@ -1137,6 +1161,8 @@ export function parseConsoleFamily(text) {
 
   for (const [family, patterns] of CONSOLE_FAMILIES) {
     if (patterns.some((pattern) => t.includes(normalizeConsoleText(pattern)))) {
+      if (family === "ps5_disc" && detectPs5Variant(t) === "digital") continue;
+      if (family === "ps5_digital" && detectPs5Variant(t) !== "digital") continue;
       if (family === "xbox_series_x" && isXboxOneFamilySignal(t)) continue;
       if (family === "xbox_series_s" && isXboxOneFamilySignal(t)) continue;
       return family;
@@ -1144,7 +1170,7 @@ export function parseConsoleFamily(text) {
   }
 
   if (t.includes("ps5") || t.includes("playstation5")) {
-    if (t.includes("digital")) return "ps5_digital";
+    if (detectPs5Variant(t) === "digital") return "ps5_digital";
     return "ps5_disc";
   }
 
@@ -2401,8 +2427,15 @@ export function detectPs5Variant(text = "") {
     "digital console",
     "all digital",
     "digital model",
+    "digital version",
+    "digital ps5",
+    "ps5 digital",
+    "playstation5 digital",
     "discless",
     "disc less",
+    "no disc",
+    "no disc drive",
+    "without disc drive",
     "cfi 1116b",
     "cfi 1216b",
     "cfi-1116b",
@@ -2416,6 +2449,9 @@ export function detectPs5Variant(text = "") {
     "standard console",
     "bluray",
     "with disc drive",
+    "console with disc drive",
+    "ps5 console with disc drive",
+    "playstation5 console with disc drive",
     "cfi 1116a",
     "cfi 1216a",
     "cfi-1116a",
@@ -2428,30 +2464,11 @@ export function detectPs5Variant(text = "") {
     "cfi-12",
   ];
 
-  const mentionsDigital = hasAny(t, digitalSignals);
+  const mentionsDigital = hasAny(t, digitalSignals) || t.includes("digital");
   const mentionsDisc = hasAny(t, discSignals);
 
-  if (mentionsDigital && !mentionsDisc) return "digital";
-  if (mentionsDisc && !mentionsDigital) return "disc";
-
-  if (
-    t.includes("digital") &&
-    !t.includes("disc drive") &&
-    !t.includes("disc edition") &&
-    !t.includes("standard edition")
-  ) {
-    return "digital";
-  }
-
-  if (
-    t.includes("with disc drive") ||
-    t.includes("disc version") ||
-    t.includes("disc edition") ||
-    t.includes("standard edition") ||
-    t.includes("bluray")
-  ) {
-    return "disc";
-  }
+  if (mentionsDigital) return "digital";
+  if (mentionsDisc) return "disc";
 
   return "unknown";
 }
@@ -2670,7 +2687,7 @@ export function getSwitchPricingBucket(item, queryContext) {
 export function matchesConsoleFamily(text, queryContext, item) {
   const t = normalizeConsoleText(text);
   const family = String(queryContext?.family || "");
-  const consoleType = detectConsoleType(t, family);
+  const consoleType = detectConsoleType(`${getTitleText(item)} ${t}`, family);
   const titleText = getTitleText(item);
   const switchGeneration = detectSwitchGeneration(`${titleText} ${t}`);
   const queryStorage = String(queryContext?.storagePreference || "");
@@ -2686,7 +2703,7 @@ export function matchesConsoleFamily(text, queryContext, item) {
 
   if (family === "ps5_disc") {
     if (isHardPs5AccessoryListing(`${titleText} ${t}`, item)) return false;
-    if (!isPs5Like(t)) return false;
+    if (!isPs5Like(`${titleText} ${t}`)) return false;
     if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
@@ -2698,7 +2715,7 @@ export function matchesConsoleFamily(text, queryContext, item) {
 
   if (family === "ps5_digital") {
     if (isHardPs5AccessoryListing(`${titleText} ${t}`, item)) return false;
-    if (!isPs5Like(t)) return false;
+    if (!isPs5Like(`${titleText} ${t}`)) return false;
     if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
