@@ -438,6 +438,43 @@ const SWITCH_GAME_TERMS = [
   "download code",
 ];
 
+const SWITCH_PARTS_TERMS = [
+  "replacement battery",
+  "battery replacement",
+  "battery for nintendo switch",
+  "battery for switch",
+  "hac-003",
+  "hac 003",
+  "replacement part",
+  "replacement parts",
+  "spare part",
+  "spare parts",
+  "repair part",
+  "repair parts",
+  "joy con rail",
+  "joy-con rail",
+  "rail replacement",
+  "game card reader",
+  "card reader replacement",
+  "usb c port",
+  "usb-c port",
+  "charge port",
+  "charging port",
+  "lcd replacement",
+  "digitizer",
+  "touch screen replacement",
+  "screen replacement",
+  "replacement screen",
+  "replacement lcd",
+  "motherboard",
+  "daughterboard",
+  "speaker replacement",
+  "fan replacement",
+  "replacement fan",
+  "housing replacement",
+  "shell replacement",
+];
+
 const PS5_DISC_CUSTOM_STORAGE_TERMS = [
   "upgraded ssd",
   "ssd upgrade",
@@ -898,6 +935,58 @@ function isSwitchGameListing(item, text = "", family = "") {
       "switch game",
     ])
   ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isSwitchPartsListing(item, text = "", family = "") {
+  const combinedText = normalizeConsoleText(text);
+  const titleText = getTitleText(item);
+  const categoryText = getCategoryText(item);
+  const fam = String(family || parseConsoleFamily(`${titleText} ${combinedText}`));
+  const allText = normalizeConsoleText(`${titleText} ${combinedText} ${categoryText}`);
+
+  if (!(fam === "switch_oled" || fam === "switch_lite" || fam === "switch_v2")) {
+    return false;
+  }
+
+  if (!isSwitchFamilySignal(allText)) return false;
+
+  const legitBatteryConsoleSignals = hasAny(allText, [
+    "improved battery",
+    "battery improved",
+    "better battery",
+    "extended battery",
+    "extended battery edtn",
+    "extended battery edition",
+    "new battery model",
+    "v2",
+    "hac-001(-01)",
+    "hac 001(-01)",
+    "red box model",
+    "revised model",
+  ]);
+
+  const hardPartSignal =
+    hasAny(allText, SWITCH_PARTS_TERMS) ||
+    (allText.includes("battery") &&
+      hasAny(allText, [
+        "replacement",
+        "for nintendo switch",
+        "for switch",
+        "for switch console",
+        "for nintendo switch console",
+        "hac-003",
+        "hac 003",
+        "new",
+      ])) ||
+    (hasAny(categoryText, ["batteries"]) && allText.includes("switch")) ||
+    (allText.includes("for nintendo switch") && !hasSwitchConsoleIntent(allText, fam)) ||
+    (allText.includes("for switch console") && !hasSwitchConsoleIntent(allText, fam));
+
+  if (hardPartSignal && !legitBatteryConsoleSignals) {
     return true;
   }
 
@@ -1395,6 +1484,9 @@ function isObviousAccessoryTitle(titleText) {
 function isHardAccessoryListing(text, item) {
   const titleText = getTitleText(item);
   const combinedText = normalizeConsoleText(text);
+  const family = parseConsoleFamily(`${titleText} ${combinedText}`);
+
+  if (isSwitchPartsListing(item, `${titleText} ${combinedText}`, family)) return true;
 
   if (looksLikeMainConsoleTitle(titleText)) return false;
   if (isObviousAccessoryTitle(titleText)) return true;
@@ -1528,6 +1620,7 @@ function isStrictSwitchMainConsoleListing(item, text = "", family = "") {
   }
 
   if (!isSwitchFamilySignal(`${titleText} ${combinedText}`)) return false;
+  if (isSwitchPartsListing(item, `${titleText} ${combinedText}`, fam)) return false;
   if (isSwitchGameListing(item, `${titleText} ${combinedText}`, fam)) return false;
   if (isHardAccessoryListing(`${titleText} ${combinedText}`, item)) return false;
   if (isDigitalCodeOrMembership(item, `${titleText} ${combinedText}`)) return false;
@@ -1578,12 +1671,14 @@ function failsSharedConsoleGate(item, text = "", queryContext = {}) {
 function isClearlyNonConsole(item, text) {
   const combinedText = normalizeConsoleText(text);
   const titleText = getTitleText(item);
+  const family = parseConsoleFamily(`${titleText} ${combinedText}`);
 
   if (isHardNonConsoleCategory(item)) return true;
+  if (isSwitchPartsListing(item, `${titleText} ${combinedText}`, family)) return true;
   if (isDigitalCodeOrMembership(item, combinedText)) return true;
   if (
     failsSharedConsoleGate(item, `${titleText} ${combinedText}`, {
-      family: parseConsoleFamily(`${titleText} ${combinedText}`),
+      family,
     })
   ) {
     return true;
@@ -2355,6 +2450,7 @@ function matchesConsoleFamily(text, queryContext, item) {
     if (isIncompleteSwitchConsole(t, queryContext)) return false;
     if (!isConsoleCategory(item) && !hasSwitchConsoleIntent(switchText, family)) return false;
     if (isSwitchGameListing(item, switchText, family)) return false;
+    if (isSwitchPartsListing(item, switchText, family)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
     return isSwitchOledSignal(switchText);
   }
@@ -2363,6 +2459,7 @@ function matchesConsoleFamily(text, queryContext, item) {
     if (!isStrictSwitchMainConsoleListing(item, switchText, family)) return false;
     if (!isConsoleCategory(item) && !hasSwitchConsoleIntent(switchText, family)) return false;
     if (isSwitchGameListing(item, switchText, family)) return false;
+    if (isSwitchPartsListing(item, switchText, family)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
     return isSwitchLiteSignal(switchText);
   }
@@ -2377,6 +2474,7 @@ function matchesConsoleFamily(text, queryContext, item) {
     if (switchGeneration === "v1") return false;
     if (!isConsoleCategory(item) && !hasSwitchConsoleIntent(switchText, family)) return false;
     if (isSwitchGameListing(item, switchText, family)) return false;
+    if (isSwitchPartsListing(item, switchText, family)) return false;
 
     return hasSwitch && !saysOled && !saysLite && !isHardAccessoryListing(titleText || t, item);
   }
