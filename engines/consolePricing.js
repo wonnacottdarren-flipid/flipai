@@ -38,11 +38,8 @@ import {
   hasConfirmedCompleteSwitchV2Signals,
   getNintendoSwitchRankingAdjustment,
   getSwitchPricingBucket,
-  detectIncludedGamesCount,
-  hasControllerIncluded,
   isHomeConsoleOnlyListing,
   isStorageMismatch,
-  getCategoryText,
   isHardNonConsoleCategory,
   failsSharedConsoleGate,
 } from "./consoleFilters.js";
@@ -203,7 +200,11 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals, item = null
       flags.push("Unknown Switch version");
     }
 
-    if (switchGeneration === "unknown" && isGenericUnknownSwitchTitle(titleText) && !flags.includes("Generic Switch title")) {
+    if (
+      switchGeneration === "unknown" &&
+      isGenericUnknownSwitchTitle(titleText) &&
+      !flags.includes("Generic Switch title")
+    ) {
       flags.push("Generic Switch title");
     }
   }
@@ -297,7 +298,10 @@ function getStorageBias(queryContext, text) {
   if (itemStorage === "unknown") return -2;
 
   if (
-    (family === "xbox_series_s" || family === "xbox_series_x" || family === "ps5_disc" || family === "ps5_digital") &&
+    (family === "xbox_series_s" ||
+      family === "xbox_series_x" ||
+      family === "ps5_disc" ||
+      family === "ps5_digital") &&
     itemStorage !== queryStorage
   ) {
     return -14;
@@ -765,7 +769,9 @@ export function buildConsolePricingModel(queryContext, marketItems = [], listing
         .filter((value) => value > 0)
     );
 
-    const blendedV2Totals = removePriceOutliers([...v2MarketTotals, ...v2ListingTotals].filter((value) => value > 0));
+    const blendedV2Totals = removePriceOutliers(
+      [...v2MarketTotals, ...v2ListingTotals].filter((value) => value > 0)
+    );
 
     if (v2MarketTotals.length >= 3 || blendedV2Totals.length >= 3) {
       marketTotals = v2MarketTotals.length >= 3 ? v2MarketTotals : blendedV2Totals;
@@ -944,10 +950,12 @@ export function buildConsolePricingModel(queryContext, marketItems = [], listing
     const unknownSwitchCount = marketConditionPool.filter(
       (entry) => entry.switchPricingBucket === "switch_unknown_standard"
     ).length;
-    const riskySwitchCount = marketConditionPool.filter((entry) => entry.warningFlags.includes("Risky Switch wording"))
-      .length;
-    const genericUnknownCount = marketConditionPool.filter((entry) => entry.warningFlags.includes("Generic Switch title"))
-      .length;
+    const riskySwitchCount = marketConditionPool.filter(
+      (entry) => entry.warningFlags.includes("Risky Switch wording")
+    ).length;
+    const genericUnknownCount = marketConditionPool.filter(
+      (entry) => entry.warningFlags.includes("Generic Switch title")
+    ).length;
 
     if (pricingMode === "Switch V2 confirmed blended median" && confirmedV2Count >= 4) {
       confidence += 6;
@@ -975,8 +983,9 @@ export function buildConsolePricingModel(queryContext, marketItems = [], listing
   }
 
   if (queryContext.family === "switch_oled" || queryContext.family === "switch_lite") {
-    const riskySwitchCount = marketConditionPool.filter((entry) => entry.warningFlags.includes("Risky Switch wording"))
-      .length;
+    const riskySwitchCount = marketConditionPool.filter(
+      (entry) => entry.warningFlags.includes("Risky Switch wording")
+    ).length;
 
     if (riskySwitchCount >= 2) {
       confidence -= 4;
@@ -1012,20 +1021,24 @@ export function buildConsolePricingModel(queryContext, marketItems = [], listing
       familyLowBandFloor,
       baseline,
       multiplier: conservativeMultiplier,
-      switchMarketV2Count: marketConditionPool.filter((entry) => entry.switchPricingBucket === "switch_v2_confirmed")
-        .length,
+      switchMarketV2Count: marketConditionPool.filter(
+        (entry) => entry.switchPricingBucket === "switch_v2_confirmed"
+      ).length,
       switchMarketUnknownCount: marketConditionPool.filter(
         (entry) => entry.switchPricingBucket === "switch_unknown_standard"
       ).length,
-      switchListingV2Count: listingConditionPool.filter((entry) => entry.switchPricingBucket === "switch_v2_confirmed")
-        .length,
+      switchListingV2Count: listingConditionPool.filter(
+        (entry) => entry.switchPricingBucket === "switch_v2_confirmed"
+      ).length,
       switchListingUnknownCount: listingConditionPool.filter(
         (entry) => entry.switchPricingBucket === "switch_unknown_standard"
       ).length,
-      switchMarketRiskyCount: marketConditionPool.filter((entry) => entry.warningFlags.includes("Risky Switch wording"))
-        .length,
-      switchMarketGenericCount: marketConditionPool.filter((entry) => entry.warningFlags.includes("Generic Switch title"))
-        .length,
+      switchMarketRiskyCount: marketConditionPool.filter(
+        (entry) => entry.warningFlags.includes("Risky Switch wording")
+      ).length,
+      switchMarketGenericCount: marketConditionPool.filter(
+        (entry) => entry.warningFlags.includes("Generic Switch title")
+      ).length,
     },
   };
 }
@@ -1144,7 +1157,10 @@ export function applyBundleValueToListing({ queryContext, item, baseResale }) {
     }
   }
 
-  if ((queryContext.family === "switch_oled" || queryContext.family === "switch_lite") && hasRiskySwitchWording(`${titleText} ${text}`, queryContext.family)) {
+  if (
+    (queryContext.family === "switch_oled" || queryContext.family === "switch_lite") &&
+    hasRiskySwitchWording(`${titleText} ${text}`, queryContext.family)
+  ) {
     estimatedResale -= queryContext.family === "switch_oled" ? 10 : 8;
   }
 
