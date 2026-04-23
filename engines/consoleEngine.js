@@ -1868,7 +1868,7 @@ function buildConsoleWarningFlags(text, queryContext, bundleSignals) {
     queryStorage &&
     queryStorage !== "unknown" &&
     (!itemStorage || itemStorage === "unknown") &&
-    (family === "ps5_disc" || family === "ps5_digital" || family === "xbox_series_x" || family === "xbox_series_s")
+    (family === "ps5_digital" || family === "xbox_series_x" || family === "xbox_series_s")
   ) {
     flags.push("Storage not confirmed");
   }
@@ -2406,7 +2406,11 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
       marketTotals = unknownMarketTotals;
       listingTotals = unknownListingTotals.length ? unknownListingTotals : v2ListingTotals;
 
-      baseline = median(unknownMarketTotals) || percentile(unknownMarketTotals, 0.35) || median(unknownListingTotals) || 0;
+      baseline =
+        median(unknownMarketTotals) ||
+        percentile(unknownMarketTotals, 0.35) ||
+        median(unknownListingTotals) ||
+        0;
 
       baseline = Math.max(baseline, getSwitchBucketLowBandFloor("switch_unknown_standard"));
       pricingMode = "Switch unknown-version median";
