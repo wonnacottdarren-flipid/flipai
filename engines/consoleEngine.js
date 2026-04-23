@@ -1534,7 +1534,10 @@ function isStrictSwitchMainConsoleListing(item, text = "", family = "") {
 
   if (fam === "switch_oled" && !isSwitchOledSignal(`${titleText} ${combinedText}`)) return false;
   if (fam === "switch_lite" && !isSwitchLiteSignal(`${titleText} ${combinedText}`)) return false;
-  if (fam === "switch_v2" && (isSwitchOledSignal(`${titleText} ${combinedText}`) || isSwitchLiteSignal(`${titleText} ${combinedText}`))) {
+  if (
+    fam === "switch_v2" &&
+    (isSwitchOledSignal(`${titleText} ${combinedText}`) || isSwitchLiteSignal(`${titleText} ${combinedText}`))
+  ) {
     return false;
   }
 
