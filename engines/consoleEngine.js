@@ -353,6 +353,9 @@ const XBOX_CONSOLE_INTENT_TERMS = [
   "512gb",
   "standard edition",
   "boxed",
+  "box included",
+  "original box",
+  "complete in box",
   "no box",
   "unboxed",
   "with controller",
@@ -368,6 +371,8 @@ const XBOX_CONSOLE_INTENT_TERMS = [
   "no controller",
   "without controller",
   "controller not included",
+  "pad included",
+  "pad not included",
 ];
 
 const PS5_DISC_CUSTOM_STORAGE_TERMS = [
@@ -652,6 +657,70 @@ function hasXboxConsoleIntent(text = "") {
   return hasAny(t, XBOX_CONSOLE_INTENT_TERMS);
 }
 
+function hasStrictXboxConsoleTitleSignals(text = "") {
+  const t = normalizeConsoleText(text);
+
+  return hasAny(t, [
+    "console",
+    "system",
+    "1tb",
+    "2tb",
+    "512gb",
+    "standard edition",
+    "boxed",
+    "box included",
+    "original box",
+    "complete in box",
+    "no box",
+    "unboxed",
+    "with controller",
+    "controller included",
+    "includes controller",
+    "pad included",
+    "bundle",
+    "console only",
+    "no controller",
+    "without controller",
+    "controller not included",
+    "pad not included",
+    "carbon black",
+    "galaxy black",
+  ]);
+}
+
+function isStrictXboxMainConsoleListing(item, text = "", family = "") {
+  const combinedText = normalizeConsoleText(text);
+  const titleText = getTitleText(item);
+  const categoryText = getCategoryText(item);
+  const fam = String(family || parseConsoleFamily(`${titleText} ${combinedText}`));
+
+  if (!(fam === "xbox_series_x" || fam === "xbox_series_s")) {
+    return false;
+  }
+
+  if (isXboxOneFamilySignal(`${titleText} ${combinedText}`)) return false;
+  if (isXboxGameListing(item, `${titleText} ${combinedText}`)) return false;
+  if (isHardAccessoryListing(`${titleText} ${combinedText}`, item)) return false;
+  if (isDigitalCodeOrMembership(item, `${titleText} ${combinedText}`)) return false;
+
+  const hasCorrectFamilySignal =
+    fam === "xbox_series_x"
+      ? isXboxSeriesXSignal(`${titleText} ${combinedText}`)
+      : isXboxSeriesSSignal(`${titleText} ${combinedText}`);
+
+  if (!hasCorrectFamilySignal) return false;
+
+  const titleHasStrictSignals = hasStrictXboxConsoleTitleSignals(titleText);
+  const combinedHasStrictSignals = hasStrictXboxConsoleTitleSignals(`${titleText} ${combinedText}`);
+  const inConsoleCategory = hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
+
+  if (!titleHasStrictSignals && !(inConsoleCategory && combinedHasStrictSignals)) {
+    return false;
+  }
+
+  return true;
+}
+
 function isVideoGamesCategoryOnly(item) {
   const categoryText = getCategoryText(item);
   return hasAny(categoryText, ["video games"]) && !hasAny(categoryText, CONSOLE_CATEGORY_TERMS);
@@ -725,6 +794,10 @@ function hasBaseConsoleIntent(text = "", family = "") {
 function failsSharedConsoleGate(item, text = "", queryContext = {}) {
   const combined = normalizeConsoleText(text);
   const family = String(queryContext?.family || parseConsoleFamily(combined));
+
+  if (family === "xbox_series_x" || family === "xbox_series_s") {
+    return !isStrictXboxMainConsoleListing(item, combined, family);
+  }
 
   if (isVideoGamesCategoryOnly(item) && !hasBaseConsoleIntent(combined, family)) {
     return true;
@@ -1294,7 +1367,11 @@ function isClearlyNonConsole(item, text) {
 
   if (isHardNonConsoleCategory(item)) return true;
   if (isDigitalCodeOrMembership(item, combinedText)) return true;
-  if (failsSharedConsoleGate(item, `${titleText} ${combinedText}`, { family: parseConsoleFamily(`${titleText} ${combinedText}`) })) {
+  if (
+    failsSharedConsoleGate(item, `${titleText} ${combinedText}`, {
+      family: parseConsoleFamily(`${titleText} ${combinedText}`),
+    })
+  ) {
     return true;
   }
 
@@ -2031,25 +2108,25 @@ function matchesConsoleFamily(text, queryContext, item) {
   }
 
   if (family === "xbox_series_x") {
+    if (!isStrictXboxMainConsoleListing(item, xboxText, family)) return false;
     if (!isXboxSeriesXSignal(xboxText)) return false;
     if (isXboxSeriesSSignal(xboxText)) return false;
     if (isXboxOneFamilySignal(xboxText)) return false;
     if (isXboxGameListing(item, xboxText)) return false;
     if (isClearlyNonConsole(item, xboxText)) return false;
     if (isHardAccessoryListing(xboxText, item)) return false;
-    if (!isConsoleCategory(item) && !hasXboxConsoleIntent(xboxText)) return false;
     if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
     return true;
   }
 
   if (family === "xbox_series_s") {
+    if (!isStrictXboxMainConsoleListing(item, xboxText, family)) return false;
     if (!isXboxSeriesSSignal(xboxText)) return false;
     if (isXboxSeriesXSignal(xboxText)) return false;
     if (isXboxOneFamilySignal(xboxText)) return false;
     if (isXboxGameListing(item, xboxText)) return false;
     if (isClearlyNonConsole(item, xboxText)) return false;
     if (isHardAccessoryListing(xboxText, item)) return false;
-    if (!isConsoleCategory(item) && !hasXboxConsoleIntent(xboxText)) return false;
     if (isStorageMismatch(queryStorage, itemStorage, family)) return false;
     return true;
   }
@@ -2720,7 +2797,7 @@ function buildConsolePricingModel(queryContext, marketItems = [], listingItems =
       pricingMode = "Switch V2 confirmed blended median";
     } else if (unknownMarketTotals.length >= 3) {
       marketTotals = unknownMarketTotals;
-      listingTotals = unknownListingTotals.length ? unknownListingTotals : v2ListingTotals;
+      listingTotals = unknownListingsTotals.length ? unknownListingTotals : v2ListingTotals;
 
       baseline =
         median(unknownMarketTotals) ||
