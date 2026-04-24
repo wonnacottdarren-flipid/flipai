@@ -1,7 +1,26 @@
 import { matchPs5CleanListing } from "./ps5CleanFilter.js";
 
-export function matchPs5ConsoleFamily({ item, queryContext } = {}) {
-  const result = matchPs5CleanListing(item, queryContext);
+function getItemText(item = {}) {
+  return [
+    item?.title,
+    item?.subtitle,
+    item?.condition,
+    item?.conditionDisplayName,
+    item?.itemCondition,
+    item?.shortDescription,
+    item?.description,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function matchPs5ConsoleFamily({ text = "", item, queryContext } = {}) {
+  const combinedItem = {
+    ...item,
+    title: [text, getItemText(item)].filter(Boolean).join(" "),
+  };
+
+  const result = matchPs5CleanListing(combinedItem, queryContext);
 
   if (!result?.matched) return false;
 
