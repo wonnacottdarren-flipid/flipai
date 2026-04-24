@@ -10,7 +10,7 @@ import {
 
 const CONSOLE_FAMILIES = [
   [
-    "ps5_disc",
+    "ps5_disc", 
     [
       "ps5 disc",
       "ps5 disk",
