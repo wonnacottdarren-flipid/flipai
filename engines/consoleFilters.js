@@ -602,13 +602,20 @@ export const ps5BundleDebugCounts = {
   passed: 0,
 };
 
+globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
+
+let ps5BundleDebugLogTimer = null;
+
 export function resetPs5BundleDebugCounts() {
   Object.keys(ps5BundleDebugCounts).forEach((key) => {
     ps5BundleDebugCounts[key] = 0;
   });
+
+  globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
 }
 
 export function getPs5BundleDebugCounts() {
+  globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
   return { ...ps5BundleDebugCounts };
 }
 
@@ -620,10 +627,27 @@ function isPs5BundleDebugQuery(queryContext = {}) {
   );
 }
 
+function schedulePs5BundleDebugLog(queryContext = {}) {
+  if (!isPs5BundleDebugQuery(queryContext)) return;
+
+  globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
+
+  if (ps5BundleDebugLogTimer) {
+    clearTimeout(ps5BundleDebugLogTimer);
+  }
+
+  ps5BundleDebugLogTimer = setTimeout(() => {
+    globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
+    console.log("globalThis.__flipaiPs5BundleDebug", globalThis.__flipaiPs5BundleDebug);
+  }, 1000);
+}
+
 function countPs5BundleDebug(queryContext = {}, key = "") {
   if (!key || !isPs5BundleDebugQuery(queryContext)) return;
   if (Object.prototype.hasOwnProperty.call(ps5BundleDebugCounts, key)) {
     ps5BundleDebugCounts[key] += 1;
+    globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
+    schedulePs5BundleDebugLog(queryContext);
   }
 }
 
