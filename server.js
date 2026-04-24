@@ -26,6 +26,7 @@ import {
 import { runAnalysis } from "./openai.js";
 import { searchEbayListings, searchEbayMarketPool } from "./ebay.js";
 import * as engineRegistry from "./engines/index.js";
+import { logPs5BundleDebug } from "./engines/consoleMatchDebug.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2201,7 +2202,7 @@ app.post("/api/find-deals", async (req, res) => {
         ...deal,
         bestDeal: index === 0,
       }));
-
+logPs5BundleDebug({ query, queryContext, cleanListings, cleanMarket, evaluatedDeals, preferredDeals, finalDeals });
     return res.json({
       ok: true,
       searchQuery: fetchedListings.searchQuery,
