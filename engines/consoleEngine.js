@@ -3477,7 +3477,7 @@ export const consoleEngine = {
   wantsConsoleOnly,
   storagePreference,
 };
-    };
+    },
 
   buildSearchQuery(query = "") {
     const ctx = this.classifyQuery(query);
