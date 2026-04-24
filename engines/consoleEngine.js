@@ -3461,14 +3461,22 @@ export const consoleEngine = {
         normalizedQuery.includes("comes with"));
 
     return {
-      rawQuery,
-      normalizedQuery,
-      brand,
-      family,
-      allowDamaged,
-      wantsBundle,
-      wantsConsoleOnly,
-      storagePreference,
+  rawQuery,
+  normalizedQuery,
+  brand,
+  family,
+  allowDamaged,
+  wantsBundle:
+    (family === "ps5_disc" || family === "ps5_digital") && wantsBundle
+      ? false
+      : wantsBundle,
+  originalWantsBundle:
+    (family === "ps5_disc" || family === "ps5_digital") && wantsBundle
+      ? true
+      : false,
+  wantsConsoleOnly,
+  storagePreference,
+};
     };
   },
 
@@ -3495,6 +3503,19 @@ export const consoleEngine = {
   expandSearchVariants(query = "") {
     const rawQuery = String(query || "").trim();
     const ctx = this.classifyQuery(rawQuery);
+    if (
+  (ctx.family === "ps5_disc" || ctx.family === "ps5_digital") &&
+  (ctx.wantsBundle || ctx.originalWantsBundle)
+) {
+  return [
+    "ps5 bundle",
+    "ps5 console bundle",
+    "ps5 with games",
+    "ps5 games bundle",
+    "ps5 with 2 controllers",
+    "ps5 with controller",
+  ];
+}
 
     if (ctx.wantsConsoleOnly) {
       if (ctx.family === "ps5_disc") {
