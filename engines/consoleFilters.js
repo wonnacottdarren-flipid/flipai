@@ -16,6 +16,11 @@ const CONSOLE_FAMILIES = [
       "disc version",
       "bluray edition",
       "blu ray edition",
+      "blu-ray edition",
+      "ps5 bundle",
+      "playstation 5 bundle",
+      "ps5 console bundle",
+      "playstation 5 console bundle",
       "cfi 1116a",
       "cfi 1216a",
       "cfi-1116a",
@@ -557,8 +562,8 @@ export const MINOR_WARNING_TERMS = [
   ["scratched up", "Visible cosmetic wear mentioned"],
   ["heavy scratches", "Visible cosmetic wear mentioned"],
   ["wear scratch", "Visible cosmetic wear mentioned"],
-  ["cosmetic marks", "Visible cosmetic wear mentioned"],
-  ["cosmetic wear", "Visible cosmetic wear mentioned"],
+  ["cosmetic marks", "Condition may reduce resale appeal"],
+  ["cosmetic wear", "Condition may reduce resale appeal"],
   ["missing controller", "No controller included"],
   ["no controller", "No controller included"],
   ["without controller", "No controller included"],
@@ -657,6 +662,7 @@ export function hasAny(text, phrases = []) {
 
 export function normalizeConsoleText(value) {
   return normalizeText(String(value || ""))
+    .replace(/[&+]/g, " and ")
     .replace(/\bps\s*5\b/g, "ps5")
     .replace(/\bplaystation\s*5\b/g, "playstation5")
     .replace(/\bplaystation 5\b/g, "playstation5")
@@ -776,11 +782,16 @@ export function isHardPs5AccessoryText(text = "") {
     "with controller",
     "controller included",
     "includes controller",
+    "controller and cable",
+    "controller and cables",
+    "controller cables",
     "2 controllers",
     "two controllers",
     "extra controller",
     "second controller",
     "console bundle",
+    "ps5 bundle",
+    "playstation5 bundle",
     "ps5 console",
     "playstation5 console",
   ]);
@@ -1130,7 +1141,16 @@ export function hasBaseConsoleIntent(text = "", family = "") {
       "512gb",
       "with controller",
       "controller included",
+      "includes controller",
+      "controller and cable",
+      "controller and cables",
+      "with cables",
+      "cables included",
+      "box and cables",
       "boxed",
+      "bundle",
+      "ps5 bundle",
+      "playstation5 bundle",
     ]);
   }
 
@@ -1393,7 +1413,16 @@ export function hasStrongConsoleSignals(text) {
     "512gb",
     "with controller",
     "controller included",
+    "includes controller",
+    "controller and cable",
+    "controller and cables",
+    "with cables",
+    "cables included",
+    "box and cables",
     "boxed",
+    "bundle",
+    "ps5 bundle",
+    "playstation5 bundle",
     "xbox series x console",
     "xbox series s console",
     "nintendo switch console",
@@ -1461,6 +1490,8 @@ export function looksLikeMainConsoleTitle(text) {
       "with controller",
       "controller included",
       "includes controller",
+      "controller and cable",
+      "controller and cables",
       "2 controllers",
       "two controllers",
       "extra controller",
@@ -1491,7 +1522,16 @@ export function looksLikeMainConsoleTitle(text) {
       "512gb",
       "with controller",
       "controller included",
+      "includes controller",
+      "controller and cable",
+      "controller and cables",
+      "with cables",
+      "cables included",
+      "box and cables",
       "boxed",
+      "bundle",
+      "ps5 bundle",
+      "playstation5 bundle",
       "xbox series x console",
       "xbox series s console",
       "nintendo switch console",
@@ -1525,7 +1565,23 @@ export function looksLikeMainConsoleTitle(text) {
 
   if (
     (t.startsWith("ps5 ") || t.startsWith("playstation5 ")) &&
-    hasAny(t, ["console", "edition", "standard", "digital", "disc", "slim", "cfi", "825gb", "1tb"])
+    hasAny(t, [
+      "console",
+      "edition",
+      "standard",
+      "digital",
+      "disc",
+      "slim",
+      "cfi",
+      "825gb",
+      "1tb",
+      "bundle",
+      "controller",
+      "cable",
+      "cables",
+      "box",
+      "boxed",
+    ])
   ) {
     return true;
   }
@@ -1641,6 +1697,9 @@ export function isObviousAccessoryTitle(titleText) {
     !hasAny(t, [
       "with controller",
       "controller included",
+      "includes controller",
+      "controller and cable",
+      "controller and cables",
       "2 controllers",
       "two controllers",
       "extra controller",
@@ -2262,7 +2321,7 @@ export function hasControllerIncluded(text, family) {
   }
 
   if (hasAny(t, ["no controller", "without controller", "missing controller"])) return false;
-  if (hasAny(t, ["with controller", "controller included", "pad included"])) return true;
+  if (hasAny(t, ["with controller", "controller included", "includes controller", "controller and cable", "controller and cables", "pad included"])) return true;
 
   return true;
 }
@@ -2346,7 +2405,14 @@ export function detectBundleSignals(text, family) {
 
   const hasBox =
     !hasAny(t, ["unboxed", "no box", "without box"]) &&
-    hasAny(t, ["boxed", "box included", "original box", "complete in box"])
+    hasAny(t, [
+      "boxed",
+      "box included",
+      "box and cables",
+      "box with cables",
+      "original box",
+      "complete in box",
+    ])
       ? 1
       : 0;
 
@@ -2371,8 +2437,28 @@ export function detectBundleSignals(text, family) {
       ? 1
       : 0;
 
+  const hasStandardCables =
+    hasAny(t, [
+      "with cable",
+      "with cables",
+      "cable included",
+      "cables included",
+      "power cable",
+      "hdmi cable included",
+      "hdmi and power cable",
+      "power and hdmi cable",
+      "controller and cable",
+      "controller and cables",
+      "box and cables",
+    ])
+      ? 1
+      : 0;
+
   const explicitBundleWords = hasAny(t, [
     "bundle",
+    "console bundle",
+    "ps5 bundle",
+    "playstation5 bundle",
     "job lot",
     "comes with games",
     "includes games",
@@ -2413,6 +2499,7 @@ export function detectBundleSignals(text, family) {
     includedGamesCount,
     hasBox: Boolean(hasBox),
     hasAccessories: Boolean(hasAccessories),
+    hasStandardCables: Boolean(hasStandardCables),
     explicitBundleWords: Boolean(explicitBundleWords),
   };
 }
@@ -2694,6 +2781,8 @@ export function matchesConsoleFamily(text, queryContext, item) {
   const itemStorage = detectConsoleStorage(`${titleText} ${t}`, family);
   const xboxText = `${titleText} ${t}`;
   const switchText = `${titleText} ${t}`;
+  const ps5Text = normalizeConsoleText(`${titleText} ${t}`);
+  const wantsPs5Bundle = Boolean(queryContext?.wantsBundle) && (family === "ps5_disc" || family === "ps5_digital");
 
   if (isHardPs5AccessoryListing(`${titleText} ${t}`, item)) return false;
   if (isHardNonConsoleCategory(item)) return false;
@@ -2702,9 +2791,9 @@ export function matchesConsoleFamily(text, queryContext, item) {
   if (!family) return true;
 
   if (family === "ps5_disc") {
-    if (isHardPs5AccessoryListing(`${titleText} ${t}`, item)) return false;
-    if (!isPs5Like(`${titleText} ${t}`)) return false;
-    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
+    if (isHardPs5AccessoryListing(ps5Text, item)) return false;
+    if (!isPs5Like(ps5Text)) return false;
+    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText) && !(wantsPs5Bundle && hasBaseConsoleIntent(ps5Text, family))) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
     if (consoleType === "accessory") return false;
@@ -2714,9 +2803,9 @@ export function matchesConsoleFamily(text, queryContext, item) {
   }
 
   if (family === "ps5_digital") {
-    if (isHardPs5AccessoryListing(`${titleText} ${t}`, item)) return false;
-    if (!isPs5Like(`${titleText} ${t}`)) return false;
-    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
+    if (isHardPs5AccessoryListing(ps5Text, item)) return false;
+    if (!isPs5Like(ps5Text)) return false;
+    if (!isConsoleCategory(item) && !hasStrongConsoleSignals(titleText) && !(wantsPs5Bundle && hasBaseConsoleIntent(ps5Text, family))) return false;
     if (isClearlyNonConsole(item, titleText || t)) return false;
     if (isHardAccessoryListing(titleText || t, item)) return false;
     if (consoleType === "accessory") return false;
@@ -2815,6 +2904,7 @@ export function classifyConsoleQuery(query = "") {
   const wantsBundle =
     !wantsConsoleOnly &&
     (normalizedQuery.includes("bundle") ||
+      normalizedQuery.includes("console bundle") ||
       normalizedQuery.includes("with games") ||
       normalizedQuery.includes("games included") ||
       normalizedQuery.includes("with 2 controllers") ||
@@ -2822,6 +2912,11 @@ export function classifyConsoleQuery(query = "") {
       normalizedQuery.includes("extra controller") ||
       normalizedQuery.includes("second controller") ||
       normalizedQuery.includes("spare controller") ||
+      normalizedQuery.includes("with controller") ||
+      normalizedQuery.includes("controller included") ||
+      normalizedQuery.includes("with cables") ||
+      normalizedQuery.includes("cables included") ||
+      normalizedQuery.includes("box and cables") ||
       normalizedQuery.includes("job lot") ||
       normalizedQuery.includes("comes with"));
 
@@ -2915,6 +3010,13 @@ export function expandConsoleSearchVariants(query = "") {
       "ps5 disc",
       "ps5 standard",
       "ps5 bundle",
+      "ps5 console bundle",
+      "playstation 5 bundle",
+      "playstation 5 console bundle",
+      "ps5 with controller",
+      "ps5 with games",
+      "ps5 with cables",
+      "ps5 boxed",
     ];
   }
 
@@ -2925,6 +3027,8 @@ export function expandConsoleSearchVariants(query = "") {
       "playstation 5 digital",
       "digital edition ps5",
       "ps5 digital console",
+      "ps5 digital bundle",
+      "playstation 5 digital bundle",
     ];
   }
 
