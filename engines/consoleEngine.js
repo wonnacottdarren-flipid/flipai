@@ -3478,7 +3478,6 @@ export const consoleEngine = {
   storagePreference,
 };
     };
-  },
 
   buildSearchQuery(query = "") {
     const ctx = this.classifyQuery(query);
