@@ -2777,8 +2777,13 @@ function getMatchDebug(item, queryContext) {
     };
   }
   if (queryContext.wantsBundle && !isRealBundle) {
+  const family = String(queryContext?.family || "");
+
+  if (family !== "ps5_disc" && family !== "ps5_digital") {
     return { matched: false, reason: "bundle_required_but_not_detected" };
   }
+}
+  
   if (queryContext.wantsConsoleOnly && bundleSignals.bundleType !== "console_only") {
     return {
       matched: false,
