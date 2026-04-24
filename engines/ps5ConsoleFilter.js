@@ -91,6 +91,26 @@ const HARD_REJECT_TERMS = [
   "account banned",
 ];
 
+const HARD_ACCESSORY_ONLY_TERMS = [
+  "controller only",
+  "pad only",
+  "dualsense only",
+  "game only",
+  "games only",
+  "box only",
+  "empty box",
+  "disc drive only",
+  "drive only",
+  "stand only",
+  "case only",
+  "shell only",
+  "hdmi cable only",
+  "power cable only",
+  "cable only",
+  "camera only",
+  "remote only",
+];
+
 const HARD_ACCESSORY_TERMS = [
   "controller only",
   "pad only",
@@ -176,6 +196,13 @@ export function isHardPs5AccessoryText(input) {
 
   if (!isPs5Like(text)) return false;
 
+  if (hasAny(text, HARD_ACCESSORY_ONLY_TERMS)) return true;
+
+  const saysConsole = hasAny(text, CONSOLE_TERMS);
+  const saysBundle = hasAny(text, BUNDLE_TERMS);
+
+  if (saysBundle) return false;
+
   if (hasAny(text, HARD_ACCESSORY_TERMS)) return true;
 
   const saysController = hasAny(text, [
@@ -185,19 +212,17 @@ export function isHardPs5AccessoryText(input) {
     "wireless controller",
   ]);
 
-  const saysConsole = hasAny(text, CONSOLE_TERMS);
-
-  if (saysController && !saysConsole && !hasAny(text, BUNDLE_TERMS)) {
+  if (saysController && !saysConsole) {
     return true;
   }
 
   const saysGame = hasWord(text, "game") || hasWord(text, "games");
-  if (saysGame && !saysConsole && !hasAny(text, BUNDLE_TERMS)) {
+  if (saysGame && !saysConsole) {
     return true;
   }
 
   const saysAccessory = hasAny(text, ACCESSORY_CATEGORY_TERMS);
-  if (saysAccessory && !saysConsole && !hasAny(text, BUNDLE_TERMS)) {
+  if (saysAccessory && !saysConsole) {
     return true;
   }
 
@@ -235,12 +260,11 @@ export function isPs5BundleCandidate(input) {
 
   if (!isPs5Like(text)) return false;
   if (hasHardPs5Reject(text)) return false;
-  if (isHardPs5AccessoryText(text)) return false;
+  if (hasAny(text, HARD_ACCESSORY_ONLY_TERMS)) return false;
 
-  const hasConsoleSignal = hasAny(text, CONSOLE_TERMS) || hasAny(text, PS5_DISC_TERMS) || hasAny(text, PS5_DIGITAL_TERMS);
   const hasBundleSignal = hasAny(text, BUNDLE_TERMS);
 
-  return hasConsoleSignal && hasBundleSignal;
+  return hasBundleSignal;
 }
 
 export function detectConsoleType(input) {
@@ -248,7 +272,6 @@ export function detectConsoleType(input) {
 
   if (!isPs5Like(text)) return null;
   if (hasHardPs5Reject(text)) return null;
-  if (isHardPs5AccessoryText(text)) return null;
 
   const variant = detectPs5Variant(text);
 
@@ -261,6 +284,8 @@ export function detectConsoleType(input) {
       isConsole: true,
     };
   }
+
+  if (isHardPs5AccessoryText(text)) return null;
 
   if (hasAny(text, CONSOLE_TERMS) || variant === "ps5_disc" || variant === "ps5_digital") {
     return {
