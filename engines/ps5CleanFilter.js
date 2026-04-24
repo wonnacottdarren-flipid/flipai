@@ -1,98 +1,149 @@
-// ps5CleanFilter.js
-
 import { normalizeText } from "./baseEngine.js";
 
-function norm(text) {
-  return normalizeText(String(text || ""));
+function normalize(value) {
+  return normalizeText(String(value || ""))
+    .replace(/\bplaystation\s*5\b/g, "ps5")
+    .replace(/\bps\s*5\b/g, "ps5")
+    .replace(/\bdisk\b/g, "disc")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getText(item) {
+  return normalize(
+    [
+      item?.title,
+      item?.subtitle,
+      item?.description,
+      item?.condition,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
 }
 
 function hasAny(text, terms) {
-  return terms.some(t => text.includes(t));
+  return terms.some((t) => text.includes(t));
 }
 
-// --- CORE TERMS ---
-const PS5_TERMS = ["ps5", "playstation 5"];
+function isPs5(text) {
+  return text.includes("ps5");
+}
 
-const CONSOLE_TERMS = [
-  "console",
-  "ps5 console",
-  "playstation 5 console",
-  "disc edition",
-  "digital edition",
-];
+function hasConsoleContext(text) {
+  return hasAny(text, [
+    "console",
+    "system",
+    "bundle",
+    "with controller",
+    "controller included",
+    "with games",
+    "games included",
+    "with cables",
+    "cables included",
+    "boxed",
+    "box included",
+    "complete in box",
+    "disc edition",
+    "digital edition",
+    "standard edition",
+    "1tb",
+    "825gb",
+  ]);
+}
 
-const BUNDLE_TERMS = [
-  "bundle",
-  "with controller",
-  "controller included",
-  "includes controller",
-  "with games",
-  "games included",
-  "with cables",
-  "cables included",
-  "boxed",
-  "box included",
-];
+function detectVariant(text) {
+  if (hasAny(text, ["digital edition", "digital"])) return "digital";
+  if (hasAny(text, ["disc edition", "disc", "standard edition"])) return "disc";
+  return "unknown";
+}
 
-const HARD_REJECT = [
-  "faulty",
-  "broken",
-  "not working",
-  "for parts",
-  "spares",
-];
+function isFaulty(text) {
+  return hasAny(text, [
+    "faulty",
+    "not working",
+    "for parts",
+    "spares",
+    "repairs",
+    "broken",
+    "no power",
+    "won't turn on",
+    "wont turn on",
+  ]);
+}
 
-const HARD_ONLY = [
-  "controller only",
-  "game only",
-  "games only",
-  "box only",
-  "empty box",
-  "disc drive only",
-  "cable only",
-  "headset only",
-];
+function isAccessoryOnly(text) {
+  return hasAny(text, [
+    "controller only",
+    "dualsense only",
+    "pad only",
+    "remote only",
+    "disc drive only",
+    "drive only",
+    "box only",
+    "empty box",
+    "manual only",
+    "shell only",
+    "case only",
+  ]);
+}
 
-// --- MAIN FUNCTION ---
-export function matchPs5Clean(text) {
-  const t = norm(text);
+function isGameOnly(text) {
+  return hasAny(text, [
+    "ps5 game",
+    "game only",
+    "disc only",
+    "no console",
+    "steelbook",
+  ]);
+}
 
-  // 1. Must be PS5
-  if (!hasAny(t, PS5_TERMS)) {
-    return { matched: false, reason: "not_ps5" };
+function isBundle(text) {
+  return hasAny(text, [
+    "bundle",
+    "with controller",
+    "controller included",
+    "with games",
+    "games included",
+    "with cables",
+    "cables included",
+    "boxed",
+    "box included",
+    "with headset",
+    "includes headset",
+  ]);
+}
+
+export function matchPs5CleanListing(item, queryContext = {}) {
+  const text = getText(item);
+
+  if (!isPs5(text)) {
+    return { matched: false, reason: "not_ps5", variant: "unknown", bundleType: "none" };
   }
 
-  // 2. Hard reject (always kill)
-  if (hasAny(t, HARD_REJECT)) {
-    return { matched: false, reason: "faulty" };
+  if (!hasConsoleContext(text)) {
+    return { matched: false, reason: "no_console_context", variant: "unknown", bundleType: "none" };
   }
 
-  // 3. Hard "only" reject
-  if (hasAny(t, HARD_ONLY)) {
-    return { matched: false, reason: "accessory_only" };
+  if (isFaulty(text)) {
+    return { matched: false, reason: "faulty_or_parts", variant: "unknown", bundleType: "none" };
   }
 
-  const hasConsole = hasAny(t, CONSOLE_TERMS);
-  const hasBundle = hasAny(t, BUNDLE_TERMS);
-
-  // 4. Bundle allowed
-  if (hasBundle) {
-    return {
-      matched: true,
-      type: "bundle",
-      reason: "bundle_pass"
-    };
+  if (isAccessoryOnly(text)) {
+    return { matched: false, reason: "accessory_only", variant: "unknown", bundleType: "none" };
   }
 
-  // 5. Normal console
-  if (hasConsole) {
-    return {
-      matched: true,
-      type: "console",
-      reason: "console_pass"
-    };
+  if (isGameOnly(text)) {
+    return { matched: false, reason: "game_only", variant: "unknown", bundleType: "none" };
   }
 
-  // 6. Everything else = reject
-  return { matched: false, reason: "weak_signal" };
+  const variant = detectVariant(text);
+  const bundle = isBundle(text);
+
+  return {
+    matched: true,
+    reason: bundle ? "ps5_bundle" : "ps5_console",
+    variant,
+    bundleType: bundle ? "bundle" : "console_only",
+  };
 }
