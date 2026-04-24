@@ -2,7 +2,7 @@
 
 import { matchPs5ConsoleFamily } from "./ps5ConsoleMatch.js";
 
-const tests = [
+const testCases = [
   "PS5 Console Bundle With Controller",
   "PS5 Disc Console With Games",
   "PS5 Boxed With Cables",
@@ -11,25 +11,18 @@ const tests = [
   "PS5 Faulty Not Working",
 ];
 
-const baseQueryContext = {
-  rawQuery: "ps5 bundle",
-  normalizedQuery: "ps5 bundle",
-  family: "ps5_disc",
-  wantsBundle: true,
-  storagePreference: "unknown",
-};
-
-const helpers = {};
-
-for (const title of tests) {
-  const item = { title };
-
+for (const title of testCases) {
   const result = matchPs5ConsoleFamily({
     text: title,
-    queryContext: baseQueryContext,
-    item,
-    helpers,
+    queryContext: {
+      family: "ps5_disc",
+      wantsBundle: true,
+    },
+    item: {
+      title,
+    },
+    helpers: {},
   });
 
-  console.log(`${title} → matched: ${result.matched} | reason: ${result.reason || "matched"}`);
+  console.log(title, "→", result);
 }
