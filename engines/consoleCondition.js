@@ -33,6 +33,65 @@ export function hasStrongCleanConditionSignal(text = "") {
   ]);
 }
 
+export function isIncompleteSwitchConsole(text, queryContext = {}) {
+  const t = normalizeConsoleText(text);
+  const family = String(queryContext?.family || "");
+
+  if (!family.startsWith("switch")) return false;
+
+  return hasAny(t, [
+    "tablet only",
+    "screen only",
+    "main unit only",
+    "console only",
+    "no dock",
+    "without dock",
+    "missing dock",
+    "dock not included",
+    "dock missing",
+    "no joy con",
+    "no joy-cons",
+    "no joy cons",
+    "without joy con",
+    "without joy-cons",
+    "without joy cons",
+    "missing joy con",
+    "missing joy-cons",
+    "missing joy cons",
+    "joy cons not included",
+    "joy-cons not included",
+    "joy con not included",
+    "hac-001 tablet only",
+    "tablet unit only",
+    "screen tablet only",
+    "main tablet only",
+    "switch tablet only",
+    "switch screen only",
+    "with docking station only",
+    "docking station only",
+    "console with docking station only",
+    "tablet and dock only",
+    "console and dock only",
+    "dock + tablet only",
+    "just tablet and dock",
+    "only tablet and dock",
+    "tablet with dock only",
+    "main unit and dock only",
+    "dock and charger only",
+    "tablet plus dock only",
+    "screen and dock only",
+    "switch only no joy cons",
+    "switch console only no joy cons",
+    "switch only without joy cons",
+    "switch without joy cons",
+    "tablet + dock no joy cons",
+    "no joy cons included",
+    "no joy-con included",
+    "joy cons missing",
+    "joy-cons missing",
+  ]);
+}
+
 export function hasFaultKeywordCombo(text = "") {
   const t = normalizeConsoleText(text);
 
@@ -87,62 +146,7 @@ export function hasFaultKeywordCombo(text = "") {
 export function isSeverelyBadConsole(text, queryContext = {}) {
   const t = normalizeConsoleText(text);
 
-  if (
-    String(queryContext?.family || "").startsWith("switch") &&
-    hasAny(t, [
-      "tablet only",
-      "screen only",
-      "main unit only",
-      "console only",
-      "no dock",
-      "without dock",
-      "missing dock",
-      "dock not included",
-      "dock missing",
-      "no joy con",
-      "no joy-cons",
-      "no joy cons",
-      "without joy con",
-      "without joy-cons",
-      "without joy cons",
-      "missing joy con",
-      "missing joy-cons",
-      "missing joy cons",
-      "joy cons not included",
-      "joy-cons not included",
-      "joy con not included",
-      "hac-001 tablet only",
-      "tablet unit only",
-      "screen tablet only",
-      "main tablet only",
-      "switch tablet only",
-      "switch screen only",
-      "with docking station only",
-      "docking station only",
-      "console with docking station only",
-      "tablet and dock only",
-      "console and dock only",
-      "dock + tablet only",
-      "just tablet and dock",
-      "only tablet and dock",
-      "tablet with dock only",
-      "main unit and dock only",
-      "dock and charger only",
-      "tablet plus dock only",
-      "screen and dock only",
-      "switch only no joy cons",
-      "switch console only no joy cons",
-      "switch only without joy cons",
-      "switch without joy cons",
-      "tablet + dock no joy cons",
-      "no joy cons included",
-      "no joy-con included",
-      "joy cons missing",
-      "joy-cons missing",
-    ])
-  ) {
-    return true;
-  }
+  if (isIncompleteSwitchConsole(t, queryContext)) return true;
 
   return (
     hasAny(t, HARD_REJECT_TERMS) ||
