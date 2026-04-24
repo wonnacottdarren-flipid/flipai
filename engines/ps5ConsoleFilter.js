@@ -160,6 +160,10 @@ const BUNDLE_TERMS = [
   "with controller",
   "controller included",
   "includes controller",
+  "2 controllers",
+  "two controllers",
+  "extra controller",
+  "second controller",
   "with pad",
   "with dualsense",
   "games included",
@@ -171,8 +175,9 @@ const BUNDLE_TERMS = [
   "with box",
   "with cables",
   "cables included",
-  "power cable",
-  "hdmi cable",
+  "headset included",
+  "with headset",
+  "comes with",
   "complete set",
   "full set",
   "ready to play",
@@ -263,9 +268,7 @@ export function isPs5BundleCandidate(input) {
   if (hasHardPs5Reject(text)) return false;
   if (hasAny(text, HARD_ACCESSORY_ONLY_TERMS)) return false;
 
-  const hasBundleSignal = hasAny(text, BUNDLE_TERMS);
-
-  return hasBundleSignal;
+  return hasAny(text, BUNDLE_TERMS);
 }
 
 export function detectConsoleType(input) {
