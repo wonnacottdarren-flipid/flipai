@@ -195,6 +195,7 @@ export function isHardPs5AccessoryText(input) {
   const text = norm(input);
 
   if (!isPs5Like(text)) return false;
+  if (hasHardPs5Reject(text)) return true;
 
   if (hasAny(text, HARD_ACCESSORY_ONLY_TERMS)) return true;
 
