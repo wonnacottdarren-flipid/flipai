@@ -7,7 +7,7 @@ export function matchesConsoleFamily(text, queryContext, item) {
   const family = String(queryContext?.family || "");
 
   if (family.startsWith("ps5")) {
-    return matchesConsoleFamilyV2({ item, queryContext });
+    return matchesConsoleFamilyV2({ text, item, queryContext });
   }
 
   return matchesConsoleFamilyLegacy(text, queryContext, item);
