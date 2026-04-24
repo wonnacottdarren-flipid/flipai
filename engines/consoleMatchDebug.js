@@ -6,7 +6,7 @@ let ps5BundleDebugState = {
   skippedNonConsole: 0,
   skippedAccessory: 0,
 };
-
+ 
 export function resetPs5BundleDebug() {
   ps5BundleDebugState = {
     totalChecked: 0,
