@@ -1654,7 +1654,7 @@ export function failsSharedConsoleGate(item, text = "", queryContext = {}) {
     ps5ModuleIsPs5BundleCandidate(normalizeForPs5Module(combined), item);
 
   if (isHardPs5RejectText(combined)) return true;
-  if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(combined), item)) return true;
+  if (!ps5BundleCandidate && ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(combined), item)) return true;
 
   if (ps5BundleCandidate) return false;
 
@@ -2509,7 +2509,7 @@ export function matchesConsoleFamily(text, queryContext, item) {
     wantsPs5Bundle && ps5ModuleIsPs5BundleCandidate(normalizeForPs5Module(ps5Text), item);
 
   if (isHardPs5RejectText(ps5Text)) return false;
-  if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(`${titleText} ${t}`), item)) return false;
+  if (!ps5BundleCandidate && ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(`${titleText} ${t}`), item)) return false;
   if (isHardNonConsoleCategory(item)) return false;
   if (!ps5BundleCandidate && failsSharedConsoleGate(item, `${titleText} ${t}`, queryContext)) return false;
 
@@ -2518,7 +2518,7 @@ export function matchesConsoleFamily(text, queryContext, item) {
   if (family === "ps5_disc") {
     if (!ps5ModuleIsPs5Like(normalizeForPs5Module(ps5Text))) return false;
     if (isHardPs5RejectText(ps5Text)) return false;
-    if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(ps5Text), item)) return false;
+    if (!ps5BundleCandidate && ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(ps5Text), item)) return false;
     if (!ps5BundleCandidate && !isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (!ps5BundleCandidate && isClearlyNonConsole(item, titleText || t)) return false;
     if (!ps5BundleCandidate && isHardAccessoryListing(titleText || t, item)) return false;
@@ -2531,7 +2531,7 @@ export function matchesConsoleFamily(text, queryContext, item) {
   if (family === "ps5_digital") {
     if (!ps5ModuleIsPs5Like(normalizeForPs5Module(ps5Text))) return false;
     if (isHardPs5RejectText(ps5Text)) return false;
-    if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(ps5Text), item)) return false;
+    if (!ps5BundleCandidate && ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(ps5Text), item)) return false;
     if (!ps5BundleCandidate && !isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (!ps5BundleCandidate && isClearlyNonConsole(item, titleText || t)) return false;
     if (!ps5BundleCandidate && isHardAccessoryListing(titleText || t, item)) return false;
