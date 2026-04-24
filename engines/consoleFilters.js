@@ -623,8 +623,8 @@ export function normalizeConsoleText(value) {
 
 function normalizeForPs5Module(value = "") {
   return normalizeConsoleText(value)
-    .replace(/\bplaystation5\b/g, "playstation 5")
-    .replace(/\bplaystation5 console\b/g, "playstation 5 console");
+    .replace(/\bplaystation5 console\b/g, "playstation 5 console")
+    .replace(/\bplaystation5\b/g, "playstation 5");
 }
 
 export function getTitleText(item) {
@@ -662,6 +662,11 @@ export function isPs5Like(text) {
   return ps5ModuleIsPs5Like(normalizeForPs5Module(t)) || t.includes("ps5") || t.includes("playstation5");
 }
 
+export function isHardPs5RejectText(text = "") {
+  const t = normalizeConsoleText(text);
+  return ps5ModuleIsPs5Like(normalizeForPs5Module(t)) && hasAny(t, HARD_REJECT_TERMS);
+}
+
 export function isHardPs5AccessoryText(text = "") {
   const t = normalizeConsoleText(text);
   return ps5ModuleIsHardPs5AccessoryText(normalizeForPs5Module(t));
@@ -669,12 +674,12 @@ export function isHardPs5AccessoryText(text = "") {
 
 export function isHardPs5AccessoryListing(text = "", item = {}) {
   const combined = normalizeConsoleText(`${getTitleText(item)} ${text}`);
-  return ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(combined));
+  return ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(combined), item);
 }
 
 export function isPs5BundleCandidate(text = "", item = {}) {
   const combined = normalizeConsoleText(`${getTitleText(item)} ${text}`);
-  return ps5ModuleIsPs5BundleCandidate(normalizeForPs5Module(combined));
+  return ps5ModuleIsPs5BundleCandidate(normalizeForPs5Module(combined), item);
 }
 
 export function detectConsoleBrand(text) {
@@ -998,9 +1003,10 @@ export function hasBaseConsoleIntent(text = "", family = "") {
   }
 
   if (fam === "ps5_disc" || fam === "ps5_digital") {
-    if (!isPs5Like(t)) return false;
-    if (isHardPs5AccessoryText(t)) return false;
-    if (isPs5BundleCandidate(t)) return true;
+    if (!ps5ModuleIsPs5Like(normalizeForPs5Module(t))) return false;
+    if (isHardPs5RejectText(t)) return false;
+    if (ps5ModuleIsHardPs5AccessoryText(normalizeForPs5Module(t))) return false;
+    if (ps5ModuleIsPs5BundleCandidate(normalizeForPs5Module(t))) return true;
 
     const ps5Type = detectConsoleType(t, fam);
     if (fam === "ps5_digital" && ps5Type !== "digital") return false;
@@ -1032,9 +1038,10 @@ export function hasBaseConsoleIntent(text = "", family = "") {
 export function parseConsoleFamily(text) {
   const t = normalizeConsoleText(text);
 
-  if (isHardPs5AccessoryText(t)) return "";
+  if (isHardPs5RejectText(t)) return "";
+  if (ps5ModuleIsHardPs5AccessoryText(normalizeForPs5Module(t))) return "";
 
-  if (isPs5Like(t)) {
+  if (ps5ModuleIsPs5Like(normalizeForPs5Module(t))) {
     const ps5Variant = detectPs5Variant(t);
     if (ps5Variant === "digital") return "ps5_digital";
     return "ps5_disc";
@@ -1243,8 +1250,9 @@ export function isHardNonConsoleCategory(item) {
 export function hasStrongConsoleSignals(text) {
   const t = normalizeConsoleText(text);
 
-  if (isHardPs5AccessoryText(t)) return false;
-  if (isPs5BundleCandidate(t)) return true;
+  if (isHardPs5RejectText(t)) return false;
+  if (ps5ModuleIsHardPs5AccessoryText(normalizeForPs5Module(t))) return false;
+  if (ps5ModuleIsPs5BundleCandidate(normalizeForPs5Module(t))) return true;
 
   return hasAny(t, [
     "console",
@@ -1291,10 +1299,11 @@ export function hasStrongConsoleSignals(text) {
 export function looksLikeMainConsoleTitle(text) {
   const t = normalizeConsoleText(text);
 
-  if (isHardPs5AccessoryText(t)) return false;
-  if (isPs5BundleCandidate(t)) return true;
+  if (isHardPs5RejectText(t)) return false;
+  if (ps5ModuleIsHardPs5AccessoryText(normalizeForPs5Module(t))) return false;
+  if (ps5ModuleIsPs5BundleCandidate(normalizeForPs5Module(t))) return true;
 
-  if (isPs5Like(t)) {
+  if (ps5ModuleIsPs5Like(normalizeForPs5Module(t))) {
     return Boolean(ps5ModuleDetectConsoleType(normalizeForPs5Module(t)));
   }
 
@@ -1367,7 +1376,7 @@ export function looksLikeMainConsoleTitle(text) {
 export function isObviousAccessoryTitle(titleText) {
   const t = normalizeConsoleText(titleText);
 
-  if (isHardPs5AccessoryText(t)) return true;
+  if (ps5ModuleIsHardPs5AccessoryText(normalizeForPs5Module(t))) return true;
   if (looksLikeMainConsoleTitle(t)) return false;
 
   if (
@@ -1475,7 +1484,8 @@ export function isHardAccessoryListing(text, item) {
   const combinedText = normalizeConsoleText(text);
   const family = parseConsoleFamily(`${titleText} ${combinedText}`);
 
-  if (isHardPs5AccessoryListing(`${titleText} ${combinedText}`, item)) return true;
+  if (isHardPs5RejectText(`${titleText} ${combinedText}`)) return true;
+  if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(`${titleText} ${combinedText}`), item)) return true;
   if (isSwitchPartsListing(item, `${titleText} ${combinedText}`, family)) return true;
 
   if (looksLikeMainConsoleTitle(titleText)) return false;
@@ -1641,9 +1651,10 @@ export function failsSharedConsoleGate(item, text = "", queryContext = {}) {
   const ps5BundleCandidate =
     Boolean(queryContext?.wantsBundle) &&
     (family === "ps5_disc" || family === "ps5_digital") &&
-    isPs5BundleCandidate(combined, item);
+    ps5ModuleIsPs5BundleCandidate(normalizeForPs5Module(combined), item);
 
-  if (isHardPs5AccessoryListing(combined, item)) return true;
+  if (isHardPs5RejectText(combined)) return true;
+  if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(combined), item)) return true;
 
   if (ps5BundleCandidate) return false;
 
@@ -1671,8 +1682,8 @@ export function isClearlyNonConsole(item, text) {
   const titleText = getTitleText(item);
   const family = parseConsoleFamily(`${titleText} ${combinedText}`);
 
-  if (isPs5BundleCandidate(`${titleText} ${combinedText}`, item)) return false;
-  if (isHardPs5AccessoryListing(`${titleText} ${combinedText}`, item)) return true;
+  if (isHardPs5RejectText(`${titleText} ${combinedText}`)) return true;
+  if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(`${titleText} ${combinedText}`), item)) return true;
   if (isHardNonConsoleCategory(item)) return true;
   if (isSwitchPartsListing(item, `${titleText} ${combinedText}`, family)) return true;
   if (isDigitalCodeOrMembership(item, combinedText)) return true;
@@ -1691,7 +1702,7 @@ export function isClearlyNonConsole(item, text) {
   if (hasAny(titleText, NON_CONSOLE_TERMS)) return true;
 
   if (
-    isPs5Like(combinedText) &&
+    ps5ModuleIsPs5Like(normalizeForPs5Module(combinedText)) &&
     hasAny(titleText, [
       "collector’s edition",
       "collector's edition",
@@ -1832,20 +1843,20 @@ export function hasFaultKeywordCombo(text = "") {
 
 export function detectPs5DiscShape(text = "") {
   const t = normalizeConsoleText(text);
-  if (!isPs5Like(t)) return "unknown";
+  if (!ps5ModuleIsPs5Like(normalizeForPs5Module(t))) return "unknown";
   if (t.includes("slim")) return "slim";
   return "standard";
 }
 
 export function hasPs5DiscCustomStorageSignal(text = "") {
   const t = normalizeConsoleText(text);
-  if (!isPs5Like(t)) return false;
+  if (!ps5ModuleIsPs5Like(normalizeForPs5Module(t))) return false;
   return hasAny(t, PS5_DISC_CUSTOM_STORAGE_TERMS);
 }
 
 export function hasPs5DiscOddStorageWording(text = "") {
   const t = normalizeConsoleText(text);
-  if (!isPs5Like(t)) return false;
+  if (!ps5ModuleIsPs5Like(normalizeForPs5Module(t))) return false;
 
   const storage = detectConsoleStorage(t, "ps5_disc");
   const shape = detectPs5DiscShape(t);
@@ -1859,7 +1870,7 @@ export function hasPs5DiscOddStorageWording(text = "") {
 
 export function hasPs5DiscOddSlimVariant(text = "") {
   const t = normalizeConsoleText(text);
-  if (!isPs5Like(t) || !t.includes("slim")) return false;
+  if (!ps5ModuleIsPs5Like(normalizeForPs5Module(t)) || !t.includes("slim")) return false;
 
   const storage = detectConsoleStorage(t, "ps5_disc");
 
@@ -1874,7 +1885,7 @@ export function hasPs5DiscOddSlimVariant(text = "") {
 
 export function hasPs5DiscConfirmedSpec(text = "") {
   const t = normalizeConsoleText(text);
-  if (!isPs5Like(t)) return false;
+  if (!ps5ModuleIsPs5Like(normalizeForPs5Module(t))) return false;
 
   return hasAny(t, [
     "825gb",
@@ -1895,8 +1906,9 @@ export function hasPs5DiscConfirmedSpec(text = "") {
 
 export function hasPs5DiscVagueSpecSignal(text = "") {
   const t = normalizeConsoleText(text);
-  if (!isPs5Like(t)) return false;
-  if (isHardPs5AccessoryText(t)) return false;
+  if (!ps5ModuleIsPs5Like(normalizeForPs5Module(t))) return false;
+  if (isHardPs5RejectText(t)) return false;
+  if (ps5ModuleIsHardPs5AccessoryText(normalizeForPs5Module(t))) return false;
   if (detectConsoleType(t, "ps5_disc") === "digital") return false;
 
   const looksLikeDisc =
@@ -2258,7 +2270,8 @@ export function detectBundleSignals(text, family) {
 export function detectPs5Variant(text = "") {
   const t = normalizeConsoleText(text);
 
-  if (isHardPs5AccessoryText(t)) return "accessory";
+  if (isHardPs5RejectText(t)) return "accessory";
+  if (ps5ModuleIsHardPs5AccessoryText(normalizeForPs5Module(t))) return "accessory";
 
   const moduleVariant = ps5ModuleDetectPs5Variant(normalizeForPs5Module(t));
 
@@ -2272,7 +2285,7 @@ export function detectPs5Variant(text = "") {
 export function detectConsoleType(text = "", family = "") {
   const t = normalizeConsoleText(text);
 
-  if (family.startsWith("ps5") || isPs5Like(t)) {
+  if (family.startsWith("ps5") || ps5ModuleIsPs5Like(normalizeForPs5Module(t))) {
     return detectPs5Variant(t);
   }
 
@@ -2492,17 +2505,20 @@ export function matchesConsoleFamily(text, queryContext, item) {
   const switchText = `${titleText} ${t}`;
   const ps5Text = normalizeConsoleText(`${titleText} ${t}`);
   const wantsPs5Bundle = Boolean(queryContext?.wantsBundle) && (family === "ps5_disc" || family === "ps5_digital");
-  const ps5BundleCandidate = wantsPs5Bundle && isPs5BundleCandidate(ps5Text, item);
+  const ps5BundleCandidate =
+    wantsPs5Bundle && ps5ModuleIsPs5BundleCandidate(normalizeForPs5Module(ps5Text), item);
 
-  if (isHardPs5AccessoryListing(`${titleText} ${t}`, item)) return false;
+  if (isHardPs5RejectText(ps5Text)) return false;
+  if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(`${titleText} ${t}`), item)) return false;
   if (isHardNonConsoleCategory(item)) return false;
   if (!ps5BundleCandidate && failsSharedConsoleGate(item, `${titleText} ${t}`, queryContext)) return false;
 
   if (!family) return true;
 
   if (family === "ps5_disc") {
-    if (!isPs5Like(ps5Text)) return false;
-    if (isHardPs5AccessoryListing(ps5Text, item)) return false;
+    if (!ps5ModuleIsPs5Like(normalizeForPs5Module(ps5Text))) return false;
+    if (isHardPs5RejectText(ps5Text)) return false;
+    if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(ps5Text), item)) return false;
     if (!ps5BundleCandidate && !isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (!ps5BundleCandidate && isClearlyNonConsole(item, titleText || t)) return false;
     if (!ps5BundleCandidate && isHardAccessoryListing(titleText || t, item)) return false;
@@ -2513,8 +2529,9 @@ export function matchesConsoleFamily(text, queryContext, item) {
   }
 
   if (family === "ps5_digital") {
-    if (!isPs5Like(ps5Text)) return false;
-    if (isHardPs5AccessoryListing(ps5Text, item)) return false;
+    if (!ps5ModuleIsPs5Like(normalizeForPs5Module(ps5Text))) return false;
+    if (isHardPs5RejectText(ps5Text)) return false;
+    if (ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(ps5Text), item)) return false;
     if (!ps5BundleCandidate && !isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) return false;
     if (!ps5BundleCandidate && isClearlyNonConsole(item, titleText || t)) return false;
     if (!ps5BundleCandidate && isHardAccessoryListing(titleText || t, item)) return false;
