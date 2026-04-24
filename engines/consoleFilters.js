@@ -588,26 +588,32 @@ const FAULTY_OR_PARTS_EXTRA_TERMS = [
   "corrupt data",
 ];
 
-export const ps5BundleDebugCounts = {
-  ps5BundleCandidateTrue: 0,
-  ps5BundleCandidateFalse: 0,
-  hardPs5Reject: 0,
-  hardPs5Accessory: 0,
-  hardNonConsoleCategory: 0,
-  failsSharedConsoleGate: 0,
-  clearlyNonConsole: 0,
-  hardAccessoryListing: 0,
-  consoleTypeDigitalMismatch: 0,
-  storageMismatch: 0,
-  passed: 0,
-};
+globalThis.__flipaiPs5BundleDebug = globalThis.__flipaiPs5BundleDebug || {};
 
-globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
+export const ps5BundleDebugCounts = globalThis.__flipaiPs5BundleDebug;
 
-let ps5BundleDebugLogTimer = null;
+const PS5_BUNDLE_DEBUG_KEYS = [
+  "ps5BundleCandidateTrue",
+  "ps5BundleCandidateFalse",
+  "hardPs5Reject",
+  "hardPs5Accessory",
+  "hardNonConsoleCategory",
+  "failsSharedConsoleGate",
+  "clearlyNonConsole",
+  "hardAccessoryListing",
+  "consoleTypeDigitalMismatch",
+  "storageMismatch",
+  "passed",
+];
+
+PS5_BUNDLE_DEBUG_KEYS.forEach((key) => {
+  if (typeof ps5BundleDebugCounts[key] !== "number") {
+    ps5BundleDebugCounts[key] = 0;
+  }
+});
 
 export function resetPs5BundleDebugCounts() {
-  Object.keys(ps5BundleDebugCounts).forEach((key) => {
+  PS5_BUNDLE_DEBUG_KEYS.forEach((key) => {
     ps5BundleDebugCounts[key] = 0;
   });
 
@@ -616,6 +622,7 @@ export function resetPs5BundleDebugCounts() {
 
 export function getPs5BundleDebugCounts() {
   globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
+  console.log("PS5 BUNDLE DEBUG:", globalThis.__flipaiPs5BundleDebug);
   return { ...ps5BundleDebugCounts };
 }
 
@@ -627,19 +634,10 @@ function isPs5BundleDebugQuery(queryContext = {}) {
   );
 }
 
-function schedulePs5BundleDebugLog(queryContext = {}) {
+function logPs5BundleDebug(queryContext = {}) {
   if (!isPs5BundleDebugQuery(queryContext)) return;
-
   globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
-
-  if (ps5BundleDebugLogTimer) {
-    clearTimeout(ps5BundleDebugLogTimer);
-  }
-
-  ps5BundleDebugLogTimer = setTimeout(() => {
-    globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
-    console.log("globalThis.__flipaiPs5BundleDebug", globalThis.__flipaiPs5BundleDebug);
-  }, 1000);
+  console.log("PS5 BUNDLE DEBUG:", globalThis.__flipaiPs5BundleDebug);
 }
 
 function countPs5BundleDebug(queryContext = {}, key = "") {
@@ -647,8 +645,12 @@ function countPs5BundleDebug(queryContext = {}, key = "") {
   if (Object.prototype.hasOwnProperty.call(ps5BundleDebugCounts, key)) {
     ps5BundleDebugCounts[key] += 1;
     globalThis.__flipaiPs5BundleDebug = ps5BundleDebugCounts;
-    schedulePs5BundleDebugLog(queryContext);
   }
+}
+
+function returnPs5BundleDebug(queryContext = {}, value) {
+  logPs5BundleDebug(queryContext);
+  return value;
 }
 
 export function hasAny(text, phrases = []) {
@@ -2577,115 +2579,115 @@ export function matchesConsoleFamily(text, queryContext, item) {
 
   if (isHardPs5RejectText(ps5Text)) {
     countPs5BundleDebug(queryContext, "hardPs5Reject");
-    return false;
+    return returnPs5BundleDebug(queryContext, false);
   }
 
   if (!ps5BundleCandidate && ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(`${titleText} ${t}`), item)) {
     countPs5BundleDebug(queryContext, "hardPs5Accessory");
-    return false;
+    return returnPs5BundleDebug(queryContext, false);
   }
 
   if (isHardNonConsoleCategory(item)) {
     countPs5BundleDebug(queryContext, "hardNonConsoleCategory");
-    return false;
+    return returnPs5BundleDebug(queryContext, false);
   }
 
   if (!ps5BundleCandidate && failsSharedConsoleGate(item, `${titleText} ${t}`, queryContext)) {
     countPs5BundleDebug(queryContext, "failsSharedConsoleGate");
-    return false;
+    return returnPs5BundleDebug(queryContext, false);
   }
 
   if (!family) {
     countPs5BundleDebug(queryContext, "passed");
-    return true;
+    return returnPs5BundleDebug(queryContext, true);
   }
 
   if (family === "ps5_disc") {
     if (!ps5ModuleIsPs5Like(normalizeForPs5Module(ps5Text))) {
       countPs5BundleDebug(queryContext, "clearlyNonConsole");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (isHardPs5RejectText(ps5Text)) {
       countPs5BundleDebug(queryContext, "hardPs5Reject");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (!ps5BundleCandidate && ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(ps5Text), item)) {
       countPs5BundleDebug(queryContext, "hardPs5Accessory");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (!ps5BundleCandidate && !isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) {
       countPs5BundleDebug(queryContext, "clearlyNonConsole");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (!ps5BundleCandidate && isClearlyNonConsole(item, titleText || t)) {
       countPs5BundleDebug(queryContext, "clearlyNonConsole");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (!ps5BundleCandidate && isHardAccessoryListing(titleText || t, item)) {
       countPs5BundleDebug(queryContext, "hardAccessoryListing");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (consoleType === "accessory") {
       countPs5BundleDebug(queryContext, "hardPs5Accessory");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (consoleType === "digital") {
       countPs5BundleDebug(queryContext, "consoleTypeDigitalMismatch");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (isStorageMismatch(queryStorage, itemStorage, family)) {
       countPs5BundleDebug(queryContext, "storageMismatch");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
 
     const passed = Boolean(ps5BundleCandidate || ps5ModuleDetectConsoleType(normalizeForPs5Module(ps5Text)));
     if (passed) countPs5BundleDebug(queryContext, "passed");
     else countPs5BundleDebug(queryContext, "clearlyNonConsole");
-    return passed;
+    return returnPs5BundleDebug(queryContext, passed);
   }
 
   if (family === "ps5_digital") {
     if (!ps5ModuleIsPs5Like(normalizeForPs5Module(ps5Text))) {
       countPs5BundleDebug(queryContext, "clearlyNonConsole");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (isHardPs5RejectText(ps5Text)) {
       countPs5BundleDebug(queryContext, "hardPs5Reject");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (!ps5BundleCandidate && ps5ModuleIsHardPs5AccessoryListing(normalizeForPs5Module(ps5Text), item)) {
       countPs5BundleDebug(queryContext, "hardPs5Accessory");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (!ps5BundleCandidate && !isConsoleCategory(item) && !hasStrongConsoleSignals(titleText)) {
       countPs5BundleDebug(queryContext, "clearlyNonConsole");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (!ps5BundleCandidate && isClearlyNonConsole(item, titleText || t)) {
       countPs5BundleDebug(queryContext, "clearlyNonConsole");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (!ps5BundleCandidate && isHardAccessoryListing(titleText || t, item)) {
       countPs5BundleDebug(queryContext, "hardAccessoryListing");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (consoleType === "accessory") {
       countPs5BundleDebug(queryContext, "hardPs5Accessory");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (consoleType !== "digital") {
       countPs5BundleDebug(queryContext, "consoleTypeDigitalMismatch");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
     if (isStorageMismatch(queryStorage, itemStorage, family)) {
       countPs5BundleDebug(queryContext, "storageMismatch");
-      return false;
+      return returnPs5BundleDebug(queryContext, false);
     }
 
     const passed = Boolean(ps5BundleCandidate || ps5ModuleDetectConsoleType(normalizeForPs5Module(ps5Text)));
     if (passed) countPs5BundleDebug(queryContext, "passed");
     else countPs5BundleDebug(queryContext, "clearlyNonConsole");
-    return passed;
+    return returnPs5BundleDebug(queryContext, passed);
   }
 
   if (family === "xbox_series_x") {
