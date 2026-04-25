@@ -271,9 +271,7 @@ export function classifyConsoleQuery(query = "") {
 
   const shouldSoftBundle =
     (family === "ps5_disc" ||
-      family === "ps5_digital" ||
-      family === "xbox_series_x" ||
-      family === "xbox_series_s") &&
+      family === "ps5_digital") &&
     wantsBundle;
 
   const context = {
