@@ -68,7 +68,7 @@ function hasControllerIncluded(text, family) {
   return true;
 }
 
-function isHomeConsoleOnlyListing(text = "", family = "") {
+export function isHomeConsoleOnlyListing(text = "", family = "") {
   const t = normalizeConsoleText(text);
   const fam = String(family || "");
 
