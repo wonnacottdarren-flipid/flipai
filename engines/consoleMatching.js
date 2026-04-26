@@ -962,7 +962,10 @@ function isNonConsoleCategory(item) {
 
 function isHardNonConsoleCategory(item) {
   const categoryText = getCategoryText(item);
-  return hasAny(categoryText, HARD_NON_CONSOLE_CATEGORY_TERMS) && !isConsoleCategory(item);
+
+  if (isConsoleCategory(item)) return false;
+
+  return hasAny(categoryText, HARD_NON_CONSOLE_CATEGORY_TERMS);
 }
 
 function hasStrongConsoleSignals(text) {
@@ -1502,7 +1505,6 @@ function detectPs5Variant(text = "") {
     "cfi 1116a",
     "cfi 1216a",
     "cfi-1116a",
-    "cfi-1216a",
     "cfi 10",
     "cfi-10",
     "cfi 11",
