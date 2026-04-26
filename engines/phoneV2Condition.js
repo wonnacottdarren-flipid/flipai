@@ -6,6 +6,11 @@ export function normalizePhoneText(value = "") {
     .replace(/\bdoesnt\b/g, "doesn't")
     .replace(/\bwont\b/g, "won't")
     .replace(/\bcant\b/g, "can't")
+    .replace(/\bspares\s*\/\s*repairs\b/g, "spares repairs")
+    .replace(/\bspares\s*\/\s*repair\b/g, "spares repair")
+    .replace(/\bspare\s*or\s*repair\b/g, "spares or repair")
+    .replace(/\bspares\s*or\s*repair\b/g, "spares or repair")
+    .replace(/\bspares\s*or\s*repairs\b/g, "spares or repairs")
     .replace(/\bscreen\s*lines\b/g, "screen lines")
     .replace(/\bdisplay\s*lines\b/g, "display lines")
     .replace(/\blines\s*on\s*screen\b/g, "lines on screen")
@@ -94,7 +99,9 @@ const SCREEN_DAMAGE_TERMS = [
 const HARD_FAULT_TERMS = [
   "for parts",
   "for spares",
+  "spares or repair",
   "spares or repairs",
+  "spares repair",
   "spares repairs",
   "parts only",
   "faulty",
@@ -105,6 +112,7 @@ const HARD_FAULT_TERMS = [
   "will not turn on",
   "no power",
   "dead phone",
+  "untested",
   "water damaged",
   "liquid damaged",
   "motherboard fault",
@@ -244,8 +252,10 @@ export function shouldAllowDamagedPhones(queryContext = {}) {
     "broken",
     "damaged",
     "for parts",
+    "for spares",
     "spares",
     "repairs",
+    "repair",
     "screen damage",
     "cracked screen",
     "screen lines",
