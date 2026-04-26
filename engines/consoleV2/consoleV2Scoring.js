@@ -14,54 +14,34 @@ function isFamilyMismatch(text = "", queryFamily = "") {
   const itemFamily = parseConsoleFamily(text);
 
   if (!family || !itemFamily) return false;
-
   if (family === itemFamily) return false;
 
-  if (family === "switch_v2" && (itemFamily === "switch_oled" || itemFamily === "switch_lite")) {
-    return true;
-  }
-
-  if (family === "switch_oled" && itemFamily !== "switch_oled") {
-    return true;
-  }
-
-  if (family === "switch_lite" && itemFamily !== "switch_lite") {
-    return true;
-  }
-
-  if (family.startsWith("xbox_series") && itemFamily !== family) {
-    return true;
-  }
-
-  if (family.startsWith("ps5") && itemFamily !== family) {
-    return true;
-  }
+  if (family === "switch_v2" && (itemFamily === "switch_oled" || itemFamily === "switch_lite")) return true;
+  if (family === "switch_oled" && itemFamily !== "switch_oled") return true;
+  if (family === "switch_lite" && itemFamily !== "switch_lite") return true;
+  if (family.startsWith("xbox_series") && itemFamily !== family) return true;
+  if (family.startsWith("ps5") && itemFamily !== family) return true;
 
   return false;
 }
 
-// 🚫 BLOCK NON-CONSOLES
 function isGameListing(text = "") {
   if (!text.includes("console")) return true;
 
-  if (
-    hasAny(text, [
-      "pre-order",
-      "pre order",
-      "release on",
-      "ps5 game",
-      "playstation game",
-      "ea sports",
-      "fifa",
-      "fc ",
-      "call of duty",
-      "spiderman",
-      "disc only",
-      "game only",
-    ])
-  ) return true;
-
-  return false;
+  return hasAny(text, [
+    "pre-order",
+    "pre order",
+    "release on",
+    "ps5 game",
+    "playstation game",
+    "ea sports",
+    "fifa",
+    "fc ",
+    "call of duty",
+    "spiderman",
+    "disc only",
+    "game only",
+  ]);
 }
 
 function isAccessory(text = "") {
@@ -106,11 +86,31 @@ function isMissingController(text = "") {
   ]);
 }
 
-// 🔥 IMPROVED BUNDLE DETECTION
+function hasCosmeticWear(text = "") {
+  return hasAny(text, [
+    "scratches",
+    "scratched",
+    "scuffed",
+    "scuff",
+    "worn",
+    "heavy wear",
+    "fair condition",
+    "poor condition",
+  ]);
+}
+
+function hasMissingCharger(text = "") {
+  return hasAny(text, [
+    "no charger",
+    "without charger",
+    "charger not included",
+    "missing charger",
+    "no power cable",
+  ]);
+}
+
 function detectBundleType(text = "") {
-  if (isMissingController(text)) {
-    return "console_only";
-  }
+  if (isMissingController(text)) return "console_only";
 
   if (
     hasAny(text, [
@@ -160,31 +160,19 @@ function detectCondition(text = "") {
   if (hasAny(text, ["brand new", "sealed"])) return "new";
   if (hasAny(text, ["very good", "excellent"])) return "clean_working";
   if (hasAny(text, ["good"])) return "used_working";
+  if (hasAny(text, ["fair condition", "poor condition", "scuffed", "scratched"])) return "cosmetic_wear";
   return "unknown";
 }
 
 function getWarningFlags(text = "") {
   const warnings = [];
 
-  if (isMissingController(text)) {
-    warnings.push("No controller included");
-  }
-
-  if (hasAny(text, ["read description", "see description"])) {
-    warnings.push("Read description carefully");
-  }
-
-  if (hasAny(text, ["scratches", "scratched", "worn", "heavy wear"])) {
-    warnings.push("Cosmetic wear mentioned");
-  }
-
-  if (hasAny(text, ["low firmware", "jailbreak", "modded"])) {
-    warnings.push("Specialist buyer wording");
-  }
-
-  if (hasAny(text, ["extra ssd", "upgraded ssd", "plus extra 1tb ssd"])) {
-    warnings.push("Storage upgrade needs checking");
-  }
+  if (isMissingController(text)) warnings.push("No controller included");
+  if (hasMissingCharger(text)) warnings.push("No charger included");
+  if (hasAny(text, ["read description", "see description", "desc"])) warnings.push("Read description carefully");
+  if (hasCosmeticWear(text)) warnings.push("Cosmetic wear mentioned");
+  if (hasAny(text, ["low firmware", "jailbreak", "modded"])) warnings.push("Specialist buyer wording");
+  if (hasAny(text, ["extra ssd", "upgraded ssd", "plus extra 1tb ssd"])) warnings.push("Storage upgrade needs checking");
 
   return warnings;
 }
@@ -202,11 +190,13 @@ function getRankingScore(text = "", title = "", total = 0, bundleType = "", cond
   if (conditionState === "new") score += 1.2;
   if (conditionState === "clean_working") score += 0.9;
   if (conditionState === "used_working") score += 0.4;
+  if (conditionState === "cosmetic_wear") score -= 1.1;
 
   if (isMissingController(text)) score -= 2.6;
+  if (hasMissingCharger(text)) score -= 0.9;
   if (hasAny(text, ["low firmware", "jailbreak", "modded"])) score -= 2.4;
-  if (hasAny(text, ["read description", "see description"])) score -= 1.4;
-  if (hasAny(text, ["scratches", "scratched", "worn", "heavy wear"])) score -= 0.8;
+  if (hasAny(text, ["read description", "see description", "desc"])) score -= 1.2;
+  if (hasCosmeticWear(text)) score -= 1.2;
   if (hasAny(text, ["extra ssd", "upgraded ssd", "plus extra 1tb ssd"])) score -= 1.2;
 
   if (total < 150) score -= 5;
@@ -226,17 +216,12 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
     const title = String(item?.title || "");
     const text = normalize(title);
 
-    // 🚫 HARD FILTERS
     if (isGameListing(text)) continue;
     if (isAccessory(text)) continue;
     if (isFaulty(text)) continue;
     if (isFamilyMismatch(text, queryContext?.family || "")) continue;
 
-    // 🚫 Block digital when searching disc
-    if (
-      queryContext?.family === "ps5_disc" &&
-      text.includes("digital")
-    ) {
+    if (queryContext?.family === "ps5_disc" && text.includes("digital")) {
       continue;
     }
 
