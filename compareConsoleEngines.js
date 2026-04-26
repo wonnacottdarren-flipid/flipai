@@ -4,15 +4,7 @@ import { searchEbayListings, searchEbayMarketPool } from "./ebay.js";
 import * as engineRegistry from "./engines/index.js";
 import { runConsoleV2Engine } from "./engines/consoleV2/consoleV2Engine.js";
 
-const TEST_QUERIES = [
-  "ps5",
-  "ps5 digital",
-  "xbox series x",
-  "xbox series s",
-  "nintendo switch",
-  "nintendo switch oled",
-  "nintendo switch lite",
-];
+const TEST_QUERY = "ps5 digital";
 
 function resolveV1Engine(query) {
   if (typeof engineRegistry.detectEngineForQuery === "function") {
@@ -89,8 +81,11 @@ function printV2Item(entry, index) {
   printSmallDivider();
 }
 
-async function runSingleComparison(query = "") {
-  printDivider(`QUERY: ${query}`);
+async function runComparison() {
+  const query = TEST_QUERY;
+
+  printDivider("CONSOLE ENGINE SINGLE QUERY COMPARISON START");
+  printLine("Query", query);
 
   const listings = await searchEbayListings({
     query,
@@ -108,6 +103,7 @@ async function runSingleComparison(query = "") {
   const v1Engine = resolveV1Engine(query);
 
   if (!v1Engine) {
+    printDivider("V1 RESULTS");
     printLine("V1 status", "engine not found");
   } else {
     const v1QueryContext =
@@ -129,6 +125,7 @@ async function runSingleComparison(query = "") {
           })
         : null;
 
+    printDivider("V1 RESULTS");
     printLine("V1 matched", v1Matched.length);
     printLine("V1 pricing mode", v1Pricing?.pricingMode || "");
     printLine("V1 estimated resale", v1Pricing?.estimatedResale || 0);
@@ -136,9 +133,8 @@ async function runSingleComparison(query = "") {
     printLine("V1 confidence label", v1Pricing?.confidenceLabel || "");
     printLine("V1 comp count", v1Pricing?.compCount || 0);
 
-    printSmallDivider();
-    console.log("V1 TOP 3");
-    v1Matched.slice(0, 3).forEach(printV1Item);
+    printDivider("V1 TOP 5");
+    v1Matched.slice(0, 5).forEach(printV1Item);
   }
 
   const v2 = runConsoleV2Engine({
@@ -147,6 +143,7 @@ async function runSingleComparison(query = "") {
     listingItems: listings,
   });
 
+  printDivider("V2 RESULTS");
   printLine("V2 matched", v2?.listings?.matchedCount || 0);
   printLine("V2 pricing mode", v2?.pricing?.pricingMode || "");
   printLine("V2 estimated resale", v2?.pricing?.estimatedResale || 0);
@@ -155,19 +152,10 @@ async function runSingleComparison(query = "") {
   printLine("V2 comp count", v2?.pricing?.compCount || 0);
   printLine("V2 bundle boost", v2?.pricing?.bundleBoost || 0);
 
-  printSmallDivider();
-  console.log("V2 TOP 5");
-  v2.listings.items.slice(0, 5).forEach(printV2Item);
-}
+  printDivider("V2 TOP 10");
+  v2.listings.items.slice(0, 10).forEach(printV2Item);
 
-async function runComparison() {
-  printDivider("CONSOLE ENGINE COMPARISON START");
-
-  for (const query of TEST_QUERIES) {
-    await runSingleComparison(query);
-  }
-
-  printDivider("CONSOLE ENGINE COMPARISON END");
+  printDivider("CONSOLE ENGINE SINGLE QUERY COMPARISON END");
 }
 
 runComparison().catch((err) => {
