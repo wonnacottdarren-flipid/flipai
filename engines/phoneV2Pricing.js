@@ -51,7 +51,7 @@ function estimatePhoneRepairCost(queryContext = {}, conditionState = "", text = 
       t.includes("dead")
     ) {
       if (brand === "iphone") return 95;
-      if (brand === "samsung") return 90;
+      if (brand === "samsung") return 78;
       return 85;
     }
 
@@ -64,14 +64,14 @@ function estimatePhoneRepairCost(queryContext = {}, conditionState = "", text = 
       t.includes("lcd line") ||
       t.includes("display line")
     ) {
-      if (family.includes("ultra")) return 90;
+      if (family.includes("ultra")) return 82;
       if (family.includes("pro_max")) return 85;
       if (family.includes("pro")) return 78;
       if (family.includes("plus")) return 75;
       if (family.includes("fold")) return 140;
       if (family.includes("flip")) return 110;
       if (brand === "iphone") return 72;
-      if (brand === "samsung") return 70;
+      if (brand === "samsung") return 58;
       return 65;
     }
 
@@ -82,14 +82,14 @@ function estimatePhoneRepairCost(queryContext = {}, conditionState = "", text = 
       t.includes("damaged screen") ||
       t.includes("lcd damaged")
     ) {
-      if (family.includes("ultra")) return 95;
+      if (family.includes("ultra")) return 85;
       if (family.includes("pro_max")) return 90;
       if (family.includes("pro")) return 82;
       if (family.includes("plus")) return 78;
       if (family.includes("fold")) return 150;
       if (family.includes("flip")) return 115;
       if (brand === "iphone") return 75;
-      if (brand === "samsung") return 72;
+      if (brand === "samsung") return 62;
       return 68;
     }
 
@@ -101,12 +101,17 @@ function estimatePhoneRepairCost(queryContext = {}, conditionState = "", text = 
       t.includes("poor battery")
     ) {
       if (brand === "iphone") return 38;
-      if (brand === "samsung") return 35;
+      if (brand === "samsung") return 28;
       return 32;
     }
 
     if (brand === "iphone") return 75;
-    if (brand === "samsung") return 70;
+    if (brand === "samsung") {
+      if (family.includes("ultra")) return 62;
+      if (family.includes("fold")) return 120;
+      if (family.includes("flip")) return 90;
+      return 55;
+    }
     return 65;
   }
 
@@ -120,33 +125,42 @@ function estimatePhoneRepairCost(queryContext = {}, conditionState = "", text = 
       t.includes("lcd line") ||
       t.includes("display line")
     ) {
-      if (family.includes("ultra")) return 90;
+      if (family.includes("ultra")) return 82;
       if (family.includes("pro_max")) return 85;
       if (family.includes("pro")) return 78;
       if (family.includes("plus")) return 75;
       if (family.includes("fold")) return 140;
       if (family.includes("flip")) return 110;
       if (brand === "iphone") return 72;
-      if (brand === "samsung") return 70;
+      if (brand === "samsung") return 58;
       return 65;
     }
 
-    if (family.includes("ultra")) return 95;
+    if (family.includes("ultra")) return 85;
     if (family.includes("pro_max")) return 90;
     if (family.includes("pro")) return 82;
     if (family.includes("plus")) return 78;
     if (family.includes("fold")) return 150;
     if (family.includes("flip")) return 115;
     if (brand === "iphone") return 75;
-    if (brand === "samsung") return 72;
+    if (brand === "samsung") return 62;
     return 68;
   }
 
   if (conditionState === "minor_fault") {
     if (t.includes("no s pen") || t.includes("missing s pen")) return 18;
-    if (t.includes("battery service") || t.includes("battery health low")) return 32;
-    if (t.includes("needs battery") || t.includes("battery needs replacing")) return 35;
-    if (t.includes("charging port") || t.includes("charge port")) return 30;
+    if (t.includes("battery service") || t.includes("battery health low")) {
+      if (brand === "samsung") return 26;
+      return 32;
+    }
+    if (t.includes("needs battery") || t.includes("battery needs replacing")) {
+      if (brand === "samsung") return 28;
+      return 35;
+    }
+    if (t.includes("charging port") || t.includes("charge port")) {
+      if (brand === "samsung") return 24;
+      return 30;
+    }
     if (t.includes("back glass") || t.includes("rear glass")) return 25;
     if (t.includes("camera fault") || t.includes("camera issue")) return 28;
     if (t.includes("speaker fault") || t.includes("speaker issue")) return 18;
