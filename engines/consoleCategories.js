@@ -89,5 +89,8 @@ export function isNonConsoleCategory(item) {
 
 export function isHardNonConsoleCategory(item) {
   const categoryText = getCategoryText(item);
-  return hasAny(categoryText, HARD_NON_CONSOLE_CATEGORY_TERMS) && !isConsoleCategory(item);
+
+  if (isConsoleCategory(item)) return false;
+
+  return hasAny(categoryText, HARD_NON_CONSOLE_CATEGORY_TERMS);
 }
