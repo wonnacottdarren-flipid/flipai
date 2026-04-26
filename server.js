@@ -1,4 +1,4 @@
-import "./testConsoleV2.js";
+
 import "dotenv/config";
 import express from "express";
 import path from "path";
