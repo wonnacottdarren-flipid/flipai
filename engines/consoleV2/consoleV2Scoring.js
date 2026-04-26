@@ -61,8 +61,25 @@ function isFaulty(text = "") {
   ]);
 }
 
+function isMissingController(text = "") {
+  return hasAny(text, [
+    "no pad",
+    "no controller",
+    "without controller",
+    "missing controller",
+    "controller not included",
+    "pad not included",
+    "no dualsense",
+    "without dualsense",
+  ]);
+}
+
 // 🔥 IMPROVED BUNDLE DETECTION
 function detectBundleType(text = "") {
+  if (isMissingController(text)) {
+    return "console_only";
+  }
+
   if (
     hasAny(text, [
       "bundle",
@@ -114,6 +131,32 @@ function detectCondition(text = "") {
   return "unknown";
 }
 
+function getWarningFlags(text = "") {
+  const warnings = [];
+
+  if (isMissingController(text)) {
+    warnings.push("No controller included");
+  }
+
+  if (hasAny(text, ["read description", "see description"])) {
+    warnings.push("Read description carefully");
+  }
+
+  if (hasAny(text, ["scratches", "scratched", "worn", "heavy wear"])) {
+    warnings.push("Cosmetic wear mentioned");
+  }
+
+  if (hasAny(text, ["low firmware", "jailbreak", "modded"])) {
+    warnings.push("Specialist buyer wording");
+  }
+
+  if (hasAny(text, ["extra ssd", "upgraded ssd", "plus extra 1tb ssd"])) {
+    warnings.push("Storage upgrade needs checking");
+  }
+
+  return warnings;
+}
+
 function getRankingScore(text = "", title = "", total = 0, bundleType = "", conditionState = "") {
   let score = 10;
 
@@ -122,11 +165,13 @@ function getRankingScore(text = "", title = "", total = 0, bundleType = "", cond
   if (hasAny(text, ["console and controller", "with controller", "controller included"])) score += 0.7;
   if (bundleType === "bundle") score += 0.6;
   if (bundleType === "boxed") score += 0.4;
+  if (bundleType === "console_only") score -= 2.4;
 
   if (conditionState === "new") score += 1.2;
   if (conditionState === "clean_working") score += 0.9;
   if (conditionState === "used_working") score += 0.4;
 
+  if (isMissingController(text)) score -= 2.6;
   if (hasAny(text, ["low firmware", "jailbreak", "modded"])) score -= 2.4;
   if (hasAny(text, ["read description", "see description"])) score -= 1.4;
   if (hasAny(text, ["scratches", "scratched", "worn", "heavy wear"])) score -= 0.8;
@@ -168,6 +213,7 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
 
     const bundleType = detectBundleType(text);
     const conditionState = detectCondition(text);
+    const warningFlags = getWarningFlags(text);
     const score = getRankingScore(text, title, total, bundleType, conditionState);
 
     results.push({
@@ -180,8 +226,8 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
       conditionState,
       bundleType,
       bundleSignals: {},
-      warningFlags: [],
-      warningPenalty: 0,
+      warningFlags,
+      warningPenalty: warningFlags.length,
     });
   }
 
