@@ -4,7 +4,7 @@ import { searchEbayListings, searchEbayMarketPool } from "./ebay.js";
 import * as engineRegistry from "./engines/index.js";
 import { runConsoleV2Engine } from "./engines/consoleV2/consoleV2Engine.js";
 
-const TEST_QUERY = "nintendo switch oled";
+const TEST_QUERY = "nintendo switch lite";
 
 function resolveV1Engine(query) {
   if (typeof engineRegistry.detectEngineForQuery === "function") {
