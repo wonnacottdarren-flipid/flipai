@@ -28,6 +28,8 @@ import {
   isNetworkLockedPhone,
   isExplicitlyUnlockedPhone,
   hasPhoneHandsetSignals,
+  detectPhoneFaultIntent,
+  matchesPhoneFaultIntent,
 } from "./phoneV2Filters.js";
 
 function estimatePhoneRepairCost(queryContext = {}, conditionState = "", text = "") {
@@ -173,6 +175,8 @@ export function scorePhoneV2Candidate(item = {}, queryContext = {}) {
   const itemFamily = parsePhoneFamily(text, queryContext?.brand || "");
   const itemStorageGb = extractStorageGb(text);
   const inPhoneCategory = isPhoneCategory(item);
+  const faultIntent = detectPhoneFaultIntent(queryContext);
+  const faultIntentMatched = matchesPhoneFaultIntent(`${titleText} ${text}`, queryContext);
 
   if (queryContext.brand) {
     if (itemBrand === queryContext.brand) score += 1.5;
@@ -246,6 +250,14 @@ export function scorePhoneV2Candidate(item = {}, queryContext = {}) {
       text.includes("for parts")
     ) {
       score += 0.5;
+    }
+
+    if (faultIntent) {
+      if (faultIntentMatched) {
+        score += 2.4;
+      } else {
+        score -= 0.7;
+      }
     }
 
     if (
