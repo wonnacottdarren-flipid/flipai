@@ -4,7 +4,15 @@ import { searchEbayListings, searchEbayMarketPool } from "./ebay.js";
 import * as engineRegistry from "./engines/index.js";
 import { runConsoleV2Engine } from "./engines/consoleV2/consoleV2Engine.js";
 
-const TEST_QUERY = "nintendo switch lite";
+const TEST_QUERIES = [
+  "ps5",
+  "ps5 digital",
+  "xbox series x",
+  "xbox series s",
+  "nintendo switch",
+  "nintendo switch oled",
+  "nintendo switch lite",
+];
 
 function resolveV1Engine(query) {
   if (typeof engineRegistry.detectEngineForQuery === "function") {
@@ -45,10 +53,6 @@ function getTotal(item = {}) {
   return Math.round((price + shipping) * 100) / 100;
 }
 
-function printLine(label = "", value = "") {
-  console.log(`${label}: ${value}`);
-}
-
 function printDivider(title = "") {
   console.log("");
   console.log("==================================================");
@@ -56,36 +60,29 @@ function printDivider(title = "") {
   console.log("==================================================");
 }
 
-function printSmallDivider() {
-  console.log("--------------------------------------------------");
+function printTopItems(label = "", items = [], isV2 = false) {
+  console.log(`${label} TOP 5`);
+
+  items.slice(0, 5).forEach((entry, index) => {
+    if (isV2) {
+      console.log(
+        `${index + 1}. ${entry?.titleText || ""} | £${entry?.total || 0} | score ${
+          entry?.score || 0
+        } | ${entry?.bundleType || "unknown"} | ${
+          Array.isArray(entry?.warningFlags) && entry.warningFlags.length
+            ? entry.warningFlags.join(", ")
+            : "no warnings"
+        }`
+      );
+      return;
+    }
+
+    console.log(`${index + 1}. ${getTitle(entry)} | £${getTotal(entry)}`);
+  });
 }
 
-function printV1Item(item, index) {
-  printLine(`V1 #${index + 1} title`, getTitle(item));
-  printLine(`V1 #${index + 1} total`, getTotal(item));
-  printSmallDivider();
-}
-
-function printV2Item(entry, index) {
-  printLine(`V2 #${index + 1} title`, entry?.titleText || "");
-  printLine(`V2 #${index + 1} total`, entry?.total || 0);
-  printLine(`V2 #${index + 1} score`, entry?.score || 0);
-  printLine(`V2 #${index + 1} bundleType`, entry?.bundleType || "");
-  printLine(`V2 #${index + 1} conditionState`, entry?.conditionState || "");
-  printLine(
-    `V2 #${index + 1} warnings`,
-    Array.isArray(entry?.warningFlags) && entry.warningFlags.length
-      ? entry.warningFlags.join(", ")
-      : "none"
-  );
-  printSmallDivider();
-}
-
-async function runComparison() {
-  const query = TEST_QUERY;
-
-  printDivider("CONSOLE ENGINE SINGLE QUERY COMPARISON START");
-  printLine("Query", query);
+async function runSingleComparison(query = "") {
+  printDivider(`QUERY: ${query}`);
 
   const listings = await searchEbayListings({
     query,
@@ -97,26 +94,23 @@ async function runComparison() {
     limit: 30,
   });
 
-  printLine("Listings fetched", listings.length);
-  printLine("Market fetched", market.length);
-
   const v1Engine = resolveV1Engine(query);
 
-  if (!v1Engine) {
-    printDivider("V1 RESULTS");
-    printLine("V1 status", "engine not found");
-  } else {
+  let v1Matched = [];
+  let v1Pricing = null;
+
+  if (v1Engine) {
     const v1QueryContext =
       typeof v1Engine.classifyQuery === "function"
         ? v1Engine.classifyQuery(query)
         : { rawQuery: query };
 
-    const v1Matched =
+    v1Matched =
       typeof v1Engine.matchesItem === "function"
         ? listings.filter((item) => v1Engine.matchesItem(item, v1QueryContext))
         : listings;
 
-    const v1Pricing =
+    v1Pricing =
       typeof v1Engine.buildPricingModel === "function"
         ? v1Engine.buildPricingModel({
             queryContext: v1QueryContext,
@@ -124,17 +118,6 @@ async function runComparison() {
             listingItems: listings,
           })
         : null;
-
-    printDivider("V1 RESULTS");
-    printLine("V1 matched", v1Matched.length);
-    printLine("V1 pricing mode", v1Pricing?.pricingMode || "");
-    printLine("V1 estimated resale", v1Pricing?.estimatedResale || 0);
-    printLine("V1 confidence", v1Pricing?.confidence || 0);
-    printLine("V1 confidence label", v1Pricing?.confidenceLabel || "");
-    printLine("V1 comp count", v1Pricing?.compCount || 0);
-
-    printDivider("V1 TOP 5");
-    v1Matched.slice(0, 5).forEach(printV1Item);
   }
 
   const v2 = runConsoleV2Engine({
@@ -143,19 +126,32 @@ async function runComparison() {
     listingItems: listings,
   });
 
-  printDivider("V2 RESULTS");
-  printLine("V2 matched", v2?.listings?.matchedCount || 0);
-  printLine("V2 pricing mode", v2?.pricing?.pricingMode || "");
-  printLine("V2 estimated resale", v2?.pricing?.estimatedResale || 0);
-  printLine("V2 confidence", v2?.pricing?.confidence || 0);
-  printLine("V2 confidence label", v2?.pricing?.confidenceLabel || "");
-  printLine("V2 comp count", v2?.pricing?.compCount || 0);
-  printLine("V2 bundle boost", v2?.pricing?.bundleBoost || 0);
+  console.log(`Fetched: listings ${listings.length}, market ${market.length}`);
+  console.log(
+    `V1: matched ${v1Matched.length}, resale £${v1Pricing?.estimatedResale || 0}, confidence ${
+      v1Pricing?.confidence || 0
+    } ${v1Pricing?.confidenceLabel || ""}`
+  );
+  console.log(
+    `V2: matched ${v2?.listings?.matchedCount || 0}, resale £${
+      v2?.pricing?.estimatedResale || 0
+    }, confidence ${v2?.pricing?.confidence || 0} ${
+      v2?.pricing?.confidenceLabel || ""
+    }`
+  );
 
-  printDivider("V2 TOP 10");
-  v2.listings.items.slice(0, 10).forEach(printV2Item);
+  printTopItems("V1", v1Matched, false);
+  printTopItems("V2", v2?.listings?.items || [], true);
+}
 
-  printDivider("CONSOLE ENGINE SINGLE QUERY COMPARISON END");
+async function runComparison() {
+  printDivider("CONSOLE ENGINE COMPARISON START");
+
+  for (const query of TEST_QUERIES) {
+    await runSingleComparison(query);
+  }
+
+  printDivider("CONSOLE ENGINE COMPARISON END");
 }
 
 runComparison().catch((err) => {
