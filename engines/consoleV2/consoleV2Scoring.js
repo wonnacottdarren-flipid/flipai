@@ -63,7 +63,6 @@ function isFaulty(text = "") {
 
 // 🔥 IMPROVED BUNDLE DETECTION
 function detectBundleType(text = "") {
-  // Strong bundle signals
   if (
     hasAny(text, [
       "bundle",
@@ -88,7 +87,6 @@ function detectBundleType(text = "") {
     return "bundle";
   }
 
-  // Medium signals (still treat as bundle)
   if (
     hasAny(text, [
       "controller and",
@@ -116,6 +114,34 @@ function detectCondition(text = "") {
   return "unknown";
 }
 
+function getRankingScore(text = "", title = "", total = 0, bundleType = "", conditionState = "") {
+  let score = 10;
+
+  if (hasAny(text, ["disc edition", "disc version", "825gb", "1tb", "slim"])) score += 1.4;
+  if (hasAny(text, ["sony playstation 5", "playstation 5", "ps5"])) score += 0.8;
+  if (hasAny(text, ["console and controller", "with controller", "controller included"])) score += 0.7;
+  if (bundleType === "bundle") score += 0.6;
+  if (bundleType === "boxed") score += 0.4;
+
+  if (conditionState === "new") score += 1.2;
+  if (conditionState === "clean_working") score += 0.9;
+  if (conditionState === "used_working") score += 0.4;
+
+  if (hasAny(text, ["low firmware", "jailbreak", "modded"])) score -= 2.4;
+  if (hasAny(text, ["read description", "see description"])) score -= 1.4;
+  if (hasAny(text, ["scratches", "scratched", "worn", "heavy wear"])) score -= 0.8;
+  if (hasAny(text, ["extra ssd", "upgraded ssd", "plus extra 1tb ssd"])) score -= 1.2;
+
+  if (total < 150) score -= 5;
+  else if (total < 230) score -= 1.6;
+  else if (total >= 280 && total <= 380) score += 0.8;
+  else if (total > 430) score -= 0.9;
+
+  if (title.length < 10) score -= 2;
+
+  return Math.round(score * 100) / 100;
+}
+
 export function scoreConsoleV2Items(items = [], queryContext = {}) {
   const results = [];
 
@@ -140,16 +166,9 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
 
     if (!total || total <= 0) continue;
 
-    let score = 10;
-
-    // Cheap junk penalty
-    if (total < 150) score -= 5;
-
-    // Weak title penalty
-    if (title.length < 10) score -= 2;
-
     const bundleType = detectBundleType(text);
     const conditionState = detectCondition(text);
+    const score = getRankingScore(text, title, total, bundleType, conditionState);
 
     results.push({
       item,
@@ -166,5 +185,5 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
     });
   }
 
-  return results;
+  return results.sort((a, b) => b.score - a.score);
 }
