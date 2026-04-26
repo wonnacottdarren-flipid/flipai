@@ -5,8 +5,9 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node ./compareConsoleEngines.js",
-    "dev": "node --watch server.js"
+    "start": "node ./server.js",
+    "dev": "node --watch server.js",
+    "compare:console": "node ./compareConsoleEngines.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
