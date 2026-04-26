@@ -270,9 +270,7 @@ export function classifyConsoleQuery(query = "") {
       normalizedQuery.includes("comes with"));
 
   const shouldSoftBundle =
-    (family === "ps5_disc" ||
-      family === "ps5_digital") &&
-    wantsBundle;
+    (family === "ps5_disc" || family === "ps5_digital") && wantsBundle;
 
   const context = {
     rawQuery,
