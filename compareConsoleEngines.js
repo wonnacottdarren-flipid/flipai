@@ -43,11 +43,43 @@ function getTotal(item = {}) {
   return Math.round((price + shipping) * 100) / 100;
 }
 
+function printLine(label = "", value = "") {
+  console.log(`${label}: ${value}`);
+}
+
+function printDivider(title = "") {
+  console.log("");
+  console.log("==================================================");
+  console.log(title);
+  console.log("==================================================");
+}
+
+function printV1Item(item, index) {
+  printLine(`#${index + 1} title`, getTitle(item));
+  printLine(`#${index + 1} total`, getTotal(item));
+  console.log("--------------------------------------------------");
+}
+
+function printV2Item(entry, index) {
+  printLine(`#${index + 1} title`, entry?.titleText || "");
+  printLine(`#${index + 1} total`, entry?.total || 0);
+  printLine(`#${index + 1} score`, entry?.score || 0);
+  printLine(`#${index + 1} bundleType`, entry?.bundleType || "");
+  printLine(`#${index + 1} conditionState`, entry?.conditionState || "");
+  printLine(
+    `#${index + 1} warnings`,
+    Array.isArray(entry?.warningFlags) && entry.warningFlags.length
+      ? entry.warningFlags.join(", ")
+      : "none"
+  );
+  console.log("--------------------------------------------------");
+}
+
 async function runComparison() {
   const query = "ps5";
 
-  console.log("=== CONSOLE ENGINE COMPARISON START ===");
-  console.log("Query:", query);
+  printDivider("CONSOLE ENGINE COMPARISON START");
+  printLine("Query", query);
 
   const listings = await searchEbayListings({
     query,
@@ -59,14 +91,14 @@ async function runComparison() {
     limit: 30,
   });
 
-  console.log("Listings fetched:", listings.length);
-  console.log("Market fetched:", market.length);
+  printLine("Listings fetched", listings.length);
+  printLine("Market fetched", market.length);
 
   const v1Engine = resolveV1Engine(query);
 
   if (!v1Engine) {
-    console.log("\n=== V1 ===");
-    console.log("V1 engine not found.");
+    printDivider("V1 RESULTS");
+    printLine("Status", "V1 engine not found");
   } else {
     const v1QueryContext =
       typeof v1Engine.classifyQuery === "function"
@@ -87,23 +119,16 @@ async function runComparison() {
           })
         : null;
 
-    console.log("\n=== V1 RESULTS ===");
-    console.log("Matched:", v1Matched.length);
-    console.log("Pricing:", {
-      pricingMode: v1Pricing?.pricingMode,
-      estimatedResale: v1Pricing?.estimatedResale,
-      confidence: v1Pricing?.confidence,
-      confidenceLabel: v1Pricing?.confidenceLabel,
-      compCount: v1Pricing?.compCount,
-    });
+    printDivider("V1 RESULTS");
+    printLine("Matched", v1Matched.length);
+    printLine("Pricing mode", v1Pricing?.pricingMode || "");
+    printLine("Estimated resale", v1Pricing?.estimatedResale || 0);
+    printLine("Confidence", v1Pricing?.confidence || 0);
+    printLine("Confidence label", v1Pricing?.confidenceLabel || "");
+    printLine("Comp count", v1Pricing?.compCount || 0);
 
-    console.log("\nV1 Top 5:");
-    v1Matched.slice(0, 5).forEach((item, index) => {
-      console.log(`#${index + 1}`, {
-        title: getTitle(item),
-        total: getTotal(item),
-      });
-    });
+    printDivider("V1 TOP 5");
+    v1Matched.slice(0, 5).forEach(printV1Item);
   }
 
   const v2 = runConsoleV2Engine({
@@ -112,30 +137,19 @@ async function runComparison() {
     listingItems: listings,
   });
 
-  console.log("\n=== V2 RESULTS ===");
-  console.log("Matched:", v2.listings.matchedCount);
-  console.log("Pricing:", {
-    pricingMode: v2.pricing?.pricingMode,
-    estimatedResale: v2.pricing?.estimatedResale,
-    confidence: v2.pricing?.confidence,
-    confidenceLabel: v2.pricing?.confidenceLabel,
-    compCount: v2.pricing?.compCount,
-    bundleBoost: v2.pricing?.bundleBoost,
-  });
+  printDivider("V2 RESULTS");
+  printLine("Matched", v2?.listings?.matchedCount || 0);
+  printLine("Pricing mode", v2?.pricing?.pricingMode || "");
+  printLine("Estimated resale", v2?.pricing?.estimatedResale || 0);
+  printLine("Confidence", v2?.pricing?.confidence || 0);
+  printLine("Confidence label", v2?.pricing?.confidenceLabel || "");
+  printLine("Comp count", v2?.pricing?.compCount || 0);
+  printLine("Bundle boost", v2?.pricing?.bundleBoost || 0);
 
-  console.log("\nV2 Top 5:");
-  v2.listings.items.slice(0, 5).forEach((entry, index) => {
-    console.log(`#${index + 1}`, {
-      title: entry.titleText,
-      total: entry.total,
-      score: entry.score,
-      bundleType: entry.bundleType,
-      conditionState: entry.conditionState,
-      warnings: entry.warningFlags,
-    });
-  });
+  printDivider("V2 TOP 5");
+  v2.listings.items.slice(0, 5).forEach(printV2Item);
 
-  console.log("\n=== CONSOLE ENGINE COMPARISON END ===");
+  printDivider("CONSOLE ENGINE COMPARISON END");
 }
 
 runComparison().catch((err) => {
