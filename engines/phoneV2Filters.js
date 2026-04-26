@@ -390,7 +390,7 @@ export function failsPhoneUnlockedGate(text = "", queryContext = {}) {
 }
 
 export function failsPhoneFaultIntentGate(text = "", queryContext = {}) {
-  return !matchesPhoneFaultIntent(text, queryContext);
+  return false;
 }
 
 export function failsPhoneBaseGate(item = {}, queryContext = {}) {
@@ -406,7 +406,6 @@ export function failsPhoneBaseGate(item = {}, queryContext = {}) {
 
   if (failsPhoneConditionGate(combinedText, queryContext)) return true;
   if (failsPhoneUnlockedGate(combinedText, queryContext)) return true;
-  if (failsPhoneFaultIntentGate(`${titleText} ${combinedText}`, queryContext)) return true;
 
   if (isWrongPhoneBrand(combinedText, queryContext)) return true;
   if (isWrongPhoneFamily(combinedText, queryContext)) return true;
@@ -430,6 +429,7 @@ export function getPhoneFilterDebug(item = {}, queryContext = {}) {
   const categoryText = getPhoneCategoryText(item);
   const conditionState = classifyPhoneConditionState(combinedText);
   const faultIntent = detectPhoneFaultIntent(queryContext);
+  const faultIntentMatched = matchesPhoneFaultIntent(`${titleText} ${combinedText}`, queryContext);
 
   if (!combinedText) return { matched: false, reason: "empty_text" };
   if (isPhoneAccessoryOnly(combinedText)) return { matched: false, reason: "accessory_only" };
@@ -441,9 +441,6 @@ export function getPhoneFilterDebug(item = {}, queryContext = {}) {
   }
   if (failsPhoneUnlockedGate(combinedText, queryContext)) {
     return { matched: false, reason: "unlocked_required_but_locked" };
-  }
-  if (failsPhoneFaultIntentGate(`${titleText} ${combinedText}`, queryContext)) {
-    return { matched: false, reason: `fault_intent_mismatch_${faultIntent || "unknown"}` };
   }
   if (isWrongPhoneBrand(combinedText, queryContext)) {
     return { matched: false, reason: "brand_mismatch" };
@@ -472,6 +469,7 @@ export function getPhoneFilterDebug(item = {}, queryContext = {}) {
     categoryText,
     conditionState,
     faultIntent,
+    faultIntentMatched,
     itemBrand: detectPhoneBrand(combinedText),
     itemFamily: parsePhoneFamily(combinedText, queryContext?.brand || ""),
     itemStorageGb: extractStorageGb(combinedText),
