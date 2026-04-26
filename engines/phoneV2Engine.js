@@ -31,6 +31,37 @@ function shouldAllowDamagedListings(queryContext = {}) {
   return Boolean(queryContext?.allowDamaged);
 }
 
+function buildDamagedPhoneVariants(niceFamily = "", ctx = {}, rawQuery = "") {
+  const base = String(niceFamily || "").trim();
+  const raw = String(rawQuery || "").trim();
+
+  const variants = [raw];
+
+  if (!base) {
+    return variants;
+  }
+
+  variants.push(`${base} faulty`);
+  variants.push(`${base} spares repair`);
+  variants.push(`${base} spares or repair`);
+  variants.push(`${base} for parts`);
+  variants.push(`${base} broken`);
+  variants.push(`${base} damaged`);
+
+  if (ctx.storageGb > 0) {
+    variants.push(`${base} ${ctx.storageGb}gb faulty`);
+    variants.push(`${base} ${ctx.storageGb}gb spares repair`);
+    variants.push(`${base} ${ctx.storageGb}gb broken`);
+  }
+
+  if (ctx.wantsUnlocked) {
+    variants.push(`${base} unlocked faulty`);
+    variants.push(`${base} unlocked spares repair`);
+  }
+
+  return variants;
+}
+
 export const phoneV2Engine = {
   ...baseEngine,
   id: "phone_v2",
@@ -63,6 +94,7 @@ export const phoneV2Engine = {
       normalizedQuery.includes("for spares") ||
       normalizedQuery.includes("spares") ||
       normalizedQuery.includes("repairs") ||
+      normalizedQuery.includes("repair") ||
       normalizedQuery.includes("needs screen") ||
       normalizedQuery.includes("poor condition") ||
       normalizedQuery.includes("screen lines") ||
@@ -91,6 +123,15 @@ export const phoneV2Engine = {
 
     if (ctx.brand === "iphone" && ctx.family) {
       const niceFamily = ctx.family.replaceAll("_", " ");
+
+      if (ctx.allowDamaged) {
+        return [
+          ...new Set(
+            buildDamagedPhoneVariants(niceFamily, ctx, rawQuery).filter(Boolean)
+          ),
+        ];
+      }
+
       variants.push(niceFamily);
 
       if (ctx.storageGb > 0) {
@@ -106,6 +147,14 @@ export const phoneV2Engine = {
       const niceFamily = ctx.family
         .replace("galaxy_", "galaxy ")
         .replaceAll("_", " ");
+
+      if (ctx.allowDamaged) {
+        return [
+          ...new Set(
+            buildDamagedPhoneVariants(niceFamily, ctx, rawQuery).filter(Boolean)
+          ),
+        ];
+      }
 
       variants.push(niceFamily);
 
