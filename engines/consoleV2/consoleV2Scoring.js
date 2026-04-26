@@ -8,13 +8,10 @@ function hasAny(text = "", terms = []) {
   return terms.some((t) => text.includes(t));
 }
 
+// 🚫 BLOCK NON-CONSOLES
 function isGameListing(text = "") {
-  // 🔥 Must contain console to be valid
-  if (!text.includes("console") && !text.includes("ps5 console")) {
-    return true;
-  }
+  if (!text.includes("console")) return true;
 
-  // 🔥 Block obvious games / releases
   if (
     hasAny(text, [
       "pre-order",
@@ -64,17 +61,48 @@ function isFaulty(text = "") {
   ]);
 }
 
+// 🔥 IMPROVED BUNDLE DETECTION
 function detectBundleType(text = "") {
+  // Strong bundle signals
   if (
     hasAny(text, [
       "bundle",
       "with games",
+      "includes games",
+      "games included",
       "with controller",
-      "2 controllers",
       "includes controller",
-      "extras",
+      "controller included",
+      "2 controllers",
+      "two controllers",
+      "extra controller",
+      "with accessories",
+      "includes accessories",
+      "accessories included",
+      "with extras",
+      "extras included",
+      "charging dock",
+      "charging station",
     ])
-  ) return "bundle";
+  ) {
+    return "bundle";
+  }
+
+  // Medium signals (still treat as bundle)
+  if (
+    hasAny(text, [
+      "controller and",
+      "controller +",
+      "plus controller",
+      "plus games",
+      "plus extras",
+      "+ controller",
+      "+ games",
+      "+ extras",
+    ])
+  ) {
+    return "bundle";
+  }
 
   if (hasAny(text, ["boxed", "complete in box"])) return "boxed";
 
@@ -95,7 +123,7 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
     const title = String(item?.title || "");
     const text = normalize(title);
 
-    // 🚫 HARD BLOCKS
+    // 🚫 HARD FILTERS
     if (isGameListing(text)) continue;
     if (isAccessory(text)) continue;
     if (isFaulty(text)) continue;
@@ -110,20 +138,15 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
 
     const total = extractTotalPrice(item);
 
-    // 🚫 Skip zero / junk prices
     if (!total || total <= 0) continue;
 
     let score = 10;
 
-    // 🚫 Too cheap (junk / incomplete)
-    if (total < 150) {
-      score -= 5;
-    }
+    // Cheap junk penalty
+    if (total < 150) score -= 5;
 
-    // 🚫 Weak titles
-    if (title.length < 10) {
-      score -= 2;
-    }
+    // Weak title penalty
+    if (title.length < 10) score -= 2;
 
     const bundleType = detectBundleType(text);
     const conditionState = detectCondition(text);
