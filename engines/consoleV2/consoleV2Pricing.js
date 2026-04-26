@@ -17,6 +17,17 @@ function getFamilyFallbackResaleV2(family = "") {
   return 0;
 }
 
+function getFamilySoftFloorV2(family = "") {
+  if (family === "ps5_disc") return 365;
+  if (family === "ps5_digital") return 285;
+  if (family === "xbox_series_x") return 285;
+  if (family === "xbox_series_s") return 145;
+  if (family === "switch_oled") return 190;
+  if (family === "switch_lite") return 100;
+  if (family === "switch_v2") return 140;
+  return 0;
+}
+
 function getConfidenceLabelV2(confidence = 0) {
   if (confidence >= 80) return "High";
   if (confidence >= 55) return "Medium";
@@ -29,6 +40,14 @@ function isBundleEntry(entry = {}) {
 
 function getEntryTotal(entry = {}) {
   return Number(entry?.total || 0);
+}
+
+function getStrongPricingTotals(entries = []) {
+  return removePriceOutliers(
+    entries
+      .map(getEntryTotal)
+      .filter((value) => Number.isFinite(value) && value > 0)
+  );
 }
 
 export function buildConsoleV2PricingModel(
@@ -47,40 +66,49 @@ export function buildConsoleV2PricingModel(
   const strongListings = listingPool.filter((entry) => entry.score >= 5);
   const usableListings = strongListings.length >= 2 ? strongListings : listingPool;
 
-  const consoleOnlyMarket = usableMarket.filter((entry) => !isBundleEntry(entry));
+  const standardMarket = usableMarket.filter((entry) => !isBundleEntry(entry));
   const bundleMarket = usableMarket.filter((entry) => isBundleEntry(entry));
 
+  const standardListings = usableListings.filter((entry) => !isBundleEntry(entry));
+  const bundleListings = usableListings.filter((entry) => isBundleEntry(entry));
+
   const baseMarketPool =
-    !queryContext?.wantsBundle && consoleOnlyMarket.length >= 4
-      ? consoleOnlyMarket
+    !queryContext?.wantsBundle && standardMarket.length >= 4
+      ? standardMarket
       : usableMarket;
 
-  const marketTotals = removePriceOutliers(
-    baseMarketPool.map(getEntryTotal).filter((value) => value > 0)
-  );
+  const baseListingPool =
+    !queryContext?.wantsBundle && standardListings.length >= 3
+      ? standardListings
+      : usableListings;
 
-  const listingTotals = removePriceOutliers(
-    usableListings.map(getEntryTotal).filter((value) => value > 0)
-  );
-
-  const bundleTotals = removePriceOutliers(
-    bundleMarket.map(getEntryTotal).filter((value) => value > 0)
-  );
+  const marketTotals = getStrongPricingTotals(baseMarketPool);
+  const listingTotals = getStrongPricingTotals(baseListingPool);
+  const bundleTotals = getStrongPricingTotals([...bundleMarket, ...bundleListings]);
 
   const marketMedian = median(marketTotals);
   const marketLow = percentile(marketTotals, 0.35);
+  const marketHigh = percentile(marketTotals, 0.65);
   const listingMedian = median(listingTotals);
   const fallbackResale = getFamilyFallbackResaleV2(family);
+  const softFloor = getFamilySoftFloorV2(family);
 
   const bundleMedian = median(bundleTotals);
   const bundleBoost =
     bundleMedian && marketMedian ? Math.max(0, bundleMedian - marketMedian) : 0;
 
-  let pricingMode = "Console V2 structured market median";
-  let baseline = marketMedian || marketLow || listingMedian || fallbackResale || 0;
+  let pricingMode = "Console V2 strengthened median";
+
+  let baseline = Math.max(
+    marketMedian || 0,
+    listingMedian || 0,
+    marketHigh || 0,
+    marketLow || 0,
+    fallbackResale || 0
+  );
 
   if (queryContext?.wantsBundle && marketMedian && bundleBoost > 0) {
-    baseline = roundMoney(marketMedian + bundleBoost * 0.6);
+    baseline = roundMoney(Math.max(baseline, marketMedian + bundleBoost * 0.6));
     pricingMode = "Console V2 bundle-adjusted median";
   }
 
@@ -96,9 +124,8 @@ export function buildConsoleV2PricingModel(
     pricingMode = "Console V2 family fallback";
   }
 
-  if (fallbackResale && baseline > 0) {
-    const hardFloor = roundMoney(fallbackResale * 0.78);
-    baseline = Math.max(baseline, hardFloor);
+  if (softFloor && baseline > 0) {
+    baseline = Math.max(baseline, softFloor);
   }
 
   const estimatedResale = roundMoney(baseline);
