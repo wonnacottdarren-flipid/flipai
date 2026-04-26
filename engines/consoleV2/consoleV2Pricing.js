@@ -1,113 +1,139 @@
-export function buildConsoleV2Pricing({
-  queryContext,
+import {
+  median,
+  percentile,
+  removePriceOutliers,
+  roundMoney,
+} from "../baseEngine.js";
+import { scoreConsoleV2Items } from "./consoleV2Scoring.js";
+
+function getFamilyFallbackResaleV2(family = "") {
+  if (family === "ps5_disc") return 390;
+  if (family === "ps5_digital") return 315;
+  if (family === "xbox_series_x") return 305;
+  if (family === "xbox_series_s") return 165;
+  if (family === "switch_oled") return 210;
+  if (family === "switch_lite") return 115;
+  if (family === "switch_v2") return 155;
+  return 0;
+}
+
+function getConfidenceLabelV2(confidence = 0) {
+  if (confidence >= 80) return "High";
+  if (confidence >= 55) return "Medium";
+  return "Low";
+}
+
+function isBundleEntry(entry = {}) {
+  return entry?.bundleType === "bundle";
+}
+
+function getEntryTotal(entry = {}) {
+  return Number(entry?.total || 0);
+}
+
+export function buildConsoleV2PricingModel(
+  queryContext = {},
   marketItems = [],
-  listingItems = [],
-}) {
-  function round(v) {
-    return Math.round((Number(v) || 0) * 100) / 100;
+  listingItems = []
+) {
+  const family = String(queryContext?.family || "");
+
+  const marketPool = scoreConsoleV2Items(marketItems, queryContext);
+  const listingPool = scoreConsoleV2Items(listingItems, queryContext);
+
+  const strongMarket = marketPool.filter((entry) => entry.score >= 5);
+  const usableMarket = strongMarket.length >= 3 ? strongMarket : marketPool;
+
+  const strongListings = listingPool.filter((entry) => entry.score >= 5);
+  const usableListings = strongListings.length >= 2 ? strongListings : listingPool;
+
+  const consoleOnlyMarket = usableMarket.filter((entry) => !isBundleEntry(entry));
+  const bundleMarket = usableMarket.filter((entry) => isBundleEntry(entry));
+
+  const baseMarketPool =
+    !queryContext?.wantsBundle && consoleOnlyMarket.length >= 4
+      ? consoleOnlyMarket
+      : usableMarket;
+
+  const marketTotals = removePriceOutliers(
+    baseMarketPool.map(getEntryTotal).filter((value) => value > 0)
+  );
+
+  const listingTotals = removePriceOutliers(
+    usableListings.map(getEntryTotal).filter((value) => value > 0)
+  );
+
+  const bundleTotals = removePriceOutliers(
+    bundleMarket.map(getEntryTotal).filter((value) => value > 0)
+  );
+
+  const marketMedian = median(marketTotals);
+  const marketLow = percentile(marketTotals, 0.35);
+  const listingMedian = median(listingTotals);
+  const fallbackResale = getFamilyFallbackResaleV2(family);
+
+  const bundleMedian = median(bundleTotals);
+  const bundleBoost =
+    bundleMedian && marketMedian ? Math.max(0, bundleMedian - marketMedian) : 0;
+
+  let pricingMode = "Console V2 structured market median";
+  let baseline = marketMedian || marketLow || listingMedian || fallbackResale || 0;
+
+  if (queryContext?.wantsBundle && marketMedian && bundleBoost > 0) {
+    baseline = roundMoney(marketMedian + bundleBoost * 0.6);
+    pricingMode = "Console V2 bundle-adjusted median";
   }
 
-  function median(values = []) {
-    const nums = values
-      .map((v) => Number(v || 0))
-      .filter((v) => Number.isFinite(v) && v > 0)
-      .sort((a, b) => a - b);
-
-    if (!nums.length) return 0;
-
-    const mid = Math.floor(nums.length / 2);
-    return nums.length % 2 === 0
-      ? round((nums[mid - 1] + nums[mid]) / 2)
-      : round(nums[mid]);
+  if (!marketMedian && marketLow) {
+    pricingMode = "Console V2 market low-band";
   }
 
-  function percentile(values = [], p = 0.5) {
-    const nums = values
-      .map((v) => Number(v || 0))
-      .filter((v) => Number.isFinite(v) && v > 0)
-      .sort((a, b) => a - b);
-
-    if (!nums.length) return 0;
-
-    const idx = (nums.length - 1) * p;
-    const lo = Math.floor(idx);
-    const hi = Math.ceil(idx);
-
-    if (lo === hi) return round(nums[lo]);
-
-    const weight = idx - lo;
-    return round(nums[lo] * (1 - weight) + nums[hi] * weight);
+  if (!marketMedian && !marketLow && listingMedian) {
+    pricingMode = "Console V2 listings fallback";
   }
 
-  function getTotal(item) {
-    return Number(item?.total || 0);
+  if (!marketMedian && !marketLow && !listingMedian && fallbackResale) {
+    pricingMode = "Console V2 family fallback";
   }
 
-  function isBundle(item) {
-    return item?.bundleType === "bundle";
+  if (fallbackResale && baseline > 0) {
+    const hardFloor = roundMoney(fallbackResale * 0.78);
+    baseline = Math.max(baseline, hardFloor);
   }
 
-  function isConsole(item) {
-    return !isBundle(item);
-  }
+  const estimatedResale = roundMoney(baseline);
 
-  // 🔥 Split pools
-  const marketTotals = marketItems.map(getTotal).filter((v) => v > 0);
-  const listingTotals = listingItems.map(getTotal).filter((v) => v > 0);
+  const compCount = marketTotals.length;
+  const listingCount = listingTotals.length;
 
-  const bundleMarket = marketItems.filter(isBundle).map(getTotal).filter((v) => v > 0);
-  const consoleMarket = marketItems.filter(isConsole).map(getTotal).filter((v) => v > 0);
+  let confidence = 20;
+  if (compCount >= 3) confidence = 55;
+  if (compCount >= 5) confidence = 70;
+  if (compCount >= 8) confidence = 82;
+  if (compCount >= 12) confidence = 88;
 
-  // 🔥 Fallback if no separation
-  const basePool =
-    consoleMarket.length >= 5 ? consoleMarket : marketTotals;
+  if (strongMarket.length >= 5) confidence += 4;
+  if (listingCount >= 4) confidence += 3;
+  if (pricingMode === "Console V2 family fallback") confidence = 30;
 
-  // 🔥 Core stats
-  const marketMedian = median(basePool);
-  const marketLow = percentile(basePool, 0.35);
-
-  // 🔥 Bundle uplift
-  let bundleBoost = 0;
-  if (bundleMarket.length >= 3) {
-    const bundleMedian = median(bundleMarket);
-    bundleBoost = Math.max(0, bundleMedian - marketMedian);
-  }
-
-  // 🔥 Final resale logic
-  let estimatedResale = marketMedian;
-
-  if (queryContext?.wantsBundle) {
-    estimatedResale = round(marketMedian + bundleBoost * 0.6);
-  } else {
-    // 🔥 Protect base consoles from being dragged down
-    estimatedResale = round(Math.max(marketMedian, marketLow * 1.08));
-  }
-
-  // 🔥 Confidence
-  const compCount = basePool.length;
-
-  let confidence = 30;
-  if (compCount >= 5) confidence = 60;
-  if (compCount >= 8) confidence = 75;
-  if (compCount >= 12) confidence = 85;
-  if (compCount >= 16) confidence = 92;
-
-  let confidenceLabel = "Low";
-  if (confidence >= 80) confidenceLabel = "High";
-  else if (confidence >= 55) confidenceLabel = "Medium";
+  confidence = Math.min(92, confidence);
 
   return {
-    pricingMode: "Console V2 structured pricing",
-    estimatedResale: round(estimatedResale),
-    marketMedian: round(marketMedian),
-    marketLow: round(marketLow),
-    listingMedian: median(listingTotals),
-    fallbackResale: round(marketMedian),
+    pricingMode,
+    estimatedResale,
+    marketMedian,
+    marketLow,
+    listingMedian,
+    fallbackResale,
+    bundleMedian,
+    bundleBoost: roundMoney(bundleBoost),
     confidence,
-    confidenceLabel,
+    confidenceLabel: getConfidenceLabelV2(confidence),
     compCount,
-    listingCount: listingTotals.length,
-    marketPool: basePool.slice(0, 20),
-    listingPool: listingTotals.slice(0, 20),
+    listingCount,
+    marketPool,
+    listingPool,
+    usedMarketTotals: marketTotals,
+    usedListingTotals: listingTotals,
   };
 }
