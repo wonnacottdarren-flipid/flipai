@@ -170,6 +170,7 @@ export function parseConsoleFamily(text) {
   if (ps5ModuleIsPs5Like(normalizeForPs5Module(t))) {
     const ps5Variant = detectPs5Variant(t);
     if (ps5Variant === "digital") return "ps5_digital";
+    if (ps5Variant === "accessory") return "";
     return "ps5_disc";
   }
 
