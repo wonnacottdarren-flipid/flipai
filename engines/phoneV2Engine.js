@@ -94,9 +94,11 @@ function buildDamagedPhoneVariants(niceFamily = "", ctx = {}, rawQuery = "") {
   }
 
   if (intent === "screen_lines") {
+    variants.push(`${base} green line`);
+    variants.push(`${base} faulty`);
+    variants.push(`${base} spares repair`);
     variants.push(`${base} screen lines`);
     variants.push(`${base} screen line`);
-    variants.push(`${base} green line`);
     variants.push(`${base} green lines`);
     variants.push(`${base} pink line`);
     variants.push(`${base} display line`);
@@ -106,74 +108,82 @@ function buildDamagedPhoneVariants(niceFamily = "", ctx = {}, rawQuery = "") {
     variants.push(`${base} lcd line`);
     variants.push(`${base} faulty screen`);
     variants.push(`${base} screen fault`);
+    variants.push(`${base} spares or repair`);
+    variants.push(`${base} for parts`);
+    variants.push(`${base} broken`);
+    variants.push(`${base} damaged`);
 
     if (ctx.storageGb > 0) {
       variants.push(`${base} ${ctx.storageGb}gb screen lines`);
       variants.push(`${base} ${ctx.storageGb}gb green line`);
       variants.push(`${base} ${ctx.storageGb}gb display line`);
+      variants.push(`${base} ${ctx.storageGb}gb faulty`);
+      variants.push(`${base} ${ctx.storageGb}gb spares repair`);
     }
-
-    variants.push(`${base} faulty`);
-    variants.push(`${base} spares repair`);
-    variants.push(`${base} spares or repair`);
 
     return variants;
   }
 
   if (intent === "battery") {
     variants.push(`${base} battery health`);
+    variants.push(`${base} faulty`);
+    variants.push(`${base} spares repair`);
     variants.push(`${base} battery service`);
     variants.push(`${base} needs battery`);
     variants.push(`${base} battery replacement`);
     variants.push(`${base} poor battery`);
     variants.push(`${base} battery fault`);
-    variants.push(`${base} faulty`);
+    variants.push(`${base} spares or repair`);
+    variants.push(`${base} for parts`);
+    variants.push(`${base} broken`);
 
     if (ctx.storageGb > 0) {
       variants.push(`${base} ${ctx.storageGb}gb battery health`);
       variants.push(`${base} ${ctx.storageGb}gb battery service`);
       variants.push(`${base} ${ctx.storageGb}gb needs battery`);
+      variants.push(`${base} ${ctx.storageGb}gb faulty`);
     }
-
-    variants.push(`${base} spares repair`);
-    variants.push(`${base} spares or repair`);
 
     return variants;
   }
 
   if (intent === "charging") {
     variants.push(`${base} charging port`);
+    variants.push(`${base} faulty`);
+    variants.push(`${base} spares repair`);
     variants.push(`${base} charge port`);
     variants.push(`${base} not charging`);
     variants.push(`${base} charging issue`);
     variants.push(`${base} charging fault`);
-    variants.push(`${base} faulty`);
+    variants.push(`${base} spares or repair`);
+    variants.push(`${base} for parts`);
+    variants.push(`${base} broken`);
 
     if (ctx.storageGb > 0) {
       variants.push(`${base} ${ctx.storageGb}gb charging port`);
       variants.push(`${base} ${ctx.storageGb}gb not charging`);
+      variants.push(`${base} ${ctx.storageGb}gb faulty`);
     }
-
-    variants.push(`${base} spares repair`);
-    variants.push(`${base} spares or repair`);
 
     return variants;
   }
 
   if (intent === "face_id") {
     variants.push(`${base} face id`);
+    variants.push(`${base} faulty`);
+    variants.push(`${base} spares repair`);
     variants.push(`${base} faceid`);
     variants.push(`${base} face id fault`);
     variants.push(`${base} faulty face id`);
-    variants.push(`${base} faulty`);
+    variants.push(`${base} spares or repair`);
+    variants.push(`${base} for parts`);
+    variants.push(`${base} broken`);
 
     if (ctx.storageGb > 0) {
       variants.push(`${base} ${ctx.storageGb}gb face id`);
       variants.push(`${base} ${ctx.storageGb}gb face id fault`);
+      variants.push(`${base} ${ctx.storageGb}gb faulty`);
     }
-
-    variants.push(`${base} spares repair`);
-    variants.push(`${base} spares or repair`);
 
     return variants;
   }
