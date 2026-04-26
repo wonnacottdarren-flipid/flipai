@@ -1,4 +1,5 @@
 import { extractTotalPrice } from "../baseEngine.js";
+import { parseConsoleFamily } from "./consoleV2Family.js";
 
 function normalize(text = "") {
   return String(text).toLowerCase();
@@ -6,6 +7,37 @@ function normalize(text = "") {
 
 function hasAny(text = "", terms = []) {
   return terms.some((t) => text.includes(t));
+}
+
+function isFamilyMismatch(text = "", queryFamily = "") {
+  const family = String(queryFamily || "");
+  const itemFamily = parseConsoleFamily(text);
+
+  if (!family || !itemFamily) return false;
+
+  if (family === itemFamily) return false;
+
+  if (family === "switch_v2" && (itemFamily === "switch_oled" || itemFamily === "switch_lite")) {
+    return true;
+  }
+
+  if (family === "switch_oled" && itemFamily !== "switch_oled") {
+    return true;
+  }
+
+  if (family === "switch_lite" && itemFamily !== "switch_lite") {
+    return true;
+  }
+
+  if (family.startsWith("xbox_series") && itemFamily !== family) {
+    return true;
+  }
+
+  if (family.startsWith("ps5") && itemFamily !== family) {
+    return true;
+  }
+
+  return false;
 }
 
 // 🚫 BLOCK NON-CONSOLES
@@ -198,6 +230,7 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
     if (isGameListing(text)) continue;
     if (isAccessory(text)) continue;
     if (isFaulty(text)) continue;
+    if (isFamilyMismatch(text, queryContext?.family || "")) continue;
 
     // 🚫 Block digital when searching disc
     if (
