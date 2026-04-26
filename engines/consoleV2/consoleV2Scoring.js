@@ -1,3 +1,5 @@
+import { extractTotalPrice } from "../baseEngine.js";
+
 function normalize(text = "") {
   return String(text).toLowerCase();
 }
@@ -23,9 +25,7 @@ function isHardBlocked(item = {}) {
       "game only",
       "disc only",
     ])
-  ) {
-    return true;
-  }
+  ) return true;
 
   // ❌ Block accessories
   if (
@@ -42,11 +42,9 @@ function isHardBlocked(item = {}) {
       "remote",
       "cable only",
     ])
-  ) {
-    return true;
-  }
+  ) return true;
 
-  // ❌ Block box-only / parts
+  // ❌ Block parts / faulty
   if (
     hasAny(text, [
       "box only",
@@ -58,9 +56,7 @@ function isHardBlocked(item = {}) {
       "faulty",
       "not working",
     ])
-  ) {
-    return true;
-  }
+  ) return true;
 
   return false;
 }
@@ -77,18 +73,9 @@ function detectBundleType(item = {}) {
       "includes controller",
       "extras",
     ])
-  ) {
-    return "bundle";
-  }
+  ) return "bundle";
 
-  if (
-    hasAny(text, [
-      "boxed",
-      "complete in box",
-    ])
-  ) {
-    return "boxed";
-  }
+  if (hasAny(text, ["boxed", "complete in box"])) return "boxed";
 
   return "standard";
 }
@@ -112,14 +99,19 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
     const title = String(item?.title || "");
     const text = normalize(title);
 
-    // 🚫 HARD BLOCK FIRST
+    // 🚫 HARD BLOCK
     if (isHardBlocked(item)) continue;
+
+    // ✅ FIX: correct price extraction
+    const total = extractTotalPrice(item);
+
+    // 🚫 Skip zero-price garbage
+    if (!total || total <= 0) continue;
 
     let score = 10;
 
-    // ❌ Price sanity (PS5 shouldn't be £100)
-    const total = Number(item?.total || 0);
-    if (total > 0 && total < 150) {
+    // ❌ Too cheap = likely junk
+    if (total < 150) {
       score -= 5;
     }
 
