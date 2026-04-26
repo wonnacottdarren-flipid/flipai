@@ -36,27 +36,121 @@ function estimatePhoneRepairCost(queryContext = {}, conditionState = "", text = 
   const brand = String(queryContext?.brand || "");
 
   if (conditionState === "faulty_or_parts") {
-    if (brand === "iphone") return 120;
-    if (brand === "samsung") return 110;
-    return 100;
+    if (
+      t.includes("icloud locked") ||
+      t.includes("activation locked") ||
+      t.includes("blacklisted") ||
+      t.includes("blocked imei") ||
+      t.includes("water damaged") ||
+      t.includes("liquid damage") ||
+      t.includes("motherboard") ||
+      t.includes("logic board") ||
+      t.includes("no power") ||
+      t.includes("dead")
+    ) {
+      if (brand === "iphone") return 95;
+      if (brand === "samsung") return 90;
+      return 85;
+    }
+
+    if (
+      t.includes("screen lines") ||
+      t.includes("green line") ||
+      t.includes("pink line") ||
+      t.includes("line on screen") ||
+      t.includes("lines on screen") ||
+      t.includes("lcd line") ||
+      t.includes("display line")
+    ) {
+      if (family.includes("ultra")) return 90;
+      if (family.includes("pro_max")) return 85;
+      if (family.includes("pro")) return 78;
+      if (family.includes("plus")) return 75;
+      if (family.includes("fold")) return 140;
+      if (family.includes("flip")) return 110;
+      if (brand === "iphone") return 72;
+      if (brand === "samsung") return 70;
+      return 65;
+    }
+
+    if (
+      t.includes("cracked screen") ||
+      t.includes("screen cracked") ||
+      t.includes("broken screen") ||
+      t.includes("damaged screen") ||
+      t.includes("lcd damaged")
+    ) {
+      if (family.includes("ultra")) return 95;
+      if (family.includes("pro_max")) return 90;
+      if (family.includes("pro")) return 82;
+      if (family.includes("plus")) return 78;
+      if (family.includes("fold")) return 150;
+      if (family.includes("flip")) return 115;
+      if (brand === "iphone") return 75;
+      if (brand === "samsung") return 72;
+      return 68;
+    }
+
+    if (
+      t.includes("battery service") ||
+      t.includes("battery health low") ||
+      t.includes("needs battery") ||
+      t.includes("battery needs replacing") ||
+      t.includes("poor battery")
+    ) {
+      if (brand === "iphone") return 38;
+      if (brand === "samsung") return 35;
+      return 32;
+    }
+
+    if (brand === "iphone") return 75;
+    if (brand === "samsung") return 70;
+    return 65;
   }
 
   if (conditionState === "screen_damage") {
-    if (family.includes("ultra")) return 130;
-    if (family.includes("pro_max")) return 120;
-    if (family.includes("pro")) return 110;
-    if (family.includes("plus")) return 105;
-    if (family.includes("fold")) return 180;
-    if (family.includes("flip")) return 140;
-    if (brand === "iphone") return 100;
-    if (brand === "samsung") return 95;
-    return 90;
+    if (
+      t.includes("screen lines") ||
+      t.includes("green line") ||
+      t.includes("pink line") ||
+      t.includes("line on screen") ||
+      t.includes("lines on screen") ||
+      t.includes("lcd line") ||
+      t.includes("display line")
+    ) {
+      if (family.includes("ultra")) return 90;
+      if (family.includes("pro_max")) return 85;
+      if (family.includes("pro")) return 78;
+      if (family.includes("plus")) return 75;
+      if (family.includes("fold")) return 140;
+      if (family.includes("flip")) return 110;
+      if (brand === "iphone") return 72;
+      if (brand === "samsung") return 70;
+      return 65;
+    }
+
+    if (family.includes("ultra")) return 95;
+    if (family.includes("pro_max")) return 90;
+    if (family.includes("pro")) return 82;
+    if (family.includes("plus")) return 78;
+    if (family.includes("fold")) return 150;
+    if (family.includes("flip")) return 115;
+    if (brand === "iphone") return 75;
+    if (brand === "samsung") return 72;
+    return 68;
   }
 
   if (conditionState === "minor_fault") {
     if (t.includes("no s pen") || t.includes("missing s pen")) return 18;
-    if (t.includes("battery service") || t.includes("battery health low")) return 35;
-    return 20;
+    if (t.includes("battery service") || t.includes("battery health low")) return 32;
+    if (t.includes("needs battery") || t.includes("battery needs replacing")) return 35;
+    if (t.includes("charging port") || t.includes("charge port")) return 30;
+    if (t.includes("back glass") || t.includes("rear glass")) return 25;
+    if (t.includes("camera fault") || t.includes("camera issue")) return 28;
+    if (t.includes("speaker fault") || t.includes("speaker issue")) return 18;
+    if (t.includes("face id")) return 35;
+    if (t.includes("fingerprint")) return 20;
+    return 15;
   }
 
   return 0;
@@ -70,6 +164,8 @@ export function scorePhoneV2Candidate(item = {}, queryContext = {}) {
   if (failsPhoneBaseGate(item, queryContext)) return -10;
 
   const conditionState = classifyPhoneConditionState(text);
+  const allowDamaged =
+    Boolean(queryContext?.allowDamaged) || shouldAllowDamagedPhones(queryContext);
 
   let score = 0;
 
@@ -105,9 +201,16 @@ export function scorePhoneV2Candidate(item = {}, queryContext = {}) {
 
   if (conditionState === "clean_working") score += 1.5;
   if (conditionState === "cosmetic_wear") score += 0.3;
-  if (conditionState === "minor_fault") score -= 1.5;
-  if (conditionState === "screen_damage") score -= 4.5;
-  if (conditionState === "faulty_or_parts") score -= 8;
+
+  if (allowDamaged) {
+    if (conditionState === "minor_fault") score -= 0.8;
+    if (conditionState === "screen_damage") score -= 2.4;
+    if (conditionState === "faulty_or_parts") score -= 4.2;
+  } else {
+    if (conditionState === "minor_fault") score -= 1.5;
+    if (conditionState === "screen_damage") score -= 4.5;
+    if (conditionState === "faulty_or_parts") score -= 8;
+  }
 
   if (queryContext.brand === "iphone" && text.includes("iphone")) score += 0.5;
   if (
@@ -123,6 +226,38 @@ export function scorePhoneV2Candidate(item = {}, queryContext = {}) {
 
   if (titleText && queryContext.family && titleText.includes(queryContext.family.replaceAll("_", " "))) {
     score += 0.4;
+  }
+
+  if (allowDamaged) {
+    if (
+      text.includes("screen lines") ||
+      text.includes("green line") ||
+      text.includes("pink line") ||
+      text.includes("line on screen") ||
+      text.includes("lines on screen")
+    ) {
+      score += 0.8;
+    }
+
+    if (
+      text.includes("faulty") ||
+      text.includes("spares") ||
+      text.includes("repairs") ||
+      text.includes("for parts")
+    ) {
+      score += 0.5;
+    }
+
+    if (
+      text.includes("icloud locked") ||
+      text.includes("activation locked") ||
+      text.includes("blacklisted") ||
+      text.includes("blocked imei") ||
+      text.includes("water damaged") ||
+      text.includes("liquid damage")
+    ) {
+      score -= 2.5;
+    }
   }
 
   return score;
@@ -178,13 +313,13 @@ export function buildPhoneV2PricingModel(queryContext = {}, marketItems = [], li
   const usableMarket =
     exactMarket.length >= 3
       ? exactMarket
-      : marketConditionPool.filter((entry) => entry.score >= 3);
+      : marketConditionPool.filter((entry) => entry.score >= (allowDamaged ? 1.2 : 3));
 
   const exactListings = listingConditionPool.filter((entry) => entry.score >= 6);
   const usableListings =
     exactListings.length >= 2
       ? exactListings
-      : listingConditionPool.filter((entry) => entry.score >= 3);
+      : listingConditionPool.filter((entry) => entry.score >= (allowDamaged ? 1.2 : 3));
 
   let marketTotals = removePriceOutliers(
     (usableMarket.length ? usableMarket : marketConditionPool)
@@ -207,10 +342,13 @@ export function buildPhoneV2PricingModel(queryContext = {}, marketItems = [], li
   }
 
   const marketMedian = median(marketTotals);
-  const marketLow = percentile(marketTotals, 0.35);
+  const marketLow = percentile(marketTotals, allowDamaged ? 0.3 : 0.35);
   const listingMedian = median(listingTotals);
 
-  let pricingMode = "Phone V2 model median";
+  let pricingMode = allowDamaged
+    ? "Phone V2 damaged-risk model"
+    : "Phone V2 model median";
+
   let baseline = marketMedian || marketLow || listingMedian || 0;
 
   if (!marketMedian && listingMedian) pricingMode = "Phone V2 listings fallback";
@@ -218,14 +356,14 @@ export function buildPhoneV2PricingModel(queryContext = {}, marketItems = [], li
     pricingMode = "Phone V2 low-band fallback";
   }
 
-  let conservativeMultiplier = 0.94;
+  let conservativeMultiplier = allowDamaged ? 0.9 : 0.94;
 
   if (queryContext.family && Number(queryContext.storageGb || 0) > 0) {
-    conservativeMultiplier = 0.95;
+    conservativeMultiplier = allowDamaged ? 0.91 : 0.95;
   }
 
   if (exactMarket.length >= 5) {
-    conservativeMultiplier = 0.96;
+    conservativeMultiplier = allowDamaged ? 0.92 : 0.96;
   }
 
   const estimatedResale = roundMoney(baseline * conservativeMultiplier);
@@ -243,7 +381,9 @@ export function buildPhoneV2PricingModel(queryContext = {}, marketItems = [], li
   if (queryContext.family) confidence += 2;
   if (Number(queryContext.storageGb || 0) > 0) confidence += 2;
 
-  confidence = Math.min(92, confidence);
+  if (allowDamaged) confidence -= 6;
+
+  confidence = Math.min(92, Math.max(18, confidence));
 
   let confidenceLabel = "Low";
   if (confidence >= 80) confidenceLabel = "High";
