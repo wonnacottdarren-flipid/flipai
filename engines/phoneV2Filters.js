@@ -147,6 +147,95 @@ const HANDSET_SIGNAL_TERMS = [
   "1tb",
 ];
 
+const SCREEN_LINE_QUERY_TERMS = [
+  "screen lines",
+  "screen line",
+  "line on screen",
+  "lines on screen",
+  "green line",
+  "green lines",
+  "pink line",
+  "pink lines",
+  "white line",
+  "white lines",
+  "vertical line",
+  "vertical lines",
+  "horizontal line",
+  "horizontal lines",
+  "display line",
+  "display lines",
+  "lcd line",
+  "lcd lines",
+];
+
+const SCREEN_LINE_LISTING_TERMS = [
+  "screen lines",
+  "screen line",
+  "line on screen",
+  "lines on screen",
+  "green line",
+  "green lines",
+  "pink line",
+  "pink lines",
+  "white line",
+  "white lines",
+  "vertical line",
+  "vertical lines",
+  "horizontal line",
+  "horizontal lines",
+  "display line",
+  "display lines",
+  "lcd line",
+  "lcd lines",
+];
+
+const BATTERY_QUERY_TERMS = [
+  "battery health",
+  "battery service",
+  "needs battery",
+  "battery replacement",
+  "poor battery",
+  "battery fault",
+  "battery issue",
+];
+
+const BATTERY_LISTING_TERMS = [
+  "battery health",
+  "battery service",
+  "needs battery",
+  "battery needs replacing",
+  "battery replacement",
+  "poor battery",
+  "battery fault",
+  "battery issue",
+];
+
+const CHARGING_QUERY_TERMS = [
+  "charging port",
+  "charge port",
+  "not charging",
+  "charging issue",
+  "charging fault",
+];
+
+const CHARGING_LISTING_TERMS = [
+  "charging port",
+  "charge port",
+  "not charging",
+  "charging issue",
+  "charging fault",
+];
+
+const FACE_ID_QUERY_TERMS = [
+  "face id",
+  "faceid",
+];
+
+const FACE_ID_LISTING_TERMS = [
+  "face id",
+  "faceid",
+];
+
 export function isPhoneCategory(item = {}) {
   const categoryText = getPhoneCategoryText(item);
   return hasAnyPhoneText(categoryText, PHONE_CATEGORY_TERMS);
@@ -185,6 +274,54 @@ export function isExplicitlyUnlockedPhone(text = "") {
 export function hasPhoneHandsetSignals(text = "") {
   const t = normalizePhoneText(text);
   return hasAnyPhoneText(t, HANDSET_SIGNAL_TERMS);
+}
+
+export function detectPhoneFaultIntent(queryContext = {}) {
+  const q = normalizePhoneText(
+    [
+      queryContext?.rawQuery,
+      queryContext?.normalizedQuery,
+      queryContext?.query,
+      queryContext?.searchQuery,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+
+  if (!q) return "";
+
+  if (hasAnyPhoneText(q, SCREEN_LINE_QUERY_TERMS)) return "screen_lines";
+  if (hasAnyPhoneText(q, BATTERY_QUERY_TERMS)) return "battery";
+  if (hasAnyPhoneText(q, CHARGING_QUERY_TERMS)) return "charging";
+  if (hasAnyPhoneText(q, FACE_ID_QUERY_TERMS)) return "face_id";
+
+  return "";
+}
+
+export function matchesPhoneFaultIntent(text = "", queryContext = {}) {
+  const faultIntent = detectPhoneFaultIntent(queryContext);
+
+  if (!faultIntent) return true;
+
+  const t = normalizePhoneText(text);
+
+  if (faultIntent === "screen_lines") {
+    return hasAnyPhoneText(t, SCREEN_LINE_LISTING_TERMS);
+  }
+
+  if (faultIntent === "battery") {
+    return hasAnyPhoneText(t, BATTERY_LISTING_TERMS);
+  }
+
+  if (faultIntent === "charging") {
+    return hasAnyPhoneText(t, CHARGING_LISTING_TERMS);
+  }
+
+  if (faultIntent === "face_id") {
+    return hasAnyPhoneText(t, FACE_ID_LISTING_TERMS);
+  }
+
+  return true;
 }
 
 export function isOverlyGenericPhoneTitle(titleText = "", queryContext = {}) {
@@ -252,6 +389,10 @@ export function failsPhoneUnlockedGate(text = "", queryContext = {}) {
   return false;
 }
 
+export function failsPhoneFaultIntentGate(text = "", queryContext = {}) {
+  return !matchesPhoneFaultIntent(text, queryContext);
+}
+
 export function failsPhoneBaseGate(item = {}, queryContext = {}) {
   const titleText = getPhoneTitleText(item);
   const combinedText = getPhoneCombinedItemText(item);
@@ -265,6 +406,7 @@ export function failsPhoneBaseGate(item = {}, queryContext = {}) {
 
   if (failsPhoneConditionGate(combinedText, queryContext)) return true;
   if (failsPhoneUnlockedGate(combinedText, queryContext)) return true;
+  if (failsPhoneFaultIntentGate(`${titleText} ${combinedText}`, queryContext)) return true;
 
   if (isWrongPhoneBrand(combinedText, queryContext)) return true;
   if (isWrongPhoneFamily(combinedText, queryContext)) return true;
@@ -287,6 +429,7 @@ export function getPhoneFilterDebug(item = {}, queryContext = {}) {
   const combinedText = getPhoneCombinedItemText(item);
   const categoryText = getPhoneCategoryText(item);
   const conditionState = classifyPhoneConditionState(combinedText);
+  const faultIntent = detectPhoneFaultIntent(queryContext);
 
   if (!combinedText) return { matched: false, reason: "empty_text" };
   if (isPhoneAccessoryOnly(combinedText)) return { matched: false, reason: "accessory_only" };
@@ -298,6 +441,9 @@ export function getPhoneFilterDebug(item = {}, queryContext = {}) {
   }
   if (failsPhoneUnlockedGate(combinedText, queryContext)) {
     return { matched: false, reason: "unlocked_required_but_locked" };
+  }
+  if (failsPhoneFaultIntentGate(`${titleText} ${combinedText}`, queryContext)) {
+    return { matched: false, reason: `fault_intent_mismatch_${faultIntent || "unknown"}` };
   }
   if (isWrongPhoneBrand(combinedText, queryContext)) {
     return { matched: false, reason: "brand_mismatch" };
@@ -325,6 +471,7 @@ export function getPhoneFilterDebug(item = {}, queryContext = {}) {
     combinedText,
     categoryText,
     conditionState,
+    faultIntent,
     itemBrand: detectPhoneBrand(combinedText),
     itemFamily: parsePhoneFamily(combinedText, queryContext?.brand || ""),
     itemStorageGb: extractStorageGb(combinedText),
