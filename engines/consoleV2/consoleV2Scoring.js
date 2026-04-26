@@ -8,62 +8,63 @@ function hasAny(text = "", terms = []) {
   return terms.some((t) => text.includes(t));
 }
 
-function isHardBlocked(item = {}) {
-  const text = normalize(item?.title || "");
+function isGameListing(text = "") {
+  // 🔥 Must contain console to be valid
+  if (!text.includes("console") && !text.includes("ps5 console")) {
+    return true;
+  }
 
-  // ❌ Block games
+  // 🔥 Block obvious games / releases
   if (
     hasAny(text, [
+      "pre-order",
+      "pre order",
+      "release on",
       "ps5 game",
       "playstation game",
       "ea sports",
       "fifa",
-      "fc 24",
-      "fc 25",
+      "fc ",
       "call of duty",
       "spiderman",
-      "game only",
       "disc only",
-    ])
-  ) return true;
-
-  // ❌ Block accessories
-  if (
-    hasAny(text, [
-      "controller only",
-      "dualsense",
-      "charging dock",
-      "charging station",
-      "headset",
-      "stand",
-      "cooling fan",
-      "faceplate",
-      "cover plate",
-      "remote",
-      "cable only",
-    ])
-  ) return true;
-
-  // ❌ Block parts / faulty
-  if (
-    hasAny(text, [
-      "box only",
-      "empty box",
-      "no console",
-      "for parts",
-      "spares",
-      "repair",
-      "faulty",
-      "not working",
+      "game only",
     ])
   ) return true;
 
   return false;
 }
 
-function detectBundleType(item = {}) {
-  const text = normalize(item?.title || "");
+function isAccessory(text = "") {
+  return hasAny(text, [
+    "controller only",
+    "dualsense",
+    "charging dock",
+    "charging station",
+    "headset",
+    "stand",
+    "cooling fan",
+    "faceplate",
+    "cover plate",
+    "remote",
+    "cable only",
+  ]);
+}
 
+function isFaulty(text = "") {
+  return hasAny(text, [
+    "box only",
+    "empty box",
+    "no console",
+    "for parts",
+    "spares",
+    "repair",
+    "faulty",
+    "not working",
+  ]);
+}
+
+function detectBundleType(text = "") {
   if (
     hasAny(text, [
       "bundle",
@@ -80,15 +81,10 @@ function detectBundleType(item = {}) {
   return "standard";
 }
 
-function detectCondition(item = {}) {
-  const text = normalize(
-    `${item?.title || ""} ${item?.condition || ""}`
-  );
-
+function detectCondition(text = "") {
   if (hasAny(text, ["brand new", "sealed"])) return "new";
   if (hasAny(text, ["very good", "excellent"])) return "clean_working";
   if (hasAny(text, ["good"])) return "used_working";
-
   return "unknown";
 }
 
@@ -99,29 +95,38 @@ export function scoreConsoleV2Items(items = [], queryContext = {}) {
     const title = String(item?.title || "");
     const text = normalize(title);
 
-    // 🚫 HARD BLOCK
-    if (isHardBlocked(item)) continue;
+    // 🚫 HARD BLOCKS
+    if (isGameListing(text)) continue;
+    if (isAccessory(text)) continue;
+    if (isFaulty(text)) continue;
 
-    // ✅ FIX: correct price extraction
+    // 🚫 Block digital when searching disc
+    if (
+      queryContext?.family === "ps5_disc" &&
+      text.includes("digital")
+    ) {
+      continue;
+    }
+
     const total = extractTotalPrice(item);
 
-    // 🚫 Skip zero-price garbage
+    // 🚫 Skip zero / junk prices
     if (!total || total <= 0) continue;
 
     let score = 10;
 
-    // ❌ Too cheap = likely junk
+    // 🚫 Too cheap (junk / incomplete)
     if (total < 150) {
       score -= 5;
     }
 
-    // ❌ Weak titles
+    // 🚫 Weak titles
     if (title.length < 10) {
       score -= 2;
     }
 
-    const bundleType = detectBundleType(item);
-    const conditionState = detectCondition(item);
+    const bundleType = detectBundleType(text);
+    const conditionState = detectCondition(text);
 
     results.push({
       item,
