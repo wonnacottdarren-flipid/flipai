@@ -99,13 +99,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (message) {
       const clean = String(message).trim();
       if (clean.toLowerCase().includes("service unavailable")) {
-        return "Service temporarily unavailable. Please try again in a moment.";
+        return "FlipAI is temporarily unavailable. Please try again shortly.";
       }
       return clean;
     }
 
     if (res.status >= 500) {
-      return "Service temporarily unavailable. Please try again in a moment.";
+      return "FlipAI is temporarily unavailable. Please try again shortly.";
     }
 
     return fallbackMessage;
@@ -325,7 +325,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const isWarning = Boolean(options.isWarning);
 
     const helperNote = isWarning
-      ? "No sold comps were connected on this run. Try a shorter product title or manually review likely sold prices before trusting the estimate."
+      ? "No sold comps were connected on this run. Try a shorter product title or manually review likely sold prices before relying on the estimate."
       : "These sold comps were connected and copied into the comp prices box. You can still edit them manually before running the analyzer.";
 
     return `
@@ -371,7 +371,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     resultArea.innerHTML = `
       <div class="locked-box">
-        <h3>Upgrade required</h3>
+        <h3>Unlock more FlipAI capacity</h3>
         <p>${escapeHtml(message)}</p>
         ${showStarter ? `<button class="upgrade-btn" onclick="window.startCheckout('starter')">Upgrade to Starter - £5/month</button>` : ""}
         ${showPro ? `<button class="upgrade-btn" onclick="window.startCheckout('pro')">Upgrade to Pro - £20/month</button>` : ""}
@@ -481,10 +481,10 @@ document.addEventListener("DOMContentLoaded", () => {
             `
             : `
               <div class="analysis-note-card">
-                <div class="analysis-note-title">Comp warning</div>
+                <div class="analysis-note-title">Comp confidence note</div>
                 <div class="analysis-note-body">
-                  No sold comps were found for this run, so this result is based on a weaker estimate.
-                  Treat the resale number more cautiously and try simpler product wording if needed.
+                  No sold comps were found for this run, so this result is based on a lighter estimate.
+                  For the strongest read, try simpler product wording or add manual sold prices.
                 </div>
               </div>
             `
@@ -628,7 +628,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     return `
       <div class="warning-box">
-        <h4>Warnings</h4>
+        <h4>Checks to review</h4>
         <ul>
           ${warningFlags.map((flag) => `<li>${escapeHtml(flag)}</li>`).join("")}
         </ul>
@@ -921,7 +921,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   async function runAnalysis() {
-    setAnalyzeStatus("Analyzing...", "loading");
+    setAnalyzeStatus("Running FlipAI analysis...", "loading");
     resultArea.innerHTML = "";
     analyzeBtn.disabled = true;
 
@@ -936,8 +936,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const { data } = await safeReadResponse(res);
 
       if (res.status === 401) {
-        setAnalyzeStatus("Please sign in to use FlipAI analysis.", "error");
-        renderLockedState("Please sign in to use FlipAI analysis.");
+        setAnalyzeStatus("Sign in to access your FlipAI analysis workspace.", "error");
+        renderLockedState("Sign in to access your FlipAI analysis workspace.");
         return;
       }
 
@@ -947,16 +947,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const status = String(user?.subscriptionStatus || "free").toLowerCase();
         const isStarter = plan === "starter" && (status === "active" || status === "trialing");
 
-        setAnalyzeStatus(getResponseErrorMessage(res, data, "Limit reached."), "error");
+        setAnalyzeStatus(getResponseErrorMessage(res, data, "Your current plan allowance has been used."), "error");
 
         if (isStarter) {
           renderLockedState(
-            data.error || "You have used all 25 Starter analyses. Upgrade to Pro for unlimited access.",
+            data.error || "Your Starter workspace has used its 25 monthly analyses. Move to Pro to keep sourcing with unlimited analysis.",
             { showPro: true }
           );
         } else {
           renderLockedState(
-            data.error || "You have used all 5 free analyses. Upgrade to continue.",
+            data.error || "Your free workspace has used its included analyses. Upgrade when you’re ready to keep using FlipAI on live opportunities.",
             { showStarter: true, showPro: true }
           );
         }
@@ -991,11 +991,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!payload.product) {
       clearCompsHelper();
-      setAutoCompsStatus("Enter a product first, then click Auto-fill comps.", "error");
+      setAutoCompsStatus("Enter a product first, then let FlipAI look for comps.", "error");
       return;
     }
 
-    setAutoCompsStatus("Finding similar comps...", "loading");
+    setAutoCompsStatus("Finding similar sold comps...", "loading");
     autoCompsBtn.disabled = true;
     clearCompsHelper();
 
@@ -1010,7 +1010,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const { data } = await safeReadResponse(res);
 
       if (res.status === 401) {
-        setAutoCompsStatus("Please sign in to auto-fill comps.", "error");
+        setAutoCompsStatus("Sign in to use FlipAI auto comps.", "error");
         return;
       }
 
@@ -1029,7 +1029,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("manualSoldPrices").value = manualSoldPricesText;
 
       compsHelperArea.innerHTML = renderCompsHelperCard({
-        title: compCount > 0 ? "Auto comps connected" : "Auto comps warning",
+        title: compCount > 0 ? "Auto comps connected" : "Auto comps note",
         compCount,
         confidence,
         confidenceLabel,
@@ -1044,14 +1044,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (compCount <= 0) {
         setAutoCompsStatus(
-          `No sold comps found. Query used: ${searchQuery}. Try simplifying the product title.`,
+          `No sold comps connected on this run. Query used: ${searchQuery}. Try a cleaner product title for a stronger estimate.`,
           "warning"
         );
         return;
       }
 
       setAutoCompsStatus(
-        `Auto comps filled. Query used: ${searchQuery}. Comps: ${compCount}. Confidence: ${confidenceLabel} (${confidence}).`,
+        `Auto comps connected. Query used: ${searchQuery}. Comps: ${compCount}. Confidence: ${confidenceLabel} (${confidence}).`,
         "success"
       );
     } catch (err) {
@@ -1063,7 +1063,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function findDeals() {
-    setDealStatus("Searching eBay...", "loading");
+    setDealStatus("Searching eBay listings...", "loading");
     dealResultsEl.innerHTML = "";
     findDealsBtn.disabled = true;
 
@@ -1078,11 +1078,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const { data } = await safeReadResponse(res);
 
       if (res.status === 401) {
-        setDealStatus("Please sign in to search eBay.", "error");
+        setDealStatus("Sign in to use FlipAI eBay search.", "error");
         dealResultsEl.innerHTML = `
           <div class="empty-state">
-            <h3>Sign in required</h3>
-            <p>Sign in first, then search eBay listings from inside FlipAI.</p>
+            <h3>Sign in to continue</h3>
+            <p>Create or access your FlipAI workspace, then search eBay listings directly inside the app.</p>
           </div>
         `;
         return;
@@ -1108,7 +1108,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function findBestDeals() {
-    setFinderStatus("Finding best deals...", "loading");
+    setFinderStatus("Scanning for the best opportunities...", "loading");
     finderResultsEl.innerHTML = "";
     findBestDealsBtn.disabled = true;
 
@@ -1123,11 +1123,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const { data } = await safeReadResponse(res);
 
       if (res.status === 401) {
-        setFinderStatus("Please sign in to find deals.", "error");
+        setFinderStatus("Sign in to use Deal Finder.", "error");
         finderResultsEl.innerHTML = `
           <div class="empty-state">
-            <h3>Sign in required</h3>
-            <p>Sign in first, then use Deal Finder to rank likely opportunities.</p>
+            <h3>Sign in to continue</h3>
+            <p>Create or access your FlipAI workspace, then use Deal Finder to rank live opportunities.</p>
           </div>
         `;
         return;
@@ -1144,7 +1144,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const tightModeText = data.includeTightDeals ? "including Tight deals" : "Buy and Offer only";
 
       setFinderStatus(
-        `Deal finder complete. Fetched ${Number(data.totalFetched || 0)} listings and ranked ${Number(data.totalMatched || 0)} exact matches (${tightModeText}).`,
+        `Deal Finder complete. Checked ${Number(data.totalFetched || 0)} listings and ranked ${Number(data.totalMatched || 0)} exact matches (${tightModeText}).`,
         "success"
       );
 
@@ -1202,7 +1202,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (planValueEl) planValueEl.textContent = "Pro";
       if (usageValueEl) usageValueEl.textContent = "Unlimited";
       if (remainingValueEl) remainingValueEl.textContent = "∞";
-      if (accountSublineEl) accountSublineEl.textContent = "Your Pro plan is active with unlimited analyses.";
+      if (accountSublineEl) accountSublineEl.textContent = "Your Pro workspace is active with unlimited FlipAI analysis.";
       if (billingBtn) billingBtn.style.display = "block";
       return;
     }
@@ -1213,7 +1213,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (planValueEl) planValueEl.textContent = "Starter";
       if (usageValueEl) usageValueEl.textContent = `${usageCount} / 25`;
       if (remainingValueEl) remainingValueEl.textContent = `${remaining}`;
-      if (accountSublineEl) accountSublineEl.textContent = "Your Starter plan is active with 25 analyses per month.";
+      if (accountSublineEl) accountSublineEl.textContent = "Your Starter workspace includes 25 monthly FlipAI analyses.";
       if (proBtn) proBtn.style.display = "block";
       if (billingBtn) billingBtn.style.display = "block";
       return;
@@ -1224,7 +1224,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (planValueEl) planValueEl.textContent = "Free";
     if (usageValueEl) usageValueEl.textContent = `${usageCount} / 5`;
     if (remainingValueEl) remainingValueEl.textContent = `${remaining}`;
-    if (accountSublineEl) accountSublineEl.textContent = "You are on the free plan with 5 analyses included.";
+    if (accountSublineEl) accountSublineEl.textContent = "Your free workspace includes 5 FlipAI analyses to test the full experience.";
     if (starterBtn) starterBtn.style.display = "block";
     if (proBtn) proBtn.style.display = "block";
   }
@@ -1262,13 +1262,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const { email, password } = getCredentials();
 
     if (!email || !password) {
-      setAuthStatus("Enter your email and password.", "error");
+      setAuthStatus("Enter your email and password to access your workspace.", "error");
       return;
     }
 
     loginBtn.disabled = true;
     signupBtn.disabled = true;
-    setAuthStatus("Logging in...", "loading");
+    setAuthStatus("Opening your FlipAI workspace...", "loading");
 
     try {
       const res = await fetch("/api/login", {
@@ -1284,7 +1284,7 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(getResponseErrorMessage(res, data, "Login failed"));
       }
 
-      setAuthStatus("Login successful.", "success");
+      setAuthStatus("Workspace opened successfully.", "success");
       await loadUser();
     } catch (err) {
       setAuthStatus(`Error: ${err.message}`, "error");
@@ -1298,7 +1298,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const { name, email, password } = getCredentials();
 
     if (!name || !email || !password) {
-      setAuthStatus("Enter your name, email, and password.", "error");
+      setAuthStatus("Enter your name, email, and password to create your workspace.", "error");
       return;
     }
 
@@ -1309,7 +1309,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     loginBtn.disabled = true;
     signupBtn.disabled = true;
-    setAuthStatus("Creating account...", "loading");
+    setAuthStatus("Creating your FlipAI workspace...", "loading");
 
     try {
       const res = await fetch("/api/signup", {
@@ -1325,7 +1325,7 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(getResponseErrorMessage(res, data, "Signup failed"));
       }
 
-      setAuthStatus("Account created.", "success");
+      setAuthStatus("Workspace created successfully.", "success");
       await loadUser();
     } catch (err) {
       setAuthStatus(`Error: ${err.message}`, "error");
@@ -1337,7 +1337,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function logout() {
     logoutBtn.disabled = true;
-    setAuthStatus("Logging out...", "loading");
+    setAuthStatus("Closing workspace...", "loading");
 
     try {
       const res = await fetch("/api/logout", {
@@ -1349,7 +1349,7 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error("Logout failed");
       }
 
-      setAuthStatus("Logged out.", "success");
+      setAuthStatus("Workspace closed.", "success");
 
       resultArea.innerHTML = `<div class="placeholder">Run an analysis and your profit estimate, verdict, risk, and resale guidance will appear here.</div>`;
       dealResultsEl.innerHTML = "Search eBay listings and matching results will appear here.";
@@ -1383,7 +1383,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.startCheckout = async function startCheckout(plan) {
     try {
       const selectedPlan = String(plan || "").toLowerCase();
-      setAnalyzeStatus("Redirecting to checkout...", "loading");
+      setAnalyzeStatus("Opening secure checkout...", "loading");
 
       const res = await fetch("/api/create-checkout-session", {
         method: "POST",
@@ -1411,7 +1411,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function openBillingPortal() {
     try {
-      setAuthStatus("Opening billing portal...", "loading");
+      setAuthStatus("Opening secure billing portal...", "loading");
 
       const res = await fetch("/api/create-portal-session", {
         method: "POST",
