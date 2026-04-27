@@ -6,7 +6,7 @@ export function canUserSearch(user) {
   if (!user) return false;
 
   // paid users = unlimited
-  if (user.plan === "pro" || user.plan === "premium") {
+  if (user.plan === "pro") {
     return true;
   }
 
@@ -18,7 +18,7 @@ export function recordSearchUsage(user) {
   if (!user) return;
 
   // do not count for paid users
-  if (user.plan === "pro" || user.plan === "premium") {
+  if (user.plan === "pro") {
     return;
   }
 
@@ -32,7 +32,7 @@ export function recordSearchUsage(user) {
 export function getRemainingSearches(user) {
   if (!user) return 0;
 
-  if (user.plan === "pro" || user.plan === "premium") {
+  if (user.plan === "pro") {
     return "unlimited";
   }
 
