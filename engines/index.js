@@ -4,13 +4,13 @@ import { phoneEngine } from "./phoneEngine.js";
 import { phoneV2Engine } from "./phoneV2Engine.js";
 import { consoleV2Adapter } from "./consoleV2/consoleV2Adapter.js";
 import { cameraEngine } from "./cameraEngine.js";
-import { audioEngine } from "./audioV2Engine.js";
+import { audioEngine } from "./audioEngine.js";
 
 const engines = [
   dysonEngine,
   audioEngine,
-  phoneV2Engine,
-  phoneEngine,
+  phoneV2Engine, // ✅ V2 FIRST (takes priority)
+  phoneEngine,   // ✅ V1 fallback (safety)
   consoleV2Adapter,
   cameraEngine,
 ];
@@ -34,7 +34,7 @@ export {
   baseEngine,
   dysonEngine,
   phoneEngine,
-  phoneV2Engine,
+  phoneV2Engine, // ✅ export for debugging if needed
   consoleV2Adapter,
   cameraEngine,
   audioEngine,
