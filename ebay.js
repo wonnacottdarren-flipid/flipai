@@ -36,67 +36,6 @@ function hasAny(text, phrases = []) {
   return phrases.some((phrase) => text.includes(phrase));
 }
 
-/* =========================
-   🔥 NEW: AUDIO VARIANTS
-========================= */
-function buildAudioSearchVariants(query) {
-  const q = normalizeText(query);
-  const variants = [String(query).trim()];
-
-  const add = (v) => {
-    if (v && !variants.includes(v)) variants.push(v);
-  };
-
-  // AirPods
-  if (q.includes("airpods")) {
-    add("apple airpods");
-    add("airpods earbuds");
-    add("apple airpods wireless earbuds");
-
-    if (q.includes("pro")) {
-      add("airpods pro");
-      add("apple airpods pro");
-      add("airpods pro earbuds");
-      add("airpods pro wireless earbuds");
-    }
-  }
-
-  // Samsung Buds
-  if (q.includes("galaxy buds") || q.includes("samsung buds")) {
-    add("samsung galaxy buds");
-    add("galaxy buds earbuds");
-    add("samsung earbuds");
-  }
-
-  // Sony WF (earbuds)
-  if (q.includes("sony wf") || q.includes("wf-1000xm") || q.includes("wf1000xm")) {
-    add("sony wf 1000xm4");
-    add("sony wf 1000xm5");
-    add("sony wireless earbuds");
-  }
-
-  // Sony WH (headphones)
-  if (q.includes("sony wh") || q.includes("wh-1000xm") || q.includes("wh1000xm")) {
-    add("sony wh 1000xm4");
-    add("sony wh 1000xm5");
-    add("sony headphones");
-  }
-
-  // Bose QC
-  if (q.includes("bose") || q.includes("qc")) {
-    add("bose quietcomfort");
-    add("bose qc35");
-    add("bose qc45");
-    add("bose headphones");
-  }
-
-  return [...new Set(variants)];
-}
-
-/* =========================
-   EXISTING CODE CONTINUES
-========================= */
-
 function createAbortSignal(timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error("Request timeout")), timeoutMs);
@@ -112,7 +51,9 @@ async function safeReadJson(res) {
   try {
     return JSON.parse(text);
   } catch {
-    return { raw: text };
+    return {
+      raw: text,
+    };
   }
 }
 
@@ -120,7 +61,11 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 8000) {
   const { signal, clear } = createAbortSignal(timeoutMs);
 
   try {
-    const res = await fetch(url, { ...options, signal });
+    const res = await fetch(url, {
+      ...options,
+      signal,
+    });
+
     const data = await safeReadJson(res);
     return { res, data };
   } catch (err) {
@@ -133,27 +78,560 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 8000) {
   }
 }
 
-/* =========================
-   🔥 MODIFIED: buildSearchVariants ONLY
-========================= */
+function isDysonMainUnitQuery(text) {
+  return (
+    text.includes("dyson") &&
+    (
+      text.includes("main unit") ||
+      text.includes("main body") ||
+      text.includes("body only") ||
+      text.includes("motor unit") ||
+      text.includes("bare unit") ||
+      text.includes("unit only") ||
+      text.includes("handheld unit") ||
+      text.includes("machine body") ||
+      text.includes("vacuum body") ||
+      text.includes("body")
+    )
+  );
+}
+
+function isDysonOutsizeQuery(text) {
+  return text.includes("dyson") && text.includes("outsize");
+}
+
+function isDysonPartsCategory(item) {
+  const categories = Array.isArray(item?.categories) ? item.categories : [];
+  return categories.some((category) =>
+    normalizeText(category?.categoryName).includes("parts")
+  );
+}
+
+function isDysonMainUnitTitle(text) {
+  return hasAny(text, [
+    "main unit",
+    "motor unit",
+    "body only",
+    "main body",
+    "machine body",
+    "vacuum body",
+    "body unit",
+    "handheld unit",
+    "main vacuum unit",
+    "bare unit",
+    "unit only",
+    "main machine",
+    "motor body",
+    "body",
+  ]);
+}
+
+function isDysonFullVacTitle(text) {
+  return hasAny(text, [
+    "vacuum cleaner",
+    "cordless vacuum",
+    "stick vacuum",
+    "complete vacuum",
+    "full vacuum",
+    "complete machine",
+    "complete set",
+    "full set",
+  ]);
+}
+
+function isDysonHardAccessoryOnlyTitle(text) {
+  return hasAny(text, [
+    "attachment only",
+    "attachments only",
+    "tool only",
+    "tools only",
+    "battery only",
+    "charger only",
+    "filter only",
+    "wand only",
+    "head only",
+    "roller head only",
+    "motorhead only",
+    "floor head only",
+    "bin only",
+    "canister only",
+    "hose only",
+    "dock only",
+    "wall dock only",
+    "nozzle only",
+    "crevice tool only",
+    "brush only",
+    "trigger only",
+    "spares",
+    "spare parts",
+    "for parts only",
+    "parts only",
+  ]);
+}
+
+function isDysonAccessoryOrPartsTitle(text) {
+  return hasAny(text, [
+    "parts",
+    "spares",
+    "attachment",
+    "attachments",
+    "tool only",
+    "tools only",
+    "battery only",
+    "charger only",
+    "filter only",
+    "wand only",
+    "head only",
+    "dock only",
+    "wall dock",
+    "filter",
+    "filters",
+    "wand",
+    "pipe",
+    "crevice",
+    "brush",
+    "roller",
+    "roller head",
+    "floor head",
+    "motorhead",
+    "motor head",
+    "nozzle",
+    "hose",
+    "trigger",
+    "bin only",
+    "canister only",
+  ]);
+}
+
+function isLikelyValidDysonMainUnitTitle(text) {
+  const titleText = normalizeText(text);
+  const isMainUnit = isDysonMainUnitTitle(titleText);
+
+  if (!isMainUnit) return false;
+
+  if (isDysonHardAccessoryOnlyTitle(titleText)) return false;
+  if (isDysonFullVacTitle(titleText)) return false;
+
+  return true;
+}
+
+function matchesDysonVariantForEbay(query, item) {
+  const searchText = normalizeText(query);
+  if (!searchText.includes("dyson")) return true;
+
+  const titleText = normalizeText(item?.title || "");
+  const wantsV11 = searchText.includes("v11");
+  const wantsOutsize = isDysonOutsizeQuery(searchText);
+  const wantsMainUnit = isDysonMainUnitQuery(searchText);
+
+  const titleHasV11 = titleText.includes("v11");
+  const titleHasOutsize = titleText.includes("outsize");
+  const titleIsMainUnit = isLikelyValidDysonMainUnitTitle(titleText);
+  const titleIsParts = isDysonAccessoryOrPartsTitle(titleText);
+  const titleIsFullMachine =
+    isDysonFullVacTitle(titleText) || (!titleIsMainUnit && !titleIsParts);
+
+  if (isDysonPartsCategory(item) && !titleIsMainUnit) return false;
+  if (wantsV11 && !titleHasV11) return false;
+
+  if (wantsOutsize) {
+    if (!titleHasOutsize) return false;
+    if (titleIsMainUnit) return false;
+    return titleIsFullMachine;
+  }
+
+  if (wantsMainUnit) {
+    if (titleHasOutsize) return false;
+    return titleIsMainUnit;
+  }
+
+  if (wantsV11) {
+    if (titleHasOutsize) return false;
+    if (titleIsMainUnit) return false;
+    return titleIsFullMachine;
+  }
+
+  return true;
+}
+
+function scoreMainUnitCandidate(query, item) {
+  const searchText = normalizeText(query);
+  const titleText = normalizeText(item?.title || "");
+
+  if (!isDysonMainUnitQuery(searchText)) {
+    return 0;
+  }
+
+  let score = 0;
+
+  if (titleText.includes("v11")) score += 3;
+  if (titleText.includes("main unit")) score += 6;
+  if (titleText.includes("main body")) score += 6;
+  if (titleText.includes("motor unit")) score += 6;
+  if (titleText.includes("body only")) score += 6;
+  if (titleText.includes("machine body")) score += 5;
+  if (titleText.includes("vacuum body")) score += 5;
+  if (titleText.includes("bare unit")) score += 5;
+  if (titleText.includes("unit only")) score += 5;
+  if (titleText.includes("handheld unit")) score += 5;
+  if (titleText.includes("body")) score += 2;
+
+  if (titleText.includes("for spares")) score -= 8;
+  if (titleText.includes("for parts")) score -= 8;
+  if (titleText.includes("not working")) score -= 8;
+  if (titleText.includes("outsize")) score -= 10;
+  if (isDysonHardAccessoryOnlyTitle(titleText)) score -= 12;
+  if (isDysonPartsCategory(item) && !isLikelyValidDysonMainUnitTitle(titleText)) score -= 12;
+  if (isDysonFullVacTitle(titleText)) score -= 10;
+
+  return score;
+}
+
+async function getEbayAccessToken() {
+  const now = Date.now();
+
+  if (cachedToken && now < cachedTokenExpiresAt - 60_000) {
+    return cachedToken;
+  }
+
+  const clientId = requireEnv("EBAY_CLIENT_ID");
+  const clientSecret = requireEnv("EBAY_CLIENT_SECRET");
+
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    scope: EBAY_SCOPE,
+  });
+
+  const { res, data } = await fetchJsonWithTimeout(
+    EBAY_TOKEN_URL,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${buildBasicAuth(clientId, clientSecret)}`,
+      },
+      body: body.toString(),
+    },
+    EBAY_TOKEN_TIMEOUT_MS
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      data.error_description || data.error || "Could not get eBay access token."
+    );
+  }
+
+  cachedToken = data.access_token;
+  cachedTokenExpiresAt = now + Number(data.expires_in || 7200) * 1000;
+
+  return cachedToken;
+}
+
+function normaliseCondition(condition) {
+  const text = String(condition || "").toLowerCase();
+
+  if (text.includes("certified refurbished")) return "Certified Refurbished";
+  if (text.includes("refurbished")) return "Refurbished";
+  if (text.includes("like new")) return "Like New";
+  if (text.includes("very good")) return "Very Good";
+  if (text.includes("good")) return "Good";
+  if (text.includes("acceptable")) return "Acceptable";
+  if (text.includes("new")) return "New";
+  if (text.includes("used")) return "Used";
+
+  return "Unknown";
+}
+
+function mapEbayItem(item) {
+  const priceValue = Number(item?.price?.value || 0);
+  const shippingValue = Number(
+    item?.shippingOptions?.[0]?.shippingCost?.value || 0
+  );
+
+  return {
+    itemId: item?.itemId || "",
+    title: item?.title || "",
+    itemWebUrl: item?.itemWebUrl || "",
+    imageUrl:
+      item?.image?.imageUrl || item?.thumbnailImages?.[0]?.imageUrl || "",
+    price: roundMoney(priceValue),
+    shipping: roundMoney(shippingValue),
+    totalBuyPrice: roundMoney(priceValue + shippingValue),
+    condition: normaliseCondition(item?.condition),
+    location: item?.itemLocation?.country || "GB",
+    buyingOptions: Array.isArray(item?.buyingOptions) ? item.buyingOptions : [],
+    itemOriginDate: item?.itemOriginDate || "",
+    categories: Array.isArray(item?.categories) ? item.categories : [],
+  };
+}
+
+function buildFilterString({
+  maxPrice,
+  condition,
+  freeShippingOnly,
+  fixedPriceOnly = true,
+}) {
+  const filters = [];
+
+  if (fixedPriceOnly) {
+    filters.push("buyingOptions:{FIXED_PRICE}");
+  }
+
+  if (maxPrice && Number(maxPrice) > 0) {
+    filters.push(`price:[..${Number(maxPrice)}]`);
+  }
+
+  if (condition && String(condition).trim()) {
+    const clean = String(condition).trim().toUpperCase();
+
+    if (
+      [
+        "NEW",
+        "USED",
+        "CERTIFIED_REFURBISHED",
+        "LIKE_NEW",
+        "VERY_GOOD",
+        "GOOD",
+        "ACCEPTABLE",
+      ].includes(clean)
+    ) {
+      filters.push(`conditions:{${clean}}`);
+    }
+  }
+
+  if (freeShippingOnly) {
+    filters.push("deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP|SHIP_TO_HOME}");
+  }
+
+  return filters.join(",");
+}
+
+async function browseSearch({
+  query,
+  maxPrice,
+  condition,
+  freeShippingOnly = false,
+  limit = 20,
+  fixedPriceOnly = true,
+}) {
+  if (!query || !String(query).trim()) {
+    throw new Error("Search query is required.");
+  }
+
+  const token = await getEbayAccessToken();
+  const marketplaceId = process.env.EBAY_MARKETPLACE_ID || "EBAY_GB";
+
+  const params = new URLSearchParams({
+    q: String(query).trim(),
+    limit: String(Math.min(Math.max(Number(limit) || 10, 1), 50)),
+  });
+
+  const filter = buildFilterString({
+    maxPrice,
+    condition,
+    freeShippingOnly,
+    fixedPriceOnly,
+  });
+
+  if (filter) {
+    params.set("filter", filter);
+  }
+
+  const { res, data } = await fetchJsonWithTimeout(
+    `${EBAY_BROWSE_URL}?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-EBAY-C-MARKETPLACE-ID": marketplaceId,
+        Accept: "application/json",
+      },
+    },
+    EBAY_REQUEST_TIMEOUT_MS
+  );
+
+  if (!res.ok) {
+    throw new Error(data.errors?.[0]?.message || "Could not search eBay.");
+  }
+
+  let items = Array.isArray(data.itemSummaries) ? data.itemSummaries : [];
+  items = items.map(mapEbayItem);
+
+  if (freeShippingOnly) {
+    items = items.filter((item) => Number(item.shipping || 0) === 0);
+  }
+
+  return items;
+}
+
+function uniqueByItemId(items) {
+  const seen = new Set();
+  const output = [];
+
+  for (const item of items) {
+    const key = item?.itemId || `${item?.title || ""}-${item?.price || 0}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(item);
+  }
+
+  return output;
+}
+
+function buildDysonSearchVariants(query) {
+  const q = normalizeText(query);
+  const variants = [String(query).trim()];
+
+  const isDyson = q.includes("dyson");
+  const isV11 = q.includes("v11");
+  const isOutsize = isDysonOutsizeQuery(q);
+  const isMainUnit = isDysonMainUnitQuery(q);
+
+  if (!isDyson) {
+    return variants;
+  }
+
+  if (isOutsize) {
+    variants.push("dyson v11 outsize");
+    variants.push("dyson outsize");
+    variants.push("dyson outsize absolute");
+    variants.push("dyson v11 outsize absolute");
+  } else if (isMainUnit) {
+    if (isV11) {
+      variants.push("dyson v11 main unit");
+      variants.push("dyson v11 main body");
+      variants.push("dyson v11 motor unit");
+      variants.push("dyson v11 body only");
+      variants.push("dyson v11 unit only");
+      variants.push("dyson v11 handheld unit");
+      variants.push("dyson v11 bare unit");
+      variants.push("dyson cordless v11 main body");
+      variants.push("dyson cordless v11 motor unit");
+      variants.push("dyson v11 machine body");
+      variants.push("dyson v11 vacuum body");
+      variants.push("dyson v11 body");
+    } else {
+      variants.push("dyson main unit");
+      variants.push("dyson main body");
+      variants.push("dyson motor unit");
+      variants.push("dyson body only");
+      variants.push("dyson unit only");
+      variants.push("dyson bare unit");
+      variants.push("dyson machine body");
+      variants.push("dyson vacuum body");
+    }
+  } else if (isV11) {
+    variants.push("dyson v11");
+    variants.push("dyson v11 absolute");
+    variants.push("dyson v11 cordless vacuum");
+    variants.push("dyson cordless stick vacuum cleaner v11");
+  }
+
+  return [...new Set(variants.filter(Boolean))];
+}
+
+function isConsoleBundleIntent(text) {
+  return hasAny(text, [
+    "bundle",
+    "with games",
+    "with game",
+    "games",
+    "2 controllers",
+    "two controllers",
+    "with controller",
+    "controllers",
+    "job lot",
+    "comes with",
+    "includes",
+    "plus games",
+    "inc games",
+    "includes games",
+    "with extras",
+    "extras",
+  ]);
+}
+
+function buildConsoleBundleVariants(query, baseVariants = []) {
+  const q = normalizeText(query);
+  const variants = [...baseVariants];
+
+  const add = (value) => {
+    if (value && !variants.includes(value)) variants.push(value);
+  };
+
+  const wantsPs5 = q.includes("ps5") || q.includes("playstation 5") || q.includes("playstation5");
+  const wantsDigital = q.includes("digital");
+  const wantsDisc =
+    q.includes("disc") ||
+    q.includes("disk") ||
+    q.includes("standard");
+  const wantsSeriesX = q.includes("xbox series x") || q.includes("series x");
+  const wantsSeriesS = q.includes("xbox series s") || q.includes("series s");
+  const wantsSwitchOled = q.includes("switch oled") || q.includes("nintendo switch oled");
+  const wantsSwitchLite = q.includes("switch lite");
+  const wantsSwitch =
+    q.includes("nintendo switch") || q.includes("switch");
+
+  if (wantsPs5) {
+    if (wantsDigital) {
+      add("ps5 digital");
+      add("playstation 5 digital");
+      add("ps5 digital console");
+      add("digital edition");
+      add("ps5 digital bundle");
+      add("ps5 digital with games");
+      add("ps5");
+      add("playstation 5");
+    } else if (wantsDisc) {
+      add("ps5 disc");
+      add("ps5 disk");
+      add("playstation 5 disc");
+      add("playstation 5 disk");
+      add("ps5 standard");
+      add("playstation 5 standard");
+      add("disc edition");
+      add("disk edition");
+      add("standard edition");
+      add("ps5 console");
+      add("ps5");
+      add("playstation 5");
+      add("playstation 5 console");
+      add("ps5 disc bundle");
+      add("ps5 disc with games");
+      add("ps5 with controller");
+    } else {
+      add("ps5");
+      add("playstation 5");
+      add("ps5 console");
+      add("playstation 5 console");
+    }
+  }
+
+  if (wantsSeriesX) {
+    add("xbox series x");
+    add("series x");
+  }
+
+  if (wantsSeriesS) {
+    add("xbox series s");
+    add("series s");
+  }
+
+  if (wantsSwitchOled) {
+    add("switch oled");
+    add("nintendo switch oled");
+  } else if (wantsSwitchLite) {
+    add("switch lite");
+    add("nintendo switch lite");
+  } else if (wantsSwitch) {
+    add("nintendo switch");
+    add("switch console");
+  }
+
+  return [...new Set(variants.filter(Boolean))];
+}
 
 function buildSearchVariants(query) {
   const q = normalizeText(query);
-
-  // 🔥 AUDIO FIRST (SAFE + ISOLATED)
-  if (
-    q.includes("airpods") ||
-    q.includes("buds") ||
-    q.includes("earbuds") ||
-    q.includes("headphones") ||
-    q.includes("sony wf") ||
-    q.includes("sony wh") ||
-    q.includes("bose") ||
-    q.includes("qc")
-  ) {
-    return buildAudioSearchVariants(query);
-  }
-
   const variants = [String(query).trim()];
 
   if (q.includes("dyson")) {
@@ -166,30 +644,300 @@ function buildSearchVariants(query) {
     q.includes("playstation 5 disc") ||
     q.includes("playstation 5 disk")
   ) {
-    variants.push("ps5 disc", "ps5 disk", "playstation 5 disc", "playstation 5 disk");
-    variants.push("ps5 standard", "standard edition", "disc edition", "ps5 console");
-    variants.push("playstation 5", "ps5");
+    variants.push("ps5 disc");
+    variants.push("ps5 disk");
+    variants.push("playstation 5 disc");
+    variants.push("playstation 5 disk");
+    variants.push("ps5 standard");
+    variants.push("standard edition");
+    variants.push("disc edition");
+    variants.push("ps5 console");
+    variants.push("playstation 5");
+    variants.push("ps5");
   } else if (q.includes("ps5 digital") || q.includes("playstation 5 digital")) {
-    variants.push("playstation 5 digital", "ps5 digital", "digital edition");
-    variants.push("playstation 5", "ps5");
+    variants.push("playstation 5 digital");
+    variants.push("ps5 digital");
+    variants.push("digital edition");
+    variants.push("playstation 5");
+    variants.push("ps5");
   } else if (q.includes("ps5") || q.includes("playstation 5")) {
-    variants.push("playstation 5", "ps5", "ps5 console");
+    variants.push("playstation 5");
+    variants.push("ps5");
+    variants.push("ps5 console");
   }
 
   if (q.includes("xbox series x")) {
-    variants.push("xbox series x", "series x");
+    variants.push("xbox series x");
+    variants.push("series x");
   }
 
   if (q.includes("xbox series s")) {
-    variants.push("xbox series s", "series s");
+    variants.push("xbox series s");
+    variants.push("series s");
   }
 
-  return [...new Set(variants.filter(Boolean))];
+  if (q.includes("canon eos")) {
+    variants.push(String(query).trim());
+  }
+
+  const deduped = [...new Set(variants.filter(Boolean))];
+
+  if (isConsoleBundleIntent(q) || q.includes("ps5") || q.includes("playstation 5")) {
+    return buildConsoleBundleVariants(query, deduped);
+  }
+
+  return deduped;
 }
 
-/* =========================
-   REST OF FILE UNCHANGED
-========================= */
+function isConsoleCategory(item) {
+  const categories = Array.isArray(item?.categories) ? item.categories : [];
+  const categoryText = normalizeText(
+    categories.map((c) => c?.categoryName).filter(Boolean).join(" ")
+  );
+
+  return hasAny(categoryText, [
+    "video game consoles",
+    "video games consoles",
+    "consoles",
+  ]);
+}
+
+function titleLooksLikeBundle(text) {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "bundle",
+    "with games",
+    "with game",
+    "games included",
+    "game included",
+    "2 controllers",
+    "two controllers",
+    "extra controller",
+    "second controller",
+    "spare controller",
+    "comes with",
+    "includes",
+    "plus games",
+    "inc games",
+    "includes games",
+    "job lot",
+    "with extras",
+    "extras included",
+  ]);
+}
+
+function isAccessoryStyleTitle(text) {
+  const t = normalizeText(text);
+
+  const hasConsoleWords =
+    t.includes("ps5") ||
+    t.includes("playstation 5") ||
+    t.includes("xbox series x") ||
+    t.includes("xbox series s") ||
+    t.includes("switch") ||
+    t.includes("console");
+
+  const explicitAccessoryOnly = hasAny(t, [
+    "controller only",
+    "dualsense only",
+    "dualshock only",
+    "joy con only",
+    "joy-con only",
+    "headset only",
+    "dock only",
+    "charger only",
+    "power cable only",
+    "cable only",
+    "stand only",
+    "faceplate",
+    "shell only",
+    "cover only",
+    "skin only",
+    "remote only",
+    "disc drive only",
+    "empty box",
+    "box only",
+  ]);
+
+  if (explicitAccessoryOnly) return true;
+
+  if (
+    t.includes("controller") &&
+    !hasConsoleWords
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function filterConsoleBundleIntent(query, items = []) {
+  const q = normalizeText(query);
+
+  if (!isConsoleBundleIntent(q)) {
+    return items;
+  }
+
+  const filtered = items.filter((item) => {
+    const titleText = normalizeText(item?.title || "");
+    const consoleCategory = isConsoleCategory(item);
+    const bundleish = titleLooksLikeBundle(titleText);
+
+    if (isAccessoryStyleTitle(titleText)) return false;
+    if (!consoleCategory) return false;
+
+    return bundleish;
+  });
+
+  return filtered.length ? filtered : items;
+}
+
+function isConsoleDiscDigitalSearch(text) {
+  const q = normalizeText(text);
+  return (
+    q.includes("ps5 disc") ||
+    q.includes("ps5 disk") ||
+    q.includes("playstation 5 disc") ||
+    q.includes("playstation 5 disk") ||
+    q.includes("ps5 digital") ||
+    q.includes("playstation 5 digital")
+  );
+}
+
+async function safeBrowseSearch(args) {
+  try {
+    return await browseSearch(args);
+  } catch (err) {
+    console.warn("eBay browseSearch failed:", {
+      query: args?.query,
+      message: err?.message || String(err),
+    });
+    return [];
+  }
+}
+
+async function searchWithFallbacks({
+  query,
+  maxPrice,
+  condition,
+  freeShippingOnly = false,
+  limit = 20,
+  fixedPriceOnly = true,
+  allowConditionFallback = true,
+}) {
+  const variants = buildSearchVariants(query);
+  const searchText = normalizeText(query);
+  let combined = [];
+
+  const shouldSearchAllVariants =
+    isConsoleDiscDigitalSearch(searchText) ||
+    searchText.includes("ps5") ||
+    searchText.includes("playstation 5") ||
+    isDysonMainUnitQuery(searchText);
+
+  for (let i = 0; i < variants.length; i += 1) {
+    const variant = variants[i];
+
+    const results = await safeBrowseSearch({
+      query: variant,
+      maxPrice,
+      condition,
+      freeShippingOnly,
+      limit,
+      fixedPriceOnly,
+    });
+
+    combined = uniqueByItemId([...combined, ...results]);
+
+    if (!shouldSearchAllVariants && combined.length >= limit * 3) {
+      break;
+    }
+
+    if (shouldSearchAllVariants && i >= 6 && combined.length >= limit * 2) {
+      break;
+    }
+  }
+
+  if (searchText.includes("dyson")) {
+    combined = combined.filter((item) => matchesDysonVariantForEbay(searchText, item));
+
+    if (isDysonMainUnitQuery(searchText)) {
+      combined = combined
+        .map((item) => ({
+          item,
+          score: scoreMainUnitCandidate(searchText, item),
+        }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score || (a.item.totalBuyPrice - b.item.totalBuyPrice))
+        .map((entry) => entry.item);
+    }
+  }
+
+  combined = filterConsoleBundleIntent(searchText, combined);
+  combined = uniqueByItemId(combined);
+
+  if (combined.length >= limit) {
+    return combined.slice(0, limit);
+  }
+
+  if (combined.length > 0 && !allowConditionFallback) {
+    return combined.slice(0, limit);
+  }
+
+  if (allowConditionFallback && condition) {
+    let fallbackCombined = [...combined];
+
+    for (let i = 0; i < variants.length; i += 1) {
+      const variant = variants[i];
+
+      const results = await safeBrowseSearch({
+        query: variant,
+        maxPrice,
+        condition: "",
+        freeShippingOnly,
+        limit,
+        fixedPriceOnly,
+      });
+
+      fallbackCombined = uniqueByItemId([...fallbackCombined, ...results]);
+
+      if (!shouldSearchAllVariants && fallbackCombined.length >= limit * 3) {
+        break;
+      }
+
+      if (shouldSearchAllVariants && i >= 6 && fallbackCombined.length >= limit * 2) {
+        break;
+      }
+    }
+
+    if (searchText.includes("dyson")) {
+      fallbackCombined = fallbackCombined.filter((item) =>
+        matchesDysonVariantForEbay(searchText, item)
+      );
+
+      if (isDysonMainUnitQuery(searchText)) {
+        fallbackCombined = fallbackCombined
+          .map((item) => ({
+            item,
+            score: scoreMainUnitCandidate(searchText, item),
+          }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score || (a.item.totalBuyPrice - b.item.totalBuyPrice))
+          .map((entry) => entry.item);
+      }
+    }
+
+    fallbackCombined = filterConsoleBundleIntent(searchText, fallbackCombined);
+    fallbackCombined = uniqueByItemId(fallbackCombined);
+
+    if (fallbackCombined.length > 0) {
+      return fallbackCombined.slice(0, limit);
+    }
+  }
+
+  return combined.slice(0, limit);
+}
 
 export async function searchEbayListings({
   query,
