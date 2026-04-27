@@ -116,6 +116,20 @@ function isAudioCategory(item) {
   ]);
 }
 
+function isAudioPartsCategory(item) {
+  const categoryText = getAudioCategoryText(item);
+
+  return hasAny(categoryText, [
+    "rechargeable batteries",
+    "multipurpose batteries",
+    "batteries",
+    "battery",
+    "parts",
+    "replacement parts",
+    "accessories",
+  ]);
+}
+
 function isIncompleteAudioListing(text = "") {
   const t = normalizeText(text);
 
@@ -159,6 +173,41 @@ function isIncompleteAudioListing(text = "") {
   ]);
 }
 
+function isAudioPartListing(text = "", item = null) {
+  const t = normalizeText(text);
+
+  if (item && isAudioPartsCategory(item)) return true;
+
+  return hasAny(t, [
+    "battery",
+    "battery replacement",
+    "replacement battery",
+    "charging case battery",
+    "case battery",
+    "zenipower",
+    "zeni power",
+    "z55h",
+    "cp1254",
+    "3.85v",
+    "75mah",
+    "rechargeable battery",
+    "rechargeable batteries",
+    "multipurpose batteries",
+    "for sony wf1000xm4 battery",
+    "for sony wf-1000xm4 battery",
+    "sony wf-1000xm4 battery",
+    "wf1000xm4 battery",
+    "wf-1000xm4 battery",
+    "oem battery",
+    "original battery",
+    "spare battery",
+    "repair battery",
+    "replacement part",
+    "spare part",
+    "parts only",
+  ]);
+}
+
 function isHardNonAudioListing(text = "", item = null) {
   const t = normalizeText(text);
   const categoryText = item ? getAudioCategoryText(item) : "";
@@ -181,7 +230,10 @@ function isHardNonAudioListing(text = "", item = null) {
     return true;
   }
 
-  return isIncompleteAudioListing(t);
+  if (isIncompleteAudioListing(t)) return true;
+  if (isAudioPartListing(t, item)) return true;
+
+  return false;
 }
 
 function classifyAudioConditionState(text = "") {
