@@ -14,10 +14,6 @@ import {
   isCompatibleAudioFamily,
 } from "./audioV2Families.js";
 
-/* -------------------------
-   SMALL HELPERS
-------------------------- */
-
 function squashSpaces(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
@@ -56,16 +52,9 @@ function getAudioCombinedItemText(item) {
 function getAudioCategoryText(item) {
   const categories = Array.isArray(item?.categories) ? item.categories : [];
   return normalizeText(
-    categories
-      .map((category) => category?.categoryName)
-      .filter(Boolean)
-      .join(" ")
+    categories.map((category) => category?.categoryName).filter(Boolean).join(" ")
   );
 }
-
-/* -------------------------
-   QUERY CONTEXT
-------------------------- */
 
 function wantsCompleteSetFromQuery(queryContext = {}) {
   const q = normalizeText(queryContext?.normalizedQuery || queryContext?.rawQuery || "");
@@ -98,10 +87,6 @@ function shouldAllowDamagedListings(queryContext) {
     "not working",
   ]);
 }
-
-/* -------------------------
-   AUDIO MATCHING / FILTERS
-------------------------- */
 
 function isAudioCategory(item) {
   const categoryText = getAudioCategoryText(item);
@@ -138,10 +123,15 @@ function isIncompleteAudioListing(text = "") {
     "charging case only",
     "left only",
     "right only",
+    "left ear only",
+    "right ear only",
+    "ear only",
     "left airpod only",
     "right airpod only",
     "left airpod earbud only",
     "right airpod earbud only",
+    "left earbud only",
+    "right earbud only",
     "airpod earbud only",
     "earbud only",
     "bud only",
@@ -445,10 +435,6 @@ function normalizeBuildPricingArgs(firstArg = {}, secondArg = [], thirdArg = [])
     listingItems: Array.isArray(thirdArg) ? thirdArg : [],
   };
 }
-
-/* -------------------------
-   ENGINE
-------------------------- */
 
 export const audioEngine = {
   ...baseEngine,
