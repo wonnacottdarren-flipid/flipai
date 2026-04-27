@@ -528,6 +528,22 @@ function getEngineSearchQuery(engine, rawQuery) {
 
 function getEngineSearchVariants(engine, rawQuery) {
   const query = String(rawQuery || "").trim();
+  const normalized = query.toLowerCase();
+
+  // 🔥 FORCE AUDIO TO USE EBAY VARIANTS
+  const isAudio =
+    normalized.includes("airpods") ||
+    normalized.includes("buds") ||
+    normalized.includes("earbuds") ||
+    normalized.includes("headphones") ||
+    normalized.includes("sony wf") ||
+    normalized.includes("sony wh") ||
+    normalized.includes("bose") ||
+    normalized.includes("qc");
+
+  if (isAudio) {
+    return buildSearchVariants(query); // 👈 THIS is your ebay.js logic
+  }
 
   if (!engine) return [query].filter(Boolean);
 
