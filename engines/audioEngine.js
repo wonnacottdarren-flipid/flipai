@@ -116,6 +116,49 @@ function isAudioCategory(item) {
   ]);
 }
 
+function isIncompleteAudioListing(text = "") {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "case only",
+    "charging case only",
+    "left only",
+    "right only",
+    "left airpod only",
+    "right airpod only",
+    "left airpod earbud only",
+    "right airpod earbud only",
+    "airpod earbud only",
+    "earbud only",
+    "bud only",
+    "single earbud",
+    "single airpod",
+    "single bud",
+    "one earbud",
+    "one airpod",
+    "one bud",
+    "left earbud",
+    "right earbud",
+    "left bud",
+    "right bud",
+    "replacement bud",
+    "replacement earbud",
+    "replacement airpod",
+    "individual earbud",
+    "individual airpod",
+    "ear tips only",
+    "tips only",
+    "box only",
+    "empty box",
+    "manual only",
+    "skin only",
+    "cover only",
+    "strap only",
+    "charger only",
+    "cable only",
+  ]);
+}
+
 function isHardNonAudioListing(text = "", item = null) {
   const t = normalizeText(text);
   const categoryText = item ? getAudioCategoryText(item) : "";
@@ -138,28 +181,7 @@ function isHardNonAudioListing(text = "", item = null) {
     return true;
   }
 
-  return hasAny(t, [
-    "case only",
-    "charging case only",
-    "left only",
-    "right only",
-    "single earbud",
-    "single bud",
-    "one earbud",
-    "one bud",
-    "replacement bud",
-    "replacement earbud",
-    "ear tips only",
-    "tips only",
-    "box only",
-    "empty box",
-    "manual only",
-    "skin only",
-    "cover only",
-    "strap only",
-    "charger only",
-    "cable only",
-  ]);
+  return isIncompleteAudioListing(t);
 }
 
 function classifyAudioConditionState(text = "") {
