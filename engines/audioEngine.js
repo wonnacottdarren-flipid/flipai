@@ -11,6 +11,7 @@ import {
 import {
   detectAudioBrand,
   parseAudioFamily,
+  isCompatibleAudioFamily,
 } from "./audioV2Families.js";
 
 /* -------------------------
@@ -191,8 +192,6 @@ function classifyAudioConditionState(text = "") {
 
   if (
     hasAny(t, [
-      "read description",
-      "see description",
       "untested",
       "battery weak",
       "battery issue",
@@ -255,15 +254,15 @@ function getFamilyFallbackResale(family = "", brand = "") {
   if (f.includes("wh_1000xm4")) return 150;
   if (f.includes("wh_1000xm3")) return 95;
 
-  if (f.includes("galaxy_buds_3_pro")) return 125;
-  if (f.includes("galaxy_buds_3")) return 85;
-  if (f.includes("galaxy_buds_2_pro")) return 75;
-  if (f.includes("galaxy_buds_2")) return 45;
+  if (f.includes("galaxy_buds3_pro")) return 125;
+  if (f.includes("galaxy_buds3")) return 85;
+  if (f.includes("galaxy_buds2_pro")) return 75;
+  if (f.includes("galaxy_buds2")) return 45;
   if (f.includes("galaxy_buds_live")) return 35;
   if (f.includes("galaxy_buds")) return 50;
 
-  if (f.includes("quietcomfort_ultra") || f.includes("qc_ultra")) return 210;
-  if (f.includes("quietcomfort") || f.includes("qc")) return 130;
+  if (f.includes("bose_qc_ultra")) return 210;
+  if (f.includes("bose_qc")) return 130;
   if (f.includes("bose")) return 110;
 
   if (b === "apple") return 85;
@@ -277,15 +276,23 @@ function getFamilyFallbackResale(family = "", brand = "") {
 function scoreAudioCandidate(item, queryContext = {}) {
   const titleText = getAudioTitleText(item);
   const text = getAudioCombinedItemText(item);
+  const combinedText = `${titleText} ${text}`;
 
   if (!text) return -10;
-  if (isHardNonAudioListing(`${titleText} ${text}`, item)) return -10;
+  if (isHardNonAudioListing(combinedText, item)) return -10;
 
-  const itemBrand = detectAudioBrand(`${titleText} ${text}`);
+  const itemBrand = detectAudioBrand(combinedText);
   if (queryContext.brand && itemBrand && itemBrand !== queryContext.brand) return -10;
 
-  const itemFamily = parseAudioFamily(`${titleText} ${text}`, queryContext.brand || itemBrand);
-  if (queryContext.family && itemFamily && itemFamily !== queryContext.family) return -10;
+  const itemFamily = parseAudioFamily(combinedText, queryContext.brand || itemBrand);
+
+  if (
+    queryContext.family &&
+    itemFamily &&
+    !isCompatibleAudioFamily(queryContext.family, itemFamily)
+  ) {
+    return -10;
+  }
 
   const conditionState = classifyAudioConditionState(text);
   if (!queryContext.allowDamaged && isDamagedAudioConditionState(conditionState)) return -10;
@@ -294,6 +301,14 @@ function scoreAudioCandidate(item, queryContext = {}) {
 
   if (queryContext.brand && itemBrand === queryContext.brand) score += 2;
   if (queryContext.family && itemFamily === queryContext.family) score += 4;
+  if (
+    queryContext.family &&
+    itemFamily &&
+    itemFamily !== queryContext.family &&
+    isCompatibleAudioFamily(queryContext.family, itemFamily)
+  ) {
+    score += 3;
+  }
   if (!queryContext.family && itemFamily) score += 1;
 
   if (isAudioCategory(item)) score += 1;
@@ -301,18 +316,8 @@ function scoreAudioCandidate(item, queryContext = {}) {
   if (conditionState === "minor_fault") score -= 2;
   if (conditionState === "faulty_or_parts") score -= 5;
 
-  if (
-    queryContext.wantsCompleteSet &&
-    hasAny(text, ["with case", "charging case", "complete", "pair", "both"])
-  ) {
-    score += 1;
-  }
-
-  if (
-    queryContext.wantsCompleteSet &&
-    hasAny(text, ["case only", "left only", "right only", "single"])
-  ) {
-    score -= 6;
+  if (hasAny(text, ["with case", "charging case", "complete", "pair", "both"])) {
+    score += 0.75;
   }
 
   return score;
@@ -397,6 +402,12 @@ export const audioEngine = {
       const niceFamily = ctx.family.replaceAll("_", " ");
       variants.push(niceFamily);
 
+      if (ctx.family === "airpods_pro") {
+        variants.push("airpods pro 2");
+        variants.push("apple airpods pro");
+        variants.push("apple airpods pro 2");
+      }
+
       if (ctx.brand === "apple") variants.push(`airpods ${niceFamily}`);
       if (ctx.brand === "sony") variants.push(`sony ${niceFamily}`);
       if (ctx.brand === "bose") variants.push(`bose ${niceFamily}`);
@@ -409,18 +420,24 @@ export const audioEngine = {
   matchesItem(item, queryContext) {
     const text = getAudioCombinedItemText(item);
     const titleText = getAudioTitleText(item);
+    const combinedText = `${titleText} ${text}`;
 
     if (!text) return false;
-    if (isHardNonAudioListing(`${titleText} ${text}`, item)) return false;
+    if (isHardNonAudioListing(combinedText, item)) return false;
 
     const conditionState = classifyAudioConditionState(text);
     if (!queryContext.allowDamaged && isDamagedAudioConditionState(conditionState)) return false;
 
-    const itemBrand = detectAudioBrand(`${titleText} ${text}`);
+    const itemBrand = detectAudioBrand(combinedText);
     if (queryContext.brand && itemBrand && itemBrand !== queryContext.brand) return false;
 
-    const itemFamily = parseAudioFamily(`${titleText} ${text}`, queryContext.brand || itemBrand);
-    if (queryContext.family && itemFamily && itemFamily !== queryContext.family) {
+    const itemFamily = parseAudioFamily(combinedText, queryContext.brand || itemBrand);
+
+    if (
+      queryContext.family &&
+      itemFamily &&
+      !isCompatibleAudioFamily(queryContext.family, itemFamily)
+    ) {
       return false;
     }
 
