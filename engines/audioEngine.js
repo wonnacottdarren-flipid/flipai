@@ -310,6 +310,7 @@ function scoreAudioCandidate(item, queryContext = {}) {
     score += 3;
   }
   if (!queryContext.family && itemFamily) score += 1;
+  if (!itemFamily && queryContext.family && combinedText.includes("airpods pro")) score += 2.5;
 
   if (isAudioCategory(item)) score += 1;
   if (conditionState === "clean_working") score += 1.5;
@@ -344,6 +345,31 @@ function enrichAudioCompPool(queryContext = {}, items = []) {
     })
     .filter((entry) => entry.total > 0 && entry.score > -5)
     .sort((a, b) => b.score - a.score);
+}
+
+function normalizeBuildPricingArgs(firstArg = {}, secondArg = [], thirdArg = []) {
+  if (
+    firstArg &&
+    typeof firstArg === "object" &&
+    !Array.isArray(firstArg) &&
+    (
+      Object.prototype.hasOwnProperty.call(firstArg, "queryContext") ||
+      Object.prototype.hasOwnProperty.call(firstArg, "marketItems") ||
+      Object.prototype.hasOwnProperty.call(firstArg, "listingItems")
+    )
+  ) {
+    return {
+      queryContext: firstArg.queryContext || {},
+      marketItems: Array.isArray(firstArg.marketItems) ? firstArg.marketItems : [],
+      listingItems: Array.isArray(firstArg.listingItems) ? firstArg.listingItems : [],
+    };
+  }
+
+  return {
+    queryContext: firstArg || {},
+    marketItems: Array.isArray(secondArg) ? secondArg : [],
+    listingItems: Array.isArray(thirdArg) ? thirdArg : [],
+  };
 }
 
 /* -------------------------
@@ -444,7 +470,13 @@ export const audioEngine = {
     return true;
   },
 
-  buildPricingModel(queryContext = {}, marketItems = [], listingItems = []) {
+  buildPricingModel(firstArg = {}, secondArg = [], thirdArg = []) {
+    const { queryContext, marketItems, listingItems } = normalizeBuildPricingArgs(
+      firstArg,
+      secondArg,
+      thirdArg
+    );
+
     const marketPool = enrichAudioCompPool(queryContext, marketItems);
     const listingPool = enrichAudioCompPool(queryContext, listingItems);
 
