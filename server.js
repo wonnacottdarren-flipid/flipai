@@ -530,7 +530,6 @@ function getEngineSearchVariants(engine, rawQuery) {
   const query = String(rawQuery || "").trim();
   const normalized = query.toLowerCase();
 
-  // 🔥 FORCE AUDIO TO USE EBAY VARIANTS
   const isAudio =
     normalized.includes("airpods") ||
     normalized.includes("buds") ||
@@ -541,8 +540,9 @@ function getEngineSearchVariants(engine, rawQuery) {
     normalized.includes("bose") ||
     normalized.includes("qc");
 
+  // 🔥 KEY FIX: DISABLE ENGINE FOR AUDIO
   if (isAudio) {
-    return buildSearchVariants(query); // 👈 THIS is your ebay.js logic
+    return [query]; // 👈 let ebay.js handle it downstream
   }
 
   if (!engine) return [query].filter(Boolean);
