@@ -115,8 +115,56 @@ function isAudioPartsCategory(item) {
   ]);
 }
 
+function hasFullSetSignal(text = "") {
+  const t = normalizeText(text);
+
+  return hasAny(t, [
+    "complete",
+    "complete set",
+    "full set",
+    "pair",
+    "both earbuds",
+    "both ear buds",
+    "both buds",
+    "left and right",
+    "right and left",
+    "earbuds and case",
+    "earbuds with case",
+    "buds and case",
+    "buds with case",
+    "with earbuds",
+    "with ear buds",
+    "with buds",
+    "with both earbuds",
+    "with both buds",
+  ]);
+}
+
+function isCaseOnlyAudioListing(text = "") {
+  const t = normalizeText(text);
+
+  const mentionsCase = hasAny(t, [
+    "charging case",
+    "magsafe case",
+    "mag safe case",
+    "usb c case",
+    "usb-c case",
+    "case a2968",
+    "case a2190",
+    "wireless charging case",
+  ]);
+
+  if (!mentionsCase) return false;
+
+  if (hasFullSetSignal(t)) return false;
+
+  return true;
+}
+
 function isIncompleteAudioListing(text = "") {
   const t = normalizeText(text);
+
+  if (isCaseOnlyAudioListing(t)) return true;
 
   return hasAny(t, [
     "case only",
