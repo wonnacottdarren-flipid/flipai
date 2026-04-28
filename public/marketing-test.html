@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlipAI Marketing Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 30px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 16px;
+    }
+
+    button {
+      margin-top: 12px;
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .card {
+      margin-top: 20px;
+      padding: 18px;
+      border-radius: 14px;
+      background: #111827;
+      border: 1px solid #334155;
+      white-space: pre-wrap;
+    }
+
+    h2 {
+      color: #93c5fd;
+    }
+  </style>
+</head>
+<body>
+  <h1>FlipAI Marketing Test</h1>
+
+  <textarea id="idea">Bought a PS5 for £180 and sold it for £320</textarea>
+  <br />
+  <button id="generateBtn">Generate Marketing Content</button>
+
+  <div id="output"></div>
+
+  <script>
+    function generateMarketingContent(idea) {
+      return {
+        tiktok:
+`You won’t believe this flip...
+
+${idea}
+
+This is exactly what FlipAI helps you find.
+Follow for more flips.`,
+
+        instagram:
+`You won’t believe this...
+
+${idea}
+
+Built using FlipAI 🔍
+
+#ebayflips #reselling #sidehustle #flipforprofit #ukreseller`,
+
+        facebook:
+`Quick flip:
+
+${idea}
+
+This is the kind of deal FlipAI helps find daily.
+
+Anyone else flipping right now?`,
+
+        x:
+`${idea}
+
+FlipAI is built for finding deals like this.
+
+#reselling #flipping #sidehustle`,
+
+        linkedin:
+`Small wins compound.
+
+${idea}
+
+Tools like FlipAI are designed to turn everyday opportunities into scalable results.
+
+Consistency is everything.`
+      };
+    }
+
+    document.getElementById("generateBtn").addEventListener("click", () => {
+      const idea = document.getElementById("idea").value.trim();
+      const output = document.getElementById("output");
+
+      if (!idea) {
+        output.innerHTML = "<div class='card'>Enter an idea first.</div>";
+        return;
+      }
+
+      const content = generateMarketingContent(idea);
+
+      output.innerHTML = Object.entries(content)
+        .map(([platform, text]) => `
+          <div class="card">
+            <h2>${platform.toUpperCase()}</h2>
+            ${text}
+          </div>
+        `)
+        .join("");
+    });
+  </script>
+</body>
+</html>
