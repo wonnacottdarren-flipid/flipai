@@ -387,11 +387,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const listing = result.ebay_listing || {};
 
     const verdictText = metrics.verdict || analysis.final_verdict || "Review";
-    const profitValue = Number(metrics.profit || 0);
+    const profitValue = Number(metrics.profit ?? analysis.net_profit ?? 0);
+    const totalCostValue = Number(metrics.totalCost ?? analysis.costs ?? analysis.buy_price ?? 0);
+    const estimatedResaleValue = Number(metrics.estimatedResale ?? analysis.sale_price ?? listing.quick_sale_price ?? 0);
+    const ebayFeesValue = Number(metrics.ebayFees ?? analysis.fees ?? 0);
+    const buyPriceValue = Number(analysis.buy_price ?? 0);
+    const repairCostText = analysis.estimated_repair_or_refurbishment_cost || "";
     const compCount = Number(sold.compCount || 0);
     const confidenceValue = Number(sold.confidence || 0);
     const confidenceLabel = sold.confidenceLabel || "Low";
-    const pricingMode = metrics.pricingMode || sold.pricingMode || "Unknown";
+    const pricingMode = metrics.pricingMode || sold.pricingMode || "AI analysis";
     const riskText = analysis.risk_level || "N/A";
     const sellSpeedText = analysis.time_to_sell_estimate || "N/A";
 
@@ -399,7 +404,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const compSummary =
       compCount > 0
         ? `${compCount} comp${compCount === 1 ? "" : "s"} used`
-        : "No sold comps found";
+        : "AI estimate from provided comps";
 
     resultArea.innerHTML = `
       <div class="analysis-shell">
@@ -426,19 +431,19 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="analysis-stat-grid">
           <div class="analysis-stat-card">
             <div class="analysis-stat-label">Total cost</div>
-            <div class="analysis-stat-value">${currency(metrics.totalCost)}</div>
-            <div class="analysis-stat-subvalue">Buy price plus repair cost</div>
+            <div class="analysis-stat-value">${currency(totalCostValue)}</div>
+            <div class="analysis-stat-subvalue">Buy price ${currency(buyPriceValue)}${repairCostText ? ` • Repair ${escapeHtml(repairCostText)}` : ""}</div>
           </div>
 
           <div class="analysis-stat-card">
             <div class="analysis-stat-label">Estimated resale</div>
-            <div class="analysis-stat-value">${currency(metrics.estimatedResale)}</div>
+            <div class="analysis-stat-value">${currency(estimatedResaleValue)}</div>
             <div class="analysis-stat-subvalue">Modelled resale value</div>
           </div>
 
           <div class="analysis-stat-card">
             <div class="analysis-stat-label">eBay fees</div>
-            <div class="analysis-stat-value">${currency(metrics.ebayFees)}</div>
+            <div class="analysis-stat-value">${currency(ebayFeesValue)}</div>
             <div class="analysis-stat-subvalue">Estimated platform fees</div>
           </div>
 
@@ -481,10 +486,10 @@ document.addEventListener("DOMContentLoaded", () => {
             `
             : `
               <div class="analysis-note-card">
-                <div class="analysis-note-title">Comp confidence note</div>
+                <div class="analysis-note-title">Analysis note</div>
                 <div class="analysis-note-body">
-                  No sold comps were found for this run, so this result is based on a lighter estimate.
-                  For the strongest read, try simpler product wording or add manual sold prices.
+                  FlipAI has returned a live analysis using the values supplied to the analyzer.
+                  For the strongest read, use Auto-fill comps or add manual sold prices before analysing.
                 </div>
               </div>
             `
